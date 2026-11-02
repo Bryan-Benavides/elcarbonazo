@@ -18,7 +18,7 @@
     - `CommunityToolkit.Mvvm` (8.4.0)
   - *Criterio de Aceptación:* `dotnet build ElCarbonazo.sln` en la raíz finaliza con 0 errores y 0 advertencias.
 
-- [ ] **T2: Modelo de Dominio y Contexto de Datos (EF Core)**
+- [x] **T2: Modelo de Dominio y Contexto de Datos (EF Core)** ✅ COMPLETADA
   - En `ElCarbonazo.Api`, crear las entidades `Usuario` y `Mesa` mapeadas exactamente según `docs/domain.md` (`id_usuario`, `nombre`, `contrasena_hash`, `rol`, `email`, `activo`; `id_mesa`, `id_grupo`, `numero`, `capacidad`, `estado`)[cite: 7].
   - Crear `AppDbContext` con la configuración de Fluent API y datos semilla (`HasData`): 15 mesas físicas y 1 usuario administrador inicial (`admin` / hash provisional de contraseña)[cite: 1, 2, 7].
   - Generar la migración inicial (`InitialCreate`)[cite: 1].
