@@ -1,0 +1,33 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ElCarbonazo.Desktop.App"
+             xmlns:suki="clr-namespace:SukiUI;assembly=SukiUI"
+             RequestedThemeVariant="Default">
+
+    <Application.Styles>
+        <suki:SukiTheme />
+    </Application.Styles>
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- Design System Colors - El Carbonazo -->
+            <Color x:Key="ColorVino">#8C2331</Color>
+            <Color x:Key="ColorCarbón">#2A2421</Color>
+            <Color x:Key="ColorHueso">#F8F5F0</Color>
+            <Color x:Key="ColorBeige">#E8E0D5</Color>
+            <Color x:Key="ColorMesaLibre">#7CB342</Color>
+            <Color x:Key="ColorMesaOcupada">#8C2331</Color>
+            <Color x:Key="ColorMesaReservada">#E67E22</Color>
+            <Color x:Key="ColorMesaAgrupada">#2E86AB</Color>
+
+            <SolidColorBrush x:Key="ColorVinoBrush" Color="{StaticResource ColorVino}" />
+            <SolidColorBrush x:Key="ColorCarbónBrush" Color="{StaticResource ColorCarbón}" />
+            <SolidColorBrush x:Key="ColorHuesoBrush" Color="{StaticResource ColorHueso}" />
+            <SolidColorBrush x:Key="ColorBeigeBrush" Color="{StaticResource ColorBeige}" />
+            <SolidColorBrush x:Key="ColorMesaLibreBrush" Color="{StaticResource ColorMesaLibre}" />
+            <SolidColorBrush x:Key="ColorMesaOcupadaBrush" Color="{StaticResource ColorMesaOcupada}" />
+            <SolidColorBrush x:Key="ColorMesaReservadaBrush" Color="{StaticResource ColorMesaReservada}" />
+            <SolidColorBrush x:Key="ColorMesaAgrupadaBrush" Color="{StaticResource ColorMesaAgrupada}" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
