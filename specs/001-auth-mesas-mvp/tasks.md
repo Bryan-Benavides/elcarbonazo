@@ -24,7 +24,7 @@
   - Generar la migración inicial (`InitialCreate`)[cite: 1].
   - *Criterio de Aceptación:* La migración se aplica correctamente en PostgreSQL y las tablas `usuario` y `mesa` quedan creadas sin errores de nombres o tipos[cite: 1, 7].
 
-- [ ] **T3: Endpoints de API (Autenticación y Mesas)**
+- [x] **T3: Endpoints de API (Autenticación y Mesas)** ✅ COMPLETADA
   - Configurar serialización JSON **camelCase** en `Program.cs`: `builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);`
   - Implementar `AuthController` con `POST /api/auth/login` (emisión JWT con claim `rol` usando nombres completos: 'Jefa', 'Encargado de Caja', 'Mesero', 'Personal de Cocina', 'Supervisor')
   - Implementar `MesasController` con:

@@ -59,8 +59,9 @@ public class AppDbContext : DbContext
 
         // Seed data: 1 usuario administrador
         // Contraseña: "admin123" - Hash BCrypt generado con work factor 12
-        var adminHash = "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.PZvO.S";
-        
+        var adminHash =
+            "$2a$12$ldnQEKzFtA3tYTUTCuXBTOWQPHOHLphZT6zIMMFAusyK0dGgdH9GG";
+
         modelBuilder.Entity<Usuario>().HasData(new Usuario
         {
             IdUsuario = 1,

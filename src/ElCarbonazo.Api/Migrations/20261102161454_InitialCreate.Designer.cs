@@ -214,7 +214,7 @@ namespace ElCarbonazo.Api.Migrations
                         {
                             IdUsuario = 1,
                             Activo = true,
-                            ContrasenaHash = "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.PZvO.S",
+                            ContrasenaHash = "$2a$12$ldnQEKzFtA3tYTUTCuXBTOWQPHOHLphZT6zIMMFAusyK0dGgdH9GG",
                             Email = "admin@elcarbonazo.local",
                             Nombre = "admin",
                             Rol = "Jefa"

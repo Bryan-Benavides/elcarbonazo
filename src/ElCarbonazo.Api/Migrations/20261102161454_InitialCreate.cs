@@ -71,7 +71,7 @@ namespace ElCarbonazo.Api.Migrations
             migrationBuilder.InsertData(
                 table: "usuario",
                 columns: new[] { "id_usuario", "activo", "contrasena_hash", "email", "nombre", "rol" },
-                values: new object[] { 1, true, "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.PZvO.S", "admin@elcarbonazo.local", "admin", "Jefa" });
+                values: new object[] { 1, true, "$2a$12$ldnQEKzFtA3tYTUTCuXBTOWQPHOHLphZT6zIMMFAusyK0dGgdH9GG", "admin@elcarbonazo.local", "admin", "Jefa" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_mesa_numero",
