@@ -11,7 +11,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ElCarbonazo.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261102004957_InitialCreate")]
+    [Migration("20261102161454_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
