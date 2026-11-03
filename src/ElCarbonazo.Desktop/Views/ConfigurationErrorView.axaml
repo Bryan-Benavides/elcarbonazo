@@ -1,0 +1,37 @@
+<UserControl x:Class="ElCarbonazo.Desktop.Views.ConfigurationErrorView"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ElCarbonazo.Desktop.ViewModels"
+             x:DataType="vm:ConfigurationErrorViewModel"
+             Background="{StaticResource ColorHuesoBrush}">
+    <Border Width="620"
+            Margin="32"
+            Padding="32"
+            CornerRadius="16"
+            Background="{StaticResource ColorBeigeBrush}"
+            BorderBrush="{StaticResource ColorVinoBrush}"
+            BorderThickness="2"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center">
+        <StackPanel Spacing="16">
+            <TextBlock Text="Configuración requerida"
+                       FontSize="28"
+                       FontWeight="Bold"
+                       Foreground="{StaticResource ColorVinoBrush}" />
+            <TextBlock Text="La aplicación está bloqueada para evitar una conexión insegura o incorrecta."
+                       Foreground="{StaticResource ColorCarbónBrush}"
+                       TextWrapping="Wrap" />
+            <TextBlock Text="{Binding Reason}"
+                       Foreground="{StaticResource ColorCarbónBrush}"
+                       FontWeight="SemiBold"
+                       TextWrapping="Wrap" />
+            <TextBlock Text="Ruta esperada:"
+                       Foreground="{StaticResource ColorCarbónBrush}" />
+            <SelectableTextBlock Text="{Binding ConfigurationPath}"
+                                 Foreground="{StaticResource ColorCarbónBrush}" />
+            <TextBlock Text="Solicite al administrador que repare la instalación. La URL no puede editarse desde esta pantalla."
+                       Foreground="{StaticResource ColorCarbónBrush}"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+    </Border>
+</UserControl>

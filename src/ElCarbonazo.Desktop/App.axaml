@@ -2,11 +2,28 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="ElCarbonazo.Desktop.App"
              xmlns:suki="clr-namespace:SukiUI;assembly=SukiUI"
+             xmlns:views="using:ElCarbonazo.Desktop.Views"
+             xmlns:vm="using:ElCarbonazo.Desktop.ViewModels"
              RequestedThemeVariant="Default">
 
     <Application.Styles>
-        <suki:SukiTheme />
+        <suki:SukiTheme ThemeColor="Red" Locale="es-ES" />
     </Application.Styles>
+
+    <Application.DataTemplates>
+        <DataTemplate DataType="{x:Type vm:LoginViewModel}">
+            <views:LoginView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ConfigurationErrorViewModel}">
+            <views:ConfigurationErrorView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SecurityErrorViewModel}">
+            <views:SecurityErrorView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:MesasViewModel}">
+            <views:MesasView />
+        </DataTemplate>
+    </Application.DataTemplates>
 
     <Application.Resources>
         <ResourceDictionary>

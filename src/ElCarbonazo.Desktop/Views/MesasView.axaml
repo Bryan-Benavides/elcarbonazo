@@ -1,0 +1,27 @@
+<UserControl x:Class="ElCarbonazo.Desktop.Views.MesasView"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ElCarbonazo.Desktop.ViewModels"
+             x:DataType="vm:MesasViewModel"
+             Background="{StaticResource ColorHuesoBrush}">
+    <StackPanel Spacing="12"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+        <TextBlock Text="Sesión iniciada"
+                   FontSize="30"
+                   FontWeight="Bold"
+                   Foreground="{StaticResource ColorVinoBrush}"
+                   HorizontalAlignment="Center" />
+        <TextBlock Text="{Binding Nombre}"
+                   FontSize="20"
+                   Foreground="{StaticResource ColorCarbónBrush}"
+                   HorizontalAlignment="Center" />
+        <TextBlock Text="{Binding Rol}"
+                   Foreground="{StaticResource ColorCarbónBrush}"
+                   HorizontalAlignment="Center" />
+        <TextBlock Text="El mapa interactivo de mesas se implementará en T5."
+                   Margin="0,16,0,0"
+                   Foreground="{StaticResource ColorCarbónBrush}"
+                   HorizontalAlignment="Center" />
+    </StackPanel>
+</UserControl>

@@ -1,0 +1,76 @@
+<suki:SukiWindow x:Class="ElCarbonazo.Desktop.MainWindow"
+                 xmlns="https://github.com/avaloniaui"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:suki="clr-namespace:SukiUI.Controls;assembly=SukiUI"
+                 xmlns:vm="using:ElCarbonazo.Desktop.ViewModels"
+                 x:DataType="vm:ShellViewModel"
+                 Title="El Carbonazo"
+                 Width="1100"
+                 Height="720"
+                 MinWidth="800"
+                 MinHeight="560"
+                 Background="{StaticResource ColorHuesoBrush}"
+                 BackgroundStyle="Flat"
+                 IsMenuVisible="False">
+    <Grid RowDefinitions="Auto,Auto,*">
+        <Border Grid.Row="0"
+                Background="#FFF3CD"
+                Padding="14,10"
+                IsVisible="{Binding IsAbsoluteWarningVisible}">
+            <TextBlock Text="{Binding AbsoluteWarningText}"
+                       Foreground="{StaticResource ColorCarbónBrush}"
+                       FontWeight="SemiBold"
+                       HorizontalAlignment="Center" />
+        </Border>
+
+        <Border Grid.Row="1"
+                Background="{StaticResource ColorBeigeBrush}"
+                BorderBrush="{StaticResource ColorVinoBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="14,10"
+                IsVisible="{Binding IsSessionPaused}">
+            <TextBlock Text="Sesión en pausa. Interactúe con la aplicación para renovarla."
+                       Foreground="{StaticResource ColorVinoBrush}"
+                       FontWeight="SemiBold"
+                       HorizontalAlignment="Center" />
+        </Border>
+
+        <ContentControl Grid.Row="2" Content="{Binding CurrentViewModel}" />
+
+        <Border Grid.RowSpan="3"
+                Background="#99000000"
+                IsVisible="{Binding IsInactivityWarningVisible}"
+                ZIndex="100">
+            <Border Width="430"
+                    Padding="28"
+                    CornerRadius="16"
+                    Background="{StaticResource ColorHuesoBrush}"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <StackPanel Spacing="18">
+                    <TextBlock Text="La sesión está por vencer"
+                               FontSize="24"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource ColorVinoBrush}"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Text="{Binding InactivityCountdown}"
+                               FontSize="18"
+                               Foreground="{StaticResource ColorCarbónBrush}"
+                               HorizontalAlignment="Center" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                        <Button Grid.Column="0"
+                                Content="Cerrar sesión"
+                                Command="{Binding EndSessionCommand}"
+                                HorizontalAlignment="Stretch" />
+                        <Button Grid.Column="1"
+                                Content="Continuar"
+                                Command="{Binding ContinueSessionCommand}"
+                                Background="{StaticResource ColorVinoBrush}"
+                                Foreground="White"
+                                HorizontalAlignment="Stretch" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
+</suki:SukiWindow>

@@ -156,7 +156,7 @@ Versiones estables consultadas en NuGet y verificadas mediante restore/build par
   - Ejecutar formato → build → unitarias → integración → auditoría de vulnerabilidades; nunca tocar la base de desarrollo.
   - *Criterio de Aceptación:* Toda la secuencia finaliza limpia, aislada y con cobertura crítica ≥80%.
 
-- [ ] **T4: Capa Desktop — Formulario de Login (SukiUI)**
+- [x] **T4: Capa Desktop — Formulario de Login (SukiUI)** ✅ COMPLETADA
   - Crear `Services/ApiClientService.cs` en `ElCarbonazo.Desktop` para mantener access/refresh tokens solo en memoria, renovar por interacción humana y detener polling al expirar la sesión[cite: 3].
   - Aplicar timeouts por request: 5 s para lecturas y 10 s para login/refresh/mutaciones; nunca reintentar automáticamente una escritura con resultado desconocido.
   - Detectar interacción humana y reportarla mediante `POST /api/auth/activity` como máximo una vez por minuto, con envío diferido si ocurre durante el intervalo; polling no cuenta como actividad.
