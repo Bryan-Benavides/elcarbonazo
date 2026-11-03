@@ -1,0 +1,23 @@
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=127.0.0.1;Port=5432;Database=elcarbonazo;Username=elcarbonazo_runtime;Password=REPLACE_FROM_SECRET_STORE"
+  },
+  "Jwt": {
+    "Key": "REPLACE_WITH_BASE64_OF_AT_LEAST_32_RANDOM_BYTES",
+    "Issuer": "ElCarbonazo.Api",
+    "Audience": "ElCarbonazo.Desktop",
+    "ExpirationMinutes": 5
+  },
+  "PasswordHashing": {
+    "WorkFactor": 12
+  },
+  "Logging": {
+    "FileDirectory": "C:\\ProgramData\\ElCarbonazo\\api-logs",
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft": "Warning",
+      "Microsoft.EntityFrameworkCore": "Warning",
+      "Npgsql": "Warning"
+    }
+  }
+}

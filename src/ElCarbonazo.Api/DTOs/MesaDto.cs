@@ -5,4 +5,5 @@ public sealed record MesaDto(
     int? IdGrupo,
     int Numero,
     int Capacidad,
-    string Estado);
+    string Estado,
+    uint Version);
