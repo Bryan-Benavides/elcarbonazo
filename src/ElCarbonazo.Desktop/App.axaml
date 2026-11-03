@@ -4,7 +4,7 @@
              xmlns:suki="clr-namespace:SukiUI;assembly=SukiUI"
              xmlns:views="using:ElCarbonazo.Desktop.Views"
              xmlns:vm="using:ElCarbonazo.Desktop.ViewModels"
-             RequestedThemeVariant="Default">
+             RequestedThemeVariant="Light">
 
     <Application.Styles>
         <suki:SukiTheme ThemeColor="Red" Locale="es-ES" />

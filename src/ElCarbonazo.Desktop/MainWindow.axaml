@@ -57,6 +57,9 @@
                                FontSize="18"
                                Foreground="{StaticResource ColorCarbónBrush}"
                                HorizontalAlignment="Center" />
+                    <TextBlock Text="{Binding SessionActionError}"
+                               Foreground="{StaticResource ColorVinoBrush}"
+                               TextWrapping="Wrap" />
                     <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
                         <Button Grid.Column="0"
                                 Content="Cerrar sesión"

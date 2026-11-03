@@ -76,7 +76,7 @@ public partial class App : Application
 
     private void OnHumanInteraction(object? sender, RoutedEventArgs args)
     {
-        if (_sessionManager?.HasSession == true)
+        if (_sessionManager?.HasSession == true && _shellViewModel?.IsInactivityWarningVisible != true)
         {
             _ = ObserveInteractionAsync();
         }
@@ -88,7 +88,15 @@ public partial class App : Application
         {
             await _sessionManager!.NotifyHumanInteractionAsync();
         }
-        catch (Exception exception) when (exception is HttpRequestException or OperationCanceledException or ApiException)
+        catch (OperationCanceledException)
+        {
+            // Incluye el cierre de la aplicación y tiempos de espera.
+        }
+        catch (SecurityConnectionException)
+        {
+            // El transporte ya informó el bloqueo de seguridad.
+        }
+        catch (Exception)
         {
             _logger?.Warning("HumanActivityReportFailed", "No fue posible reportar la interacción en este momento.");
         }

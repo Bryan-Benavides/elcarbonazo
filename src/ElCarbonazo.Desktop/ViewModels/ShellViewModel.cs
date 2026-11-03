@@ -23,6 +23,9 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     private string _inactivityCountdown = string.Empty;
 
     [ObservableProperty]
+    private string? _sessionActionError;
+
+    [ObservableProperty]
     private bool _isAbsoluteWarningVisible;
 
     [ObservableProperty]
@@ -61,7 +64,23 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        await _sessionManager.ContinueSessionAsync(_lifetime.Token);
+        SessionActionError = null;
+        try
+        {
+            await _sessionManager.ContinueSessionAsync(_lifetime.Token);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (SecurityConnectionException)
+        {
+            // El evento de sesión navega a la pantalla de seguridad.
+        }
+        catch (Exception)
+        {
+            SessionActionError = "No fue posible continuar la sesión. Verifique la conexión e inténtelo de nuevo.";
+        }
         UpdateWarnings();
     }
 
@@ -96,6 +115,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         {
             IsInactivityWarningVisible = false;
             IsAbsoluteWarningVisible = false;
+            SessionActionError = null;
             return;
         }
 
