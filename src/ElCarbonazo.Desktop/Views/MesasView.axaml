@@ -10,6 +10,16 @@
     <UserControl.Resources>
         <converters:EstadoMesaColorConverter x:Key="EstadoColor" />
         <converters:MesaSeleccionadaConverter x:Key="MesaSeleccionadaConverter" />
+        <!-- Sin la plantilla genérica de SukiUI: evita su fondo de hover blanco. -->
+        <ControlTheme x:Key="MesaButtonTheme" TargetType="ToggleButton">
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Stretch" />
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
     </UserControl.Resources>
     <UserControl.Styles>
         <Style Selector="ToggleButton.mesa">
@@ -25,15 +35,19 @@
         <Style Selector="ToggleButton.mesa:pressed">
             <Setter Property="Background" Value="Transparent" />
         </Style>
-        <Style Selector="ToggleButton.mesa:pointerover Border.tarjeta">
+        <Style Selector="Border.tarjeta">
+            <Setter Property="BorderBrush" Value="{StaticResource BordePanelBrush}" />
+            <Setter Property="RenderTransform" Value="translateY(0px)" />
+        </Style>
+        <Style Selector="Border.tarjeta:pointerover">
             <Setter Property="BorderBrush" Value="{StaticResource AcentoFuegoBrush}" />
             <Setter Property="RenderTransform" Value="translateY(-3px)" />
         </Style>
-        <Style Selector="ToggleButton.mesa:checked Border.tarjeta">
+        <Style Selector="Border.tarjeta.seleccionada">
             <Setter Property="BorderBrush" Value="{StaticResource AcentoFuegoBrush}" />
         </Style>
-        <Style Selector="ToggleButton.mesa:focus-visible Border.tarjeta">
-            <Setter Property="BorderBrush" Value="{StaticResource TextoPrincipalBrush}" />
+        <Style Selector="Border.tarjeta.enfocada">
+            <Setter Property="BorderBrush" Value="{StaticResource AcentoFuegoBrush}" />
         </Style>
     </UserControl.Styles>
     <Grid ColumnDefinitions="180,*">
@@ -59,7 +73,11 @@
                 <TextBlock Text="Salón principal · Consulta de mesas" Foreground="{StaticResource TextoSecundarioBrush}" />
             </StackPanel>
             <Border Grid.Row="1" Margin="0,18,0,16" Padding="12,10" CornerRadius="6" Background="{StaticResource FondoPanelBrush}">
-                <TextBlock Text="{Binding EstadoConexion}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                <StackPanel Spacing="8">
+                    <TextBlock Text="{Binding EstadoConexion}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding MensajeAccion}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <Button Content="He revisado las mesas" IsVisible="{Binding ResultadoIncierto}" IsEnabled="{Binding PuedeReconocer}" Command="{Binding ReconocerIncertidumbreCommand}" />
+                </StackPanel>
             </Border>
             <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
             <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Disabled">
@@ -69,7 +87,7 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:MesaDto">
-                            <ToggleButton Classes="mesa" Width="210" Margin="0,0,12,12" Padding="0" HorizontalContentAlignment="Stretch"
+                            <ToggleButton x:Name="MesaButton" Theme="{StaticResource MesaButtonTheme}" Classes="mesa" Width="210" Margin="0,0,12,12" Padding="0" HorizontalContentAlignment="Stretch"
                                     Command="{Binding #Root.((vm:MesasViewModel)DataContext).SeleccionarMesaCommand}"
                                     CommandParameter="{Binding}">
                             <ToggleButton.IsChecked>
@@ -78,13 +96,9 @@
                                     <Binding Path="#Root.((vm:MesasViewModel)DataContext).MesaSeleccionada" />
                                 </MultiBinding>
                             </ToggleButton.IsChecked>
-                            <Border Classes="tarjeta" MinHeight="150" Background="{StaticResource FondoPanelBrush}" BorderThickness="1" CornerRadius="7">
-                                <Border.Styles>
-                                    <Style Selector="Border.tarjeta">
-                                        <Setter Property="BorderBrush" Value="{StaticResource BordePanelBrush}" />
-                                        <Setter Property="RenderTransform" Value="translateY(0px)" />
-                                    </Style>
-                                </Border.Styles>
+                            <Border Classes="tarjeta" Classes.seleccionada="{Binding #MesaButton.IsChecked}"
+                                    Classes.enfocada="{Binding #MesaButton.IsKeyboardFocusWithin}"
+                                    MinHeight="150" Background="{StaticResource FondoPanelBrush}" BorderThickness="1" CornerRadius="7">
                                 <Border.Transitions>
                                     <Transitions>
                                         <BrushTransition Property="BorderBrush" Duration="0:0:0.16" />
@@ -114,7 +128,15 @@
                     <TextBlock Text="{Binding DetalleTitulo}" Foreground="{StaticResource TextoPrincipalBrush}" FontSize="21" FontWeight="Bold" />
                     <TextBlock Text="{Binding DetalleCapacidad}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding DetalleEstado}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding DetalleGrupo}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                     <TextBlock Text="{Binding DetalleGrupo}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                     <Button Content="Reservar" IsEnabled="{Binding PuedeReservar}" Command="{Binding ReservarCommand}" HorizontalAlignment="Stretch" />
+                     <Button Content="Ocupar" IsEnabled="{Binding PuedeOcupar}" Command="{Binding OcuparCommand}" HorizontalAlignment="Stretch" />
+                     <Button Content="Liberar" IsEnabled="{Binding PuedeLiberar}" Command="{Binding SolicitarLiberacionCommand}" HorizontalAlignment="Stretch" />
+                     <StackPanel IsVisible="{Binding ConfirmarLiberacion}" Spacing="8">
+                         <TextBlock Text="¿Confirmar la liberación de esta mesa?" TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
+                         <Button Content="Confirmar liberación" Command="{Binding LiberarCommand}" />
+                         <Button Content="Cancelar" Command="{Binding CancelarLiberacionCommand}" />
+                     </StackPanel>
                     <Button Content="Cerrar detalle" Command="{Binding CerrarDetalleCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
                 </StackPanel>
             </Border>
