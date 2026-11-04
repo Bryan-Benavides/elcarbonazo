@@ -38,3 +38,7 @@ Los logs técnicos se escriben en JSON a consola y a `%ProgramData%\ElCarbonazo\
 ## Development
 
 Después de aplicar las migraciones, el arranque de la API en `Development` crea o reutiliza la fila heredada neutralizada como `admin/admin123`. Este seeder no se ejecuta en otros entornos y no reemplaza usuarios existentes.
+
+## Provisión prevista para operaciones recuperables
+
+**Pendiente de implementación y verificación:** al desplegar el módulo 002, el instalador deberá crear el diario inicial `recovery\journal.json` bajo `%ProgramData%\ElCarbonazo`, con estado `SinPendientes` e identificador de instalación coincidente. En actualización no sobrescribirá un diario existente. Si falta o está corrupto, no se debe crear uno vacío para desbloquear la terminal; se requiere recuperación administrativa segura. Las ACL y el reemplazo atómico se verificarán con las cuentas Windows de operación. El procedimiento detallado y los permisos de las nuevas tablas se publicarán junto con la implementación, no se consideran disponibles todavía.

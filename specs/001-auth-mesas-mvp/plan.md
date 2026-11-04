@@ -128,6 +128,8 @@
 **Todas las respuestas y requests usan camelCase** (configurar `JsonNamingPolicy.CamelCase` en `Program.cs`).
 EF Core mapea a snake_case en BD; la serialización expone camelCase.
 
+> **Perfil universitario:** los endpoints de mutación de mesas y grupos descritos abajo son los contratos actuales y se usan para T5. `specs/002-operaciones-seguras/` queda como propuesta futura; no se implementa ni deshabilita estos endpoints en este perfil.
+
 ---
 
 - `POST /api/auth/login`
@@ -251,15 +253,15 @@ EF Core mapea a snake_case en BD; la serialización expone camelCase.
 - Los DTOs de Desktop son contratos cliente propios y no referencian tipos del proyecto API. El JSON usa camelCase; `numero` es el campo físico. `MesaDto.Version` se conserva como `uint` opaco para concurrencia y no se interpreta como timestamp.
 - **Propiedad de requests:** `MesasViewModel` o un servicio coordinador de mesas mantiene como máximo un GET activo y un flujo de mutación serializado. Cada resultado de GET lleva una generación local; al iniciar una mutación se invalida la generación previa. Una respuesta de polling de generación obsoleta se descarta. Las respuestas de escritura no se sustituyen por polling anterior; las respuestas `PUT`/`POST` satisfactorias se aplican inmediatamente.
 - **Delete y reconciliación:** un `DELETE` de grupo satisfactorio (204) no contiene DTOs; se mantienen bloqueadas las mutaciones hasta un `GET /api/mesas` satisfactorio posterior. Un conflicto también invalida los datos previos y solicita GET antes de permitir confirmar otra mutación.
-- **Timeout e incertidumbre:** el timeout de lectura de 5 s comprende recepción y consumo del body JSON. En mutaciones, una vez iniciado el envío, timeout, cancelación o fallo de transporte sin respuesta concluyente no demuestra que el servidor no aplicó el cambio. Se presenta estado incierto, se impiden nuevas mutaciones y se hace GET de reconciliación; no se reintenta la mutación. Una respuesta HTTP explícita se clasifica según su `ProblemDetails`; 5xx también se trata como incierto para mutaciones.
+- **Timeout e incertidumbre:** timeout, cancelación después del envío, fallo de transporte o 5xx no demuestran que la API no aplicó el cambio. Mostrar resultado incierto y bloquear mutaciones; consultar mesas y exigir revisión y reconocimiento explícitos antes de permitir nuevas acciones. No se reintenta automáticamente. Un GET no demuestra que la escritura haya terminado: esta limitación debe mostrarse y documentarse; el perfil no ofrece garantía de recuperación definitiva ni es apto para operación real bajo este fallo.
 - **Problemas API:** conflicto de versión (`MESA_CONFLICTO_CONCURRENCIA`, `GRUPO_CONFLICTO_CONCURRENCIA`) implica GET inmediato y nueva confirmación. Los códigos de pedido pendiente muestran rechazo de dominio; los errores de elegibilidad reconcilian el estado y notifican. 401/403, sesión pausada, sesión expirada, TLS y fallos de red mantienen semánticas distintas. La API sigue siendo autoridad sobre pedidos pendientes, ya que `MesaDto` no incluye esa información.
 - **Cadencia medible:** polling nominal cada 2 s entre inicios de solicitudes saludables, sin solapamiento; una consulta que sigue activa impide iniciar otra y la siguiente empieza al completar la anterior. Backoff 2→5→10→30 s ante errores recuperables. La latencia de convergencia es intervalo de espera + GET + despacho/render y se mide/documenta de extremo a extremo. El objetivo nominal es 2 s más la latencia medida de GET y presentación; no se afirma un SLA absoluto ≤2 s ni se solapan requests para simularlo.
 - **Prerrequisitos de integración de sesión:** `ISessionManager.SendHumanAsync` no debe retornar una respuesta ya dispuesta cuando refresh falla; timeout de `ApiClientService` debe cubrir también lectura del contenido de respuesta. Mantener `SecurityBlocked`/`Expired` terminales y no clasificar sus errores como desconexión recuperable. Estos comportamientos deben quedar cubiertos por pruebas de integración Desktop planificadas en T6.
 - `Converters/EstadoMesaColorConverter.cs` — Mapea estado → color del Design System:
-  - `Libre` → `ColorMesaLibre` `#7CB342`
-  - `Ocupada` → `ColorMesaOcupada` `#8C2331`
-  - `Reservada` → `ColorMesaReservada` `#E67E22`
-  - `Agrupada` → `ColorMesaAgrupada` `#2E86AB`
+  - `Libre` → `ColorMesaLibre` `#10B981`
+  - `Ocupada` → `ColorMesaOcupada` `#EF4444`
+  - `Reservada` → `ColorMesaReservada` `#F59E0B`
+  - `Agrupada` → `ColorMesaAgrupada` `#06B6D4`
 
 ## 5. Configuración Técnica Requerida
 - **Program.cs (API)**: `builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);`
@@ -267,7 +269,7 @@ EF Core mapea a snake_case en BD; la serialización expone camelCase.
 - **Modo sin conexión**: la colección visible permanece como último estado conocido, pero comandos de cambio/agrupación quedan deshabilitados hasta un GET exitoso. No existe cola de mutaciones offline.
 - **Conflictos 409**: `MESA_CONFLICTO_CONCURRENCIA` y `GRUPO_CONFLICTO_CONCURRENCIA` fuerzan GET inmediato, mensaje al usuario y nueva confirmación; nunca se reintenta la mutación obsoleta.
 - **Sesión en pausa**: es distinta de “sin conexión”. JWT vencido durante polling detiene consultas y mutaciones sin refresh automático; interacción humana dispara refresh single-flight y, si funciona, reanuda polling.
-- **Timeouts Desktop**: 5 s para GET/polling y 10 s para login, refresh y mutaciones mediante cancelación por request. Una mutación que vence no se reintenta automáticamente; se marca conectividad incierta y se fuerza reconciliación por GET.
+- **Timeouts Desktop**: 5 s para GET/polling y 10 s para login, refresh y mutaciones mediante cancelación por request. Una mutación que vence no se reintenta automáticamente; se informa la incertidumbre, se consulta mesas y se pide revisión humana sin afirmar que GET confirma el resultado definitivo.
 - **Seed estructural**: 15 mesas (`numero` 1..15, `capacidad` 4, `estado` 'Libre', `id_grupo` NULL). Las migraciones no incluyen contraseñas conocidas.
 - **Bootstrap de producción**: `--bootstrap-admin` crea la primera `Jefa` cuando `usuario` está vacío o contiene únicamente la fila heredada neutralizada. En ese caso actualiza y reactiva esa fila conservando su ID. Cualquier otro usuario bloquea el comando.
 - **Contraseñas**: toda contraseña nueva o restablecida fuera de `Development` requiere al menos 10 caracteres y admite como máximo 64 bytes UTF-8; no se imponen categorías de composición. Se usa literalmente, sin Trim ni normalización. `--bootstrap-admin` valida estos límites antes de BCrypt para evitar el truncamiento de 72 bytes.
@@ -320,10 +322,9 @@ EF Core mapea a snake_case en BD; la serialización expone camelCase.
 - Pruebas unitarias para normalización, transiciones, cálculo de expiraciones, rotación/revocación y reglas de mesas, grupos y pedidos.
 - Pruebas de integración para migraciones, restricciones PostgreSQL, endpoints HTTP, JWT/sesiones, concurrencia y `ProblemDetails`.
 - Pruebas Desktop con `HttpMessageHandler`, `TimeProvider` y navegación falsos para login, refresh single-flight, actividad, avisos, logout, timeouts, polling/backoff, modo offline, TLS/configuración, agrupación y conflictos.
-- XAML, dimensiones, colores, sillas, estados visuales y diálogos se verifican mediante checklist manual; no se agrega automatización UI al MVP.
+- XAML, distribución de tarjetas rectangulares, colores, estados visuales y diálogos se verifican manualmente; no se agrega automatización UI al MVP.
 - Cada ejecución crea una base `elcarbonazo_test_<identificador>`, aplica todas las migraciones y la elimina al finalizar; queda prohibido apuntar a `elcarbonazo` o reutilizar la base de desarrollo.
 - La conexión administrativa de pruebas se suministra por variable de entorno no versionada. El fixture rechaza cualquier nombre que no comience con `elcarbonazo_test_`.
-- Cobertura mínima de 80% para lógica crítica de autenticación, sesiones, mesas, grupos y pedidos; se excluyen migraciones, archivos generados y composición trivial.
-- Cobertura Desktop mínima de 80% para servicios y ViewModels críticos; se excluyen XAML, code-behind limitado a `InitializeComponent()`, código generado y composición.
+- Para el perfil universitario se ejecutan pruebas existentes y pruebas focalizadas de servicios/ViewModels y flujos críticos. La cobertura mínima de 80% para API y Desktop es objetivo previo a producción, no condición de aceptación del prototipo.
 - Verificación requerida antes de T4: formato → build → pruebas unitarias → pruebas de integración → auditoría de paquetes vulnerables.
 - Verificación final tras T5: formato → build → pruebas API → pruebas Desktop → checklist visual → auditoría de paquetes.

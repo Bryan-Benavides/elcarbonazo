@@ -1,5 +1,7 @@
 # Constitución del Proyecto — Bar Restaurante "El Carbonazo"
 
+> **Perfil universitario vigente:** se busca un prototipo funcional demostrable, no una instalación lista para producción. Los requisitos de despliegue seguro, aceptación LAN física y endurecimiento avanzado se conservan como objetivos para una etapa posterior. Esta aclaración no elimina SDD, MVVM, aislamiento REST, validación TLS ni las reglas de negocio.
+
 ## 1. Principios Innegociables
 - **Desarrollo Guiado por Especificaciones (SDD):** Ningún código se escribe sin una especificación aprobada previamente en `spec/`.
 - **Estabilidad de Dependencias:** Prohibido actualizar o instalar paquetes NuGet con versiones no probadas o incompatibles.
@@ -19,11 +21,12 @@
 ## 4. Design System y Paleta Oficial
 - **Tema Base:** SukiUI 7.0.1[cite: 3].
 - **Recursos de Color:**
-    - `ColorVino`: `#8C2331` (Botón primario, acento de marca, headers)[cite: 3].
-    - `ColorCarbón`: `#2A2421` (Fondo de inputs, texto denso, bordes)[cite: 3].
-    - `ColorHueso`: `#F8F5F0` (Fondo general de la aplicación)[cite: 3].
-    - `ColorBeige`: `#E8E0D5` (Paneles secundarios y resúmenes)[cite: 3].
-    - `ColorMesaLibre`: `#7CB342` | `ColorMesaOcupada`: `#8C2331` | `ColorMesaReservada`: `#E67E22` | `ColorMesaAgrupada`: `#2E86AB`[cite: 3].
+    - Fondo principal `#1E1E1E`; fondo secundario `#2D2D30`; bordes `#3F3F46`.
+    - Texto principal `#F3F4F6`; texto secundario `#9CA3AF`.
+    - Acento primario `#FF5722`; acento alterno `#E65100`.
+    - Libre `#10B981` | Ocupada `#EF4444` | Reservada `#F59E0B` | Agrupada `#06B6D4`.
+    - Dirección visual aprobada: tema oscuro «Carbón & Fuego», con navegación lateral inspirada en la referencia del usuario. Ver `docs/diseno-visual-propuesta.md`; la aplicación actual aún requiere adaptación.
+    - Los colores semánticos deben acompañarse de texto y contraste legible; no se exige texto blanco sobre fondos brillantes.
 
 ## 5. Reglas de Dominio
 - **Mesas:** El salón cuenta con 15 mesas físicas numeradas[cite: 1, 2]. Queda prohibido liberar una mesa con una cuenta pendiente[cite: 1].

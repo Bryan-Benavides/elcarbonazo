@@ -1,6 +1,8 @@
 # Especificación del Módulo 001: Autenticación, Sesiones y Control de Mesas (MVP)
 
 ## Contexto y Alcance
+**Perfil vigente: prototipo universitario funcional, no listo para producción.** Los requisitos de operación de producción permanecen como objetivos futuros; no son condición para presentar el prototipo. No se eliminan controles ya implementados ni se permite acceso directo a la base desde Desktop. El módulo 002 queda pospuesto y no bloquea T5/T6 de este perfil.
+
 Este módulo establece la seguridad de acceso, la sesión operativa y el control concurrente de las 15 mesas del restaurante. Incluye la base de datos necesaria para validar cuentas pendientes y grupos de mesas, aunque la captura funcional de pedidos se implementará en un módulo posterior.
 
 La solución opera únicamente en la LAN del negocio, sin dependencia de Internet. Desktop consume la API por HTTP/REST y nunca accede directamente a PostgreSQL.
@@ -46,7 +48,7 @@ Quedan fuera de este módulo las altas de empleados, cambios de rol, desactivaci
 - **MIENTRAS** Desktop realice polling, **EL SISTEMA NO DEBE** considerarlo actividad humana ni generar un evento de auditoría por cada consulta.
 - **SI** una consulta sigue en curso o la API falla, **EL SISTEMA NO DEBE** solapar polling; debe aplicar backoff 2→5→10→30 segundos, mostrar estado sin conexión y recuperar automáticamente el intervalo normal tras un éxito.
 - **MIENTRAS** Desktop indique estado sin conexión, **EL SISTEMA DEBE** conservar la última vista solo para lectura, bloquear mutaciones y no encolar cambios offline.
-- **SI** una lectura supera 5 segundos o una escritura/login supera 10 segundos, **EL SISTEMA DEBE** cancelar la espera; una escritura con resultado desconocido no debe reintentarse automáticamente y debe reconciliarse mediante GET.
+- **SI** una lectura supera 5 segundos o una escritura/login supera 10 segundos, **EL SISTEMA DEBE** cancelar la espera; una escritura con resultado desconocido no debe reintentarse automáticamente. En el prototipo, Desktop informa que el resultado es incierto, conserva solo lectura, consulta el estado actual y exige revisión y reconocimiento explícitos del usuario antes de permitir nuevas acciones. Un GET es una fotografía y no demuestra que una escritura anterior terminó; esta limitación se comunica y el prototipo no se presenta como seguro para operación real ante ese fallo.
 
 ### RF-04: Cambio de Estado de Mesa
 - **CUANDO** se pulse una mesa individual fuera del modo de agrupación, **EL SISTEMA DEBE** mostrar su detalle y únicamente las acciones válidas por estado y rol; Liberar debe exigir confirmación.
@@ -133,12 +135,11 @@ Quedan fuera de este módulo las altas de empleados, cambios de rol, desactivaci
 - La API **DEBE** mantener Controllers delgados y separar DTOs, servicios, reglas, seguridad y persistencia dentro del proyecto existente.
 - Pruebas xUnit unitarias y de integración **DEBEN** ejecutarse contra una base PostgreSQL temporal `elcarbonazo_test_<id>`, nunca contra desarrollo.
 - Desktop **DEBE** tener pruebas xUnit unitarias de servicios y ViewModels con HTTP/reloj falsos; la presentación XAML se valida manualmente sin automatización UI completa.
-- La lógica crítica de autenticación, sesiones, mesas, grupos y pedidos **DEBE** alcanzar al menos 80% de cobertura.
-- La lógica crítica Desktop de servicios y ViewModels **DEBE** alcanzar al menos 80%, excluyendo XAML, code-behind mínimo, código generado y composición.
+- Para el prototipo se ejecutan las pruebas API existentes y pruebas Desktop focalizadas de contratos, roles, transiciones, polling y errores. El objetivo de cobertura ≥80% de lógica crítica API y Desktop queda como objetivo previo a producción, no como bloqueo del perfil universitario.
 - Antes de T4 **DEBEN** pasar formato, build, pruebas unitarias, pruebas de integración y auditoría de paquetes vulnerables.
 
 ## Criterios de Finalización
-- T3.0–T3.11 completadas y verificadas en orden; T4 permanece bloqueada hasta entonces.
+- Para la entrega universitaria, T3.10 (aceptación física LAN sin Internet) puede permanecer pendiente y documentada; no bloquea T5/T6. La configuración segura y comprobación física siguen siendo necesarias antes de operación real.
 - Login, refresh, actividad y logout cumplen los contratos y límites de sesión definidos.
 - Los cinco roles consultan mesas; solo Jefa, Encargado de Caja, Mesero y Supervisor pueden modificarlas o agruparlas.
 - Las 15 mesas se renderizan con los cuatro estados; polling nominal de dos segundos sin solapamiento y latencia de convergencia medida/documentada como espera de polling más GET y presentación bajo condiciones LAN saludables.

@@ -36,7 +36,7 @@ public partial class LoginViewModel(
         try
         {
             var session = await sessionManager.LoginAsync(Nombre, Contrasena, cancellationToken);
-            navigation.Navigate(new MesasViewModel(session.Nombre, session.Rol));
+            navigation.Navigate(new MesasViewModel(session.Nombre, session.Rol, sessionManager, new MesasApiService(sessionManager)));
         }
         catch (ApiException exception) when (
             exception.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.TooManyRequests)

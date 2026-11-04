@@ -15,6 +15,8 @@ La API de producción no aplica migraciones al arrancar. Aplique `dotnet ef data
 
 El instalador crea `%ProgramData%\ElCarbonazo\desktop.json` con el formato de `deploy/desktop.example.json`, generando `idInstalacion` una sola vez con UUID aleatorio. ACL: usuarios normales solo leen; instalador/administradores escriben. Producción no regenera identificadores faltantes ni permite editar el endpoint desde LoginView. `ApiBaseUrl` debe usar el hostname TLS confiable; override por entorno queda limitado a Development/pruebas.
 
+**Operaciones recuperables 002 — pendiente de implementación:** la futura instalación deberá provisionar y proteger un diario local permanente conforme a `specs/002-operaciones-seguras/plan.md`. No borrar ni reinicializar el diario durante reparaciones. El cambio requiere migración y actualización coordinada de API y Desktop; los endpoints de escritura antiguos dejarán de estar disponibles solo cuando ese despliegue esté listo y verificado.
+
 ## PostgreSQL runtime (permisos mínimos)
 
 Provisionar los roles `elcarbonazo_runtime` y `elcarbonazo_bootstrap` fuera del proceso de migración y aplicar `deploy/runtime-grants.sql` como administrador. El rol runtime solo recibe operaciones DML requeridas por la API; el bootstrap solo puede leer/crear/actualizar `usuario` y agregar auditoría. No conceda `CREATE`, propiedad ni permisos DDL. Para auditoría el runtime recibe exclusivamente `SELECT`/`INSERT` y `USAGE` de su secuencia; no recibe `UPDATE`, `DELETE` o `TRUNCATE`. La auditoría tiene trigger append-only adicional.

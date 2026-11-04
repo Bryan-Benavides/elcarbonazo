@@ -37,6 +37,14 @@
             <Color x:Key="ColorMesaReservada">#E67E22</Color>
             <Color x:Key="ColorMesaAgrupada">#2E86AB</Color>
 
+            <!-- Carbón & Fuego: recursos compartidos por el nuevo mapa. -->
+            <SolidColorBrush x:Key="FondoPrincipalBrush" Color="#1E1E1E" />
+            <SolidColorBrush x:Key="FondoPanelBrush" Color="#2D2D30" />
+            <SolidColorBrush x:Key="BordePanelBrush" Color="#3F3F46" />
+            <SolidColorBrush x:Key="TextoPrincipalBrush" Color="#F3F4F6" />
+            <SolidColorBrush x:Key="TextoSecundarioBrush" Color="#9CA3AF" />
+            <SolidColorBrush x:Key="AcentoFuegoBrush" Color="#FF5722" />
+
             <SolidColorBrush x:Key="ColorVinoBrush" Color="{StaticResource ColorVino}" />
             <SolidColorBrush x:Key="ColorCarbónBrush" Color="{StaticResource ColorCarbón}" />
             <SolidColorBrush x:Key="ColorHuesoBrush" Color="{StaticResource ColorHueso}" />

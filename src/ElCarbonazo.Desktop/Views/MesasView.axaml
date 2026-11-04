@@ -1,27 +1,92 @@
 <UserControl x:Class="ElCarbonazo.Desktop.Views.MesasView"
+             x:Name="Root"
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ElCarbonazo.Desktop.ViewModels"
+             xmlns:models="using:ElCarbonazo.Desktop.Models"
+             xmlns:converters="using:ElCarbonazo.Desktop.Converters"
              x:DataType="vm:MesasViewModel"
-             Background="{StaticResource ColorHuesoBrush}">
-    <StackPanel Spacing="12"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center">
-        <TextBlock Text="Sesión iniciada"
-                   FontSize="30"
-                   FontWeight="Bold"
-                   Foreground="{StaticResource ColorVinoBrush}"
-                   HorizontalAlignment="Center" />
-        <TextBlock Text="{Binding Nombre}"
-                   FontSize="20"
-                   Foreground="{StaticResource ColorCarbónBrush}"
-                   HorizontalAlignment="Center" />
-        <TextBlock Text="{Binding Rol}"
-                   Foreground="{StaticResource ColorCarbónBrush}"
-                   HorizontalAlignment="Center" />
-        <TextBlock Text="El mapa interactivo de mesas se implementará en T5."
-                   Margin="0,16,0,0"
-                   Foreground="{StaticResource ColorCarbónBrush}"
-                   HorizontalAlignment="Center" />
-    </StackPanel>
+             Background="{StaticResource FondoPrincipalBrush}">
+    <UserControl.Resources>
+        <converters:EstadoMesaColorConverter x:Key="EstadoColor" />
+    </UserControl.Resources>
+    <Grid ColumnDefinitions="180,*">
+        <Border Grid.Column="0" Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="0,0,1,0">
+            <Grid RowDefinitions="Auto,*,Auto" Margin="16,24">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="EL CARBONAZO" FontSize="17" FontWeight="Bold" Foreground="{StaticResource AcentoFuegoBrush}" />
+                    <TextBlock Text="Gestión de salón" FontSize="12" Foreground="{StaticResource TextoSecundarioBrush}" />
+                </StackPanel>
+                <Border Grid.Row="1" Margin="0,32,0,0" Padding="12,10" VerticalAlignment="Top" CornerRadius="6" Background="{StaticResource FondoPrincipalBrush}" BorderBrush="{StaticResource AcentoFuegoBrush}" BorderThickness="3,0,0,0">
+                    <TextBlock Text="Mesas" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                </Border>
+                <StackPanel Grid.Row="2" Spacing="6">
+                    <TextBlock Text="{Binding Nombre}" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Rol}" FontSize="12" Foreground="{StaticResource TextoSecundarioBrush}" TextWrapping="Wrap" />
+                    <Button Content="Cerrar sesión" Command="{Binding SolicitarCierreCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
+                </StackPanel>
+            </Grid>
+        </Border>
+        <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*" Margin="24,20">
+            <StackPanel Spacing="5">
+                <TextBlock Text="Mapa de mesas" FontSize="27" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                <TextBlock Text="Salón principal · Consulta de mesas" Foreground="{StaticResource TextoSecundarioBrush}" />
+            </StackPanel>
+            <Border Grid.Row="1" Margin="0,18,0,16" Padding="12,10" CornerRadius="6" Background="{StaticResource FondoPanelBrush}">
+                <TextBlock Text="{Binding EstadoConexion}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+            </Border>
+            <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
+            <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding Mesas}" HorizontalAlignment="Left">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:MesaDto">
+                            <Button Width="210" Margin="0,0,12,12" Padding="0" HorizontalContentAlignment="Stretch"
+                                    Command="{Binding #Root.((vm:MesasViewModel)DataContext).SeleccionarMesaCommand}"
+                                    CommandParameter="{Binding}">
+                            <Border MinHeight="150" Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1" CornerRadius="7">
+                                <Grid RowDefinitions="4,*">
+                                    <Border Grid.Row="0" Background="{Binding Estado, Converter={StaticResource EstadoColor}}" CornerRadius="7,7,0,0" />
+                                    <StackPanel Grid.Row="1" Margin="15,13" Spacing="8">
+                                        <TextBlock Text="{Binding Numero, StringFormat='Mesa {0:00}'}" FontSize="19" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                        <TextBlock Text="{Binding Capacidad, StringFormat='Capacidad: {0} personas'}" Foreground="{StaticResource TextoSecundarioBrush}" />
+                                        <TextBlock Text="{Binding Estado, StringFormat='Estado: {0}'}" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                        <TextBlock Text="{Binding GrupoTexto}" FontSize="12" Foreground="{StaticResource TextoSecundarioBrush}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <Border Grid.Column="1" Width="230" Margin="12,0,0,0" Padding="16" VerticalAlignment="Top"
+                    IsVisible="{Binding HayMesaSeleccionada}" Background="{StaticResource FondoPanelBrush}"
+                    BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1" CornerRadius="7">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Detalle de mesa" Foreground="{StaticResource TextoSecundarioBrush}" FontSize="13" />
+                    <TextBlock Text="{Binding DetalleTitulo}" Foreground="{StaticResource TextoPrincipalBrush}" FontSize="21" FontWeight="Bold" />
+                    <TextBlock Text="{Binding DetalleCapacidad}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding DetalleEstado}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding DetalleGrupo}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <Button Content="Cerrar detalle" Command="{Binding CerrarDetalleCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+                </StackPanel>
+            </Border>
+            </Grid>
+        </Grid>
+        <Border Grid.ColumnSpan="2" Background="#B0000000" IsVisible="{Binding ConfirmarCierre}" ZIndex="100">
+            <Border Width="380" Padding="24" CornerRadius="10" Background="{StaticResource FondoPanelBrush}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="¿Cerrar sesión?" FontSize="21" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="Se detendrá la consulta de mesas y volverá al inicio de sesión." TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+                        <Button Content="Cancelar" Command="{Binding CancelarCierreCommand}" />
+                        <Button Content="Cerrar sesión" Command="{Binding CerrarSesionCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
 </UserControl>

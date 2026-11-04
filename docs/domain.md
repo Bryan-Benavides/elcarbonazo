@@ -80,7 +80,7 @@
 - El cierre bloquea primero el grupo y luego sus mesas ordenadas por `id_mesa`, revalida pedidos pendientes y confirma todo en una transacción; la apertura futura de pedidos respeta el mismo orden de locks.
 - Desktop nunca solapa consultas de polling; usa 2 segundos en operación normal y backoff 2→5→10→30 segundos ante fallos, mostrando estado sin conexión y recuperándose automáticamente.
 - Mientras esté sin conexión, Desktop conserva la última información solo para lectura, deshabilita cambios y no encola operaciones para ejecutarlas después.
-- Desktop limita lecturas a 5 segundos y login/mutaciones a 10 segundos; una escritura con timeout nunca se reintenta automáticamente y se reconcilia con una lectura posterior.
+- Desktop limita lecturas a 5 segundos y login/mutaciones a 10 segundos; una escritura con timeout nunca se reintenta automáticamente. En el prototipo se avisa del resultado incierto y se solicita revisión humana tras consultar mesas; una lectura no demuestra que terminó la escritura. El protocolo recuperable 002 se pospone para una fase futura.
 
 ## Reglas de Pedido
 - Cada pedido pertenece exactamente a una mesa individual o a un grupo: uno y solo uno de `id_mesa` e `id_grupo` debe tener valor.

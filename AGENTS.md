@@ -33,16 +33,14 @@
 | `CommunityToolkit.Mvvm` | 8.4.0 |
 
 ## Design System (SukiUI)
-Colors defined in `App.axaml` resources:
-- `ColorVino` `#8C2331` (primary, brand, headers)
-- `ColorCarbón` `#2A2421` (input bg, dense text, borders)
-- `ColorHueso` `#F8F5F0` (app background)
-- `ColorBeige` `#E8E0D5` (secondary panels)
-- Table states: `ColorMesaLibre` `#7CB342`, `ColorMesaOcupada` `#8C2331`, `ColorMesaReservada` `#E67E22`, `ColorMesaAgrupada` `#2E86AB`
+Approved direction: dark **Carbón & Fuego**; see `docs/diseno-visual-propuesta.md`.
+- Background `#1E1E1E`, panels `#2D2D30`, borders `#3F3F46`.
+- Primary text `#F3F4F6`, secondary text `#9CA3AF`, accent `#FF5722`, alternate `#E65100`.
+- Table states: Libre `#10B981`, Ocupada `#EF4444`, Reservada `#F59E0B`, Agrupada `#06B6D4`. Pair colors with text and verify contrast.
 
 UI specs (Module 001):
-- Login: SukiUI styling with ColorVino/ColorBeige
-- MesasView: WrapPanel centered, 15 cards 160×160px, circular buttons 100×100px, 4 decorative chairs in corners
+- MesasView: responsive dark rectangular cards in a WrapPanel, inspired by the approved reference; no decorative chairs or circular table buttons.
+- Sidebar exposes implemented destinations only; do not invent orders, amounts, staff or other data not supplied by the API.
 - `EstadoMesaColorConverter.cs` maps estado → color
 
 ## Developer Commands
@@ -68,17 +66,18 @@ dotnet ef database update
 4. Update task checkboxes as completed
 
 ## Current Module: 001-auth-mesas-mvp
-**Auth (JWT login) + 15-table interactive grid with ≤2s polling.**
+**University MVP: auth (JWT login) + 15-table interactive grid with nominal 2s single-flight polling.**
 
 Endpoints:
-- `POST /api/auth/login` — Body: `{ "nombre", "contrasena" }` → 200: `{ "token", "idUsuario", "nombre", "rol" }`
-- `GET /api/mesas` — Auth: Bearer → 200: `[{ "idMesa", "numeroMesa", "capacidad", "estado" }]`
-- `PUT /api/mesas/{id}/estado` — Auth: Bearer, Body: `{ "estado" }` → 200: `{ "idMesa", "estado" }`
+- `POST /api/auth/login` — Body: `{ "nombre", "contrasena" }` → access/refresh tokens, expirations and identity.
+- `GET /api/mesas` — Bearer → `[{ "idMesa", "idGrupo", "numero", "capacidad", "estado", "version" }]`.
+- `PUT /api/mesas/{id}/estado` — Bearer, body `{ "estado", "version" }` → complete mesa DTO.
+- `POST /api/grupos-mesa`, `DELETE /api/grupos-mesa/{id}` — see `plan.md` for contracts and roles.
 
 Desktop components:
 - `Views/LoginView.axaml` ↔ `ViewModels/LoginViewModel.cs`
 - `Views/MesasView.axaml` ↔ `ViewModels/MesasViewModel.cs`
-- `Services/ApiClientService.cs` — HTTPClient + token management
+- `Services/ApiClientService.cs` — HTTP/TLS transport; `SessionManager` owns in-memory tokens and session lifecycle
 - `Services/MesasApiService.cs` — mesa endpoints only
 - `Converters/EstadoMesaColorConverter.cs` — estado → color mapping
 
@@ -87,13 +86,13 @@ Key tables: `usuario`, `mesa`, `producto`, `ingrediente`, `receta`, `detalle_rec
 
 Module 001 tables (per `docs/domain.md`):
 - `usuario`: `id_usuario` (PK, SERIAL), `nombre`, `contrasena_hash`, `rol`, `email`, `activo`
-- `mesa`: `id_mesa` (PK, SERIAL), `id_grupo` (FK, NULL), `numero` (unique), `capacidad`, `estado` ('Libre'|'Ocupada'|'Reservada')
+- `mesa`: `id_mesa` (PK, SERIAL), `id_grupo` (FK, NULL), `numero` (unique), `capacidad`, `estado` ('Libre'|'Ocupada'|'Reservada'|'Agrupada')
 
 **Note**: Column names differ from earlier docs — use `domain.md` as source of truth (`numero` not `numero_mesa`; `usuario` has `email`).
 
 Pedido states: 'Abierto', 'En Preparación', 'Listo', 'Pagado', 'Cancelado'
 
-Seed data: 15 mesas + 1 admin user (`admin` / default password hash)
+Seed data: 15 mesas; production admin is created explicitly via bootstrap. Development has a separate local-only seeder.
 
 ## References
 - `docs/domain.md` — Domain dictionary & full DB schema (authoritative)

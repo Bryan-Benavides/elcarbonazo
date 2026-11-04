@@ -129,7 +129,14 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     }
 
     private void OnNavigated(object? sender, ViewModelBase viewModel) =>
-        Dispatcher.UIThread.Post(() => CurrentViewModel = viewModel);
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (CurrentViewModel is IDisposable disposable && !ReferenceEquals(CurrentViewModel, viewModel))
+            {
+                disposable.Dispose();
+            }
+            CurrentViewModel = viewModel;
+        });
 
     private void OnSessionStateChanged(object? sender, SessionStateChangedEventArgs args) =>
         Dispatcher.UIThread.Post(() => ApplySessionState(args));
@@ -161,6 +168,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
+        (CurrentViewModel as IDisposable)?.Dispose();
         _lifetime.Cancel();
         _lifetime.Dispose();
         _navigation.Navigated -= OnNavigated;
