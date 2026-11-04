@@ -6,25 +6,27 @@ namespace ElCarbonazo.Desktop.Tests;
 public sealed class MesasRequestCoordinatorTests
 {
     [Fact]
-    public void OldReadCannotOverwriteMutationAndNoNewReadStartsDuringMutation()
+    public async Task OldReadFinishesBeforeMutationAndCannotApply()
     {
         var coordinator = Online();
         var oldRead = coordinator.TryBeginRead()!.Value;
-        Assert.True(coordinator.TryBeginMutation());
-        Assert.False(coordinator.TryBeginMutation());
+        var mutation = coordinator.TryBeginMutationAsync();
+        Assert.False(mutation.IsCompleted);
+        Assert.False(await coordinator.TryBeginMutationAsync());
         Assert.Null(coordinator.TryBeginRead());
         var applied = false;
         Assert.False(coordinator.CompleteRead(oldRead, true, () => applied = true));
+        Assert.True(await mutation);
         coordinator.CompleteMutation(false);
         Assert.False(applied);
         Assert.True(coordinator.CanMutate);
     }
 
     [Fact]
-    public void UncertainMutationRequiresSuccessfulReadAndExplicitAcknowledgement()
+    public async Task UncertainMutationRequiresSuccessfulReadAndExplicitAcknowledgement()
     {
         var coordinator = Online();
-        Assert.True(coordinator.TryBeginMutation());
+        Assert.True(await coordinator.TryBeginMutationAsync());
         coordinator.CompleteMutation(true, uncertain: true);
         Assert.False(coordinator.CanMutate);
         Assert.False(coordinator.AcknowledgeUncertainty());
@@ -50,20 +52,20 @@ public sealed class MesasRequestCoordinatorTests
     }
 
     [Fact]
-    public void FailedReadPreventsMutationsAndReadsDoNotOverlap()
+    public async Task FailedReadPreventsMutationsAndReadsDoNotOverlap()
     {
         var coordinator = Online();
         var ticket = coordinator.TryBeginRead()!.Value;
         Assert.Null(coordinator.TryBeginRead());
         coordinator.CompleteRead(ticket, false);
-        Assert.False(coordinator.TryBeginMutation());
+        Assert.False(await coordinator.TryBeginMutationAsync());
     }
 
     [Fact]
-    public void ResponseAfterSessionEndsCannotApplyOrReenableChanges()
+    public async Task ResponseAfterSessionEndsCannotApplyOrReenableChanges()
     {
         var coordinator = Online();
-        Assert.True(coordinator.TryBeginMutation());
+        Assert.True(await coordinator.TryBeginMutationAsync());
         coordinator.SetSessionActive(false);
         coordinator.SetSessionActive(true);
         var applied = false;
@@ -72,6 +74,28 @@ public sealed class MesasRequestCoordinatorTests
 
         Assert.False(applied);
         Assert.False(coordinator.CanMutate);
+    }
+
+    [Fact]
+    public async Task FailedPendingReadPreventsWaitingMutation()
+    {
+        var coordinator = Online();
+        var read = coordinator.TryBeginRead()!.Value;
+        var mutation = coordinator.TryBeginMutationAsync();
+        coordinator.CompleteRead(read, false);
+        Assert.False(await mutation);
+        Assert.False(coordinator.CanMutate);
+    }
+
+    [Fact]
+    public async Task SessionChangeWhileWaitingPreventsMutation()
+    {
+        var coordinator = Online();
+        var read = coordinator.TryBeginRead()!.Value;
+        var mutation = coordinator.TryBeginMutationAsync();
+        coordinator.SetSessionActive(false);
+        coordinator.CompleteRead(read, true);
+        Assert.False(await mutation);
     }
 
     private static MesasRequestCoordinator Online()

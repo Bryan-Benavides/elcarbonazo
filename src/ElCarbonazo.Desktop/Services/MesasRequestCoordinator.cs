@@ -12,10 +12,16 @@ public sealed class MesasRequestCoordinator
     private bool _sessionActive;
     private bool _uncertain;
     private bool _disposed;
+    private TaskCompletionSource? _readFinished;
 
     public bool CanMutate
     {
         get { lock (_gate) return !_disposed && _sessionActive && _online && !_mutation && !_uncertain; }
+    }
+
+    public bool CanAcknowledgeUncertainty
+    {
+        get { lock (_gate) return !_disposed && _sessionActive && _online && !_mutation && _uncertain; }
     }
 
     public void SetSessionActive(bool active)
@@ -35,6 +41,7 @@ public sealed class MesasRequestCoordinator
         {
             if (_disposed || !_sessionActive || _mutation || _read.HasValue) return null;
             _read = ++_generation;
+            _readFinished = new(TaskCreationOptions.RunContinuationsAsynchronously);
             return _read;
         }
     }
@@ -45,6 +52,9 @@ public sealed class MesasRequestCoordinator
         {
             if (_read != ticket) return false;
             _read = null;
+            _readFinished?.TrySetResult();
+            _readFinished = null;
+            if (_mutation && !success) _online = false;
             if (_disposed || !_sessionActive || _mutation || ticket != _generation) return false;
             _online = success;
             if (success) apply?.Invoke();
@@ -52,15 +62,31 @@ public sealed class MesasRequestCoordinator
         }
     }
 
-    public bool TryBeginMutation()
+    public async Task<bool> TryBeginMutationAsync(CancellationToken cancellationToken = default)
     {
+        Task? pendingRead;
         lock (_gate)
         {
             if (!CanMutate) return false;
             _mutation = true;
             _generation++;
             _mutationGeneration = _generation;
-            return true;
+            pendingRead = _readFinished?.Task;
+        }
+        try
+        {
+            if (pendingRead is not null) await pendingRead.WaitAsync(cancellationToken);
+        }
+        catch
+        {
+            lock (_gate) { _mutation = false; _generation++; }
+            throw;
+        }
+        lock (_gate)
+        {
+            if (!_disposed && _sessionActive && _online && _generation == _mutationGeneration) return true;
+            _mutation = false;
+            return false;
         }
     }
 

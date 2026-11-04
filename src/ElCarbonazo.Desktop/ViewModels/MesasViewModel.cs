@@ -28,9 +28,9 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     public bool PuedeReservar => PuedeCambiar("Reservada");
     public bool PuedeOcupar => PuedeCambiar("Ocupada");
     public bool PuedeLiberar => PuedeCambiar("Libre");
-    public bool PuedeReconocer => ResultadoIncierto && ConsultaTrasIncertidumbre;
+    public bool PuedeReconocer => ResultadoIncierto && ConsultaTrasIncertidumbre && _coordinator.CanAcknowledgeUncertainty;
 
-    private bool PuedeCambiar(string destino) => !_disposed && !Mutando && !ConfirmarLiberacion &&
+    private bool PuedeCambiar(string destino) => !_disposed && !Mutando && !ConfirmarLiberacion && !SeleccionandoGrupo &&
         _coordinator.CanMutate && Rol is "Jefa" or "Encargado de Caja" or "Mesero" or "Supervisor" &&
         MesaSeleccionada is { IdGrupo: null } mesa && (mesa.Estado, destino) is
             ("Libre", "Reservada") or ("Libre", "Ocupada") or ("Reservada", "Ocupada") or
@@ -42,9 +42,10 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(PuedeOcupar));
         OnPropertyChanged(nameof(PuedeLiberar));
         OnPropertyChanged(nameof(PuedeReconocer));
+        ActualizarAccionesGrupo();
     }
 
-    partial void OnMesaSeleccionadaChanged(MesaDto? value) { ConfirmarLiberacion = false; ActualizarAcciones(); }
+    partial void OnMesaSeleccionadaChanged(MesaDto? value) { ConfirmarLiberacion = false; ConfirmarCierreGrupo = false; ActualizarAcciones(); }
     partial void OnConfirmarLiberacionChanged(bool value) => ActualizarAcciones();
     partial void OnResultadoInciertoChanged(bool value) => ActualizarAcciones();
     partial void OnConsultaTrasIncertidumbreChanged(bool value) => ActualizarAcciones();
@@ -79,8 +80,12 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
 
     private async Task CambiarEstadoAsync(string destino)
     {
-        if (!PuedeCambiar(destino) || MesaSeleccionada is not { } mesa || !_coordinator.TryBeginMutation()) return;
+        if (!PuedeCambiar(destino) || MesaSeleccionada is not { } mesa) return;
         Mutando = true;
+        bool iniciado;
+        try { iniciado = await _coordinator.TryBeginMutationAsync(_lifetime.Token); }
+        catch (OperationCanceledException) { Mutando = false; return; }
+        if (!iniciado) { Mutando = false; MensajeAccion = "No se envió el cambio; revise la conexión y vuelva a intentarlo."; ActualizarAcciones(); return; }
         MensajeAccion = "";
         bool reconciliar = false, incierto = false;
         MesaDto? resultado = null;
@@ -96,7 +101,8 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
                 "MESA_CONFLICTO_CONCURRENCIA" => "La mesa cambió en otra terminal. Revise los datos actualizados antes de volver a intentar.",
                 "MESA_CON_PEDIDO_PENDIENTE" => "No se puede liberar: la mesa tiene una cuenta pendiente.",
                 "MESA_PERTENECE_A_GRUPO" => "La mesa pertenece a un grupo; no puede cambiarse individualmente.",
-                _ when (int)ex.StatusCode is 401 or 403 => "No tiene autorización para realizar esta acción.",
+                _ when (int)ex.StatusCode == 401 => "La autenticación no es válida. Inicie sesión nuevamente.",
+                _ when (int)ex.StatusCode == 403 => "Su rol no tiene permiso para realizar esta acción.",
                 _ => $"La API rechazó el cambio: {ex.Message}"
             };
         }
@@ -155,6 +161,7 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void SeleccionarMesa(MesaDto? mesa)
     {
+        if (SeleccionandoGrupo) { AlternarMesaGrupo(mesa); return; }
         MesaSeleccionada = mesa is null || MesaSeleccionada?.IdMesa == mesa.IdMesa
             ? null
             : Mesas.FirstOrDefault(m => m.IdMesa == mesa.IdMesa);
@@ -178,12 +185,13 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     }
 
     public MesasViewModel(string nombre, string rol, ISessionManager session, IMesasApiService mesasService,
-        Func<Action, Task>? dispatch = null)
+        Func<Action, Task>? dispatch = null, IGruposMesaApiService? gruposService = null)
     {
         Nombre = nombre;
         Rol = rol;
         _session = session;
         _mesasService = mesasService;
+        _gruposService = gruposService ?? new GruposMesaApiService(session);
         _dispatch = dispatch ?? DispatchToUiAsync;
         _coordinator.SetSessionActive(session.State is SessionLifecycleState.Active or SessionLifecycleState.Expiring);
         _session.SessionStateChanged += OnSessionStateChanged;
@@ -233,6 +241,7 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
                             var selectedId = MesaSeleccionada?.IdMesa;
                             Mesas.Clear();
                             foreach (var mesa in mesas.OrderBy(m => m.Numero)) Mesas.Add(mesa);
+                            RevisarSeleccionGrupo();
                             if (selectedId is int id)
                             {
                                 MesaSeleccionada = Mesas.FirstOrDefault(m => m.IdMesa == id);
@@ -267,7 +276,10 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
                     await _dispatch(() =>
                     {
                         _coordinator.CompleteRead(ticket.Value, false);
-                        EstadoConexion = "No está autorizado para consultar mesas.";
+                        EstadoConexion = (int)ex.StatusCode == 401
+                            ? "La autenticación no es válida para consultar mesas."
+                            : "Su rol no tiene permiso para consultar mesas.";
+                        ConsultaTrasIncertidumbre = false;
                         ActualizarAcciones();
                     });
                     return;
@@ -276,9 +288,11 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
                 {
                     await _dispatch(() =>
                     {
-                        if (_coordinator.CompleteRead(ticket.Value, false))
+                        if (_coordinator.CompleteRead(ticket.Value, false) ||
+                            (Mutando && _session.State is SessionLifecycleState.Active or SessionLifecycleState.Expiring))
                         {
                             EstadoConexion = "Sin conexión o respuesta inválida. Mostrando últimos datos.";
+                            ConsultaTrasIncertidumbre = false;
                             ActualizarAcciones();
                         }
                     });
@@ -302,7 +316,12 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     private void OnSessionStateChanged(object? sender, SessionStateChangedEventArgs args)
     {
         _coordinator.SetSessionActive(args.State is SessionLifecycleState.Active or SessionLifecycleState.Expiring);
-        _ = _dispatch(ActualizarAcciones);
+        _ = _dispatch(() =>
+        {
+            if (args.State is not (SessionLifecycleState.Active or SessionLifecycleState.Expiring))
+                ConsultaTrasIncertidumbre = false;
+            ActualizarAcciones();
+        });
         if (args.PreviousState == SessionLifecycleState.Paused &&
             args.State is SessionLifecycleState.Active or SessionLifecycleState.Expiring)
         {

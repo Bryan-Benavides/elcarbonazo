@@ -50,6 +50,26 @@ public sealed class MesasApiServiceTests
         Assert.Equal("MESA_CON_PEDIDO_PENDIENTE", error.Problem?.Code);
     }
 
+    [Theory]
+    [InlineData("[]", false)]
+    [InlineData("[null]", true)]
+    [InlineData("[{\"idMesa\":1,\"numero\":1,\"capacidad\":4,\"estado\":\"Libre\"},{\"idMesa\":1,\"numero\":2,\"capacidad\":4,\"estado\":\"Libre\"}]", true)]
+    [InlineData("[{\"idMesa\":1,\"numero\":1,\"capacidad\":4,\"estado\":\"Agrupada\"}]", true)]
+    public async Task GetRejectsIncoherentSnapshots(string body, bool invalid)
+    {
+        var service = new MesasApiService(new FakeSession(_ => Json(HttpStatusCode.OK, body)));
+        if (invalid) await Assert.ThrowsAsync<InvalidDataException>(() => service.GetAsync());
+        else Assert.Empty(await service.GetAsync());
+    }
+
+    [Fact]
+    public async Task UpdateRejectsUnrelatedSuccessResponse()
+    {
+        var service = new MesasApiService(new FakeSession(_ => Json(HttpStatusCode.OK,
+            """{"idMesa":2,"numero":2,"capacidad":4,"estado":"Ocupada","version":8}""")));
+        await Assert.ThrowsAsync<InvalidDataException>(() => service.UpdateEstadoAsync(1, "Ocupada", 7));
+    }
+
     [Fact]
     public async Task CreateGroupSendsIdsAndVersions()
     {

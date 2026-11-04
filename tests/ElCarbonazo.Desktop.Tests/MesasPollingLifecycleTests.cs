@@ -151,6 +151,12 @@ public sealed class MesasPollingLifecycleTests
         await vm.LiberarCommand.ExecuteAsync(null);
         Assert.Equal(0, service.UpdateCalls);
         vm.SolicitarLiberacionCommand.Execute(null);
+        Assert.True(vm.ConfirmarLiberacion);
+        vm.CancelarLiberacionCommand.Execute(null);
+        Assert.False(vm.ConfirmarLiberacion);
+        Assert.Equal(0, service.UpdateCalls);
+        Assert.Equal("Ocupada", vm.MesaSeleccionada!.Estado);
+        vm.SolicitarLiberacionCommand.Execute(null);
         await vm.LiberarCommand.ExecuteAsync(null);
         Assert.Equal((1, "Libre", 7u), service.LastUpdate);
         Assert.Equal("Libre", vm.MesaSeleccionada!.Estado);
@@ -178,6 +184,26 @@ public sealed class MesasPollingLifecycleTests
     }
 
     [Fact]
+    public async Task UncertaintyCannotBeAcknowledgedAfterConnectionFailsUntilNewRead()
+    {
+        var service = new ControlledMesas { UpdateFailure = new HttpRequestException() };
+        using var vm = new MesasViewModel("Ana", "Mesero", new FakeSession(), service, DispatchInline);
+        (await service.NextAsync()).SetResult([new MesaDto(1, null, 1, 4, "Libre", 1)]);
+        await WaitUntilAsync(() => vm.Mesas.Count == 1);
+        vm.SeleccionarMesaCommand.Execute(vm.Mesas[0]);
+        await vm.OcuparCommand.ExecuteAsync(null);
+        (await service.NextAsync()).SetResult([new MesaDto(1, null, 1, 4, "Libre", 1)]);
+        await WaitUntilAsync(() => vm.PuedeReconocer);
+        (await service.NextAsync()).SetException(new HttpRequestException());
+        await WaitUntilAsync(() => vm.EstadoConexion.StartsWith("Sin conexión"));
+        Assert.False(vm.PuedeReconocer);
+        vm.ReconocerIncertidumbreCommand.Execute(null);
+        Assert.True(vm.ResultadoIncierto);
+        (await service.NextAsync()).SetResult([new MesaDto(1, null, 1, 4, "Libre", 1)]);
+        await WaitUntilAsync(() => vm.PuedeReconocer);
+    }
+
+    [Fact]
     public async Task ConflictReconcilesWithoutRetryingWrite()
     {
         var service = new ControlledMesas
@@ -197,10 +223,185 @@ public sealed class MesasPollingLifecycleTests
         Assert.Equal(1, service.UpdateCalls);
     }
 
+    [Theory]
+    [InlineData(401, "autenticación")]
+    [InlineData(403, "rol")]
+    public async Task AuthenticationAndPermissionRejectionsAreNotReportedAsOffline(int status, string expected)
+    {
+        var service = new ControlledMesas { UpdateFailure = new ApiException((System.Net.HttpStatusCode)status, null) };
+        using var vm = new MesasViewModel("Ana", "Mesero", new FakeSession(), service, DispatchInline);
+        (await service.NextAsync()).SetResult([new MesaDto(1, null, 1, 4, "Libre", 1)]);
+        await WaitUntilAsync(() => vm.Mesas.Count == 1);
+        vm.SeleccionarMesaCommand.Execute(vm.Mesas[0]);
+        await vm.OcuparCommand.ExecuteAsync(null);
+        Assert.Contains(expected, vm.MensajeAccion);
+        Assert.False(vm.ResultadoIncierto);
+        Assert.Equal("Conectado", vm.EstadoConexion);
+        Assert.Equal(1, service.UpdateCalls);
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         while (!condition()) await Task.Delay(10, timeout.Token);
+    }
+
+    [Fact]
+    public async Task MutationWaitsForActivePollingWithoutApplyingItsStaleResult()
+    {
+        var service = new ControlledMesas();
+        using var vm = new MesasViewModel("Ana", "Mesero", new FakeSession(), service, DispatchInline);
+        (await service.NextAsync()).SetResult([new MesaDto(1, null, 1, 4, "Libre", 1)]);
+        await WaitUntilAsync(() => vm.Mesas.Count == 1);
+        vm.SeleccionarMesaCommand.Execute(vm.Mesas[0]);
+        var pendingRead = await service.NextAsync();
+        var mutation = vm.OcuparCommand.ExecuteAsync(null);
+        Assert.Equal(0, service.UpdateCalls);
+        pendingRead.SetResult([new MesaDto(1, null, 1, 4, "Reservada", 2)]);
+        await mutation;
+        Assert.Equal((1, "Ocupada", 1u), service.LastUpdate);
+        Assert.Equal("Ocupada", vm.MesaSeleccionada!.Estado);
+    }
+
+    [Fact]
+    public async Task ReadDeadlineCoversJsonBodyProcessing()
+    {
+        var session = new FakeSession { PollResponse = () => new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StreamContent(new WaitingStream()) } };
+        var service = new MesasApiService(session);
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.GetAsync());
+        Assert.InRange(started.Elapsed.TotalSeconds, 4, 12);
+    }
+
+    private sealed class WaitingStream : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return 0;
+        }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    [Fact]
+    public async Task CreateGroupUsesLatestVersionsAndAppliesResponse()
+    {
+        var service = new ControlledMesas();
+        var groups = new FakeGroups();
+        using var vm = new MesasViewModel("Ana", "Mesero", new FakeSession(), service, DispatchInline, groups);
+        (await service.NextAsync()).SetResult([new MesaDto(1, null, 1, 4, "Libre", 1), new MesaDto(2, null, 2, 4, "Libre", 2)]);
+        await WaitUntilAsync(() => vm.Mesas.Count == 2);
+        vm.IniciarGrupoCommand.Execute(null);
+        vm.SeleccionarMesaCommand.Execute(vm.Mesas[0]);
+        vm.SeleccionarMesaCommand.Execute(vm.Mesas[1]);
+        Assert.True(vm.PuedeConfirmarGrupo);
+        (await service.NextAsync()).SetResult([new MesaDto(1, null, 1, 4, "Libre", 7), new MesaDto(2, null, 2, 4, "Libre", 8)]);
+        await WaitUntilAsync(() => vm.Mesas.FirstOrDefault()?.Version == 7 && vm.Mesas.Count == 2);
+        await vm.CrearGrupoCommand.ExecuteAsync(null);
+        Assert.Equal(new uint[] { 7, 8 }, groups.Created!.Select(m => m.Version));
+        Assert.All(vm.Mesas, m => Assert.Equal("Agrupada", m.Estado));
+        Assert.False(vm.SeleccionandoGrupo);
+    }
+
+    [Fact]
+    public async Task PollRemovesIneligibleGroupSelectionAndKitchenCannotStart()
+    {
+        var service = new ControlledMesas();
+        using var vm = new MesasViewModel("Ana", "Mesero", new FakeSession(), service, DispatchInline);
+        (await service.NextAsync()).SetResult([new MesaDto(1, null, 1, 4, "Libre", 1), new MesaDto(2, null, 2, 4, "Libre", 2)]);
+        await WaitUntilAsync(() => vm.Mesas.Count == 2);
+        vm.IniciarGrupoCommand.Execute(null);
+        vm.SeleccionarMesaCommand.Execute(vm.Mesas[0]);
+        vm.SeleccionarMesaCommand.Execute(vm.Mesas[1]);
+        (await service.NextAsync()).SetResult([new MesaDto(1, null, 1, 4, "Ocupada", 3), new MesaDto(2, null, 2, 4, "Libre", 2)]);
+        await WaitUntilAsync(() => vm.MesasSeleccionadasGrupo.Length == 1);
+        Assert.False(vm.PuedeConfirmarGrupo);
+        Assert.Contains("retiraron", vm.MensajeAccion);
+        var kitchenService = new ControlledMesas();
+        using var kitchen = new MesasViewModel("Ana", "Personal de Cocina", new FakeSession(), kitchenService, DispatchInline);
+        (await kitchenService.NextAsync()).SetResult([new MesaDto(1, null, 1, 4, "Libre", 1)]);
+        await WaitUntilAsync(() => kitchen.Mesas.Count == 1);
+        kitchen.IniciarGrupoCommand.Execute(null);
+        Assert.False(kitchen.SeleccionandoGrupo);
+    }
+
+    [Fact]
+    public async Task CloseGroupRequiresConfirmationAndRefreshBeforeFurtherWrites()
+    {
+        var service = new ControlledMesas();
+        var groups = new FakeGroups();
+        using var vm = new MesasViewModel("Ana", "Jefa", new FakeSession(), service, DispatchInline, groups);
+        (await service.NextAsync()).SetResult([new MesaDto(1, 9, 1, 4, "Agrupada", 1)]);
+        await WaitUntilAsync(() => vm.Mesas.Count == 1);
+        vm.SeleccionarMesaCommand.Execute(vm.Mesas[0]);
+        await vm.CerrarGrupoCommand.ExecuteAsync(null);
+        Assert.Null(groups.Closed);
+        vm.SolicitarCierreGrupoCommand.Execute(null);
+        await vm.CerrarGrupoCommand.ExecuteAsync(null);
+        Assert.Equal(9, groups.Closed);
+        Assert.False(vm.PuedeIniciarGrupo);
+        (await service.NextAsync()).SetResult([new MesaDto(1, null, 1, 4, "Libre", 2)]);
+        await WaitUntilAsync(() => vm.PuedeIniciarGrupo);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GroupFailureIsNotRetriedAndRequiresReconciliation(bool uncertain)
+    {
+        var service = new ControlledMesas();
+        var groups = new FakeGroups
+        {
+            Failure = uncertain ? new HttpRequestException() : new ApiException(System.Net.HttpStatusCode.Conflict,
+                new ApiProblem(409, "GRUPO_CON_PEDIDOS_PENDIENTES", null, null, null))
+        };
+        using var vm = new MesasViewModel("Ana", "Jefa", new FakeSession(), service, DispatchInline, groups);
+        (await service.NextAsync()).SetResult([new MesaDto(1, 9, 1, 4, "Agrupada", 1)]);
+        await WaitUntilAsync(() => vm.Mesas.Count == 1);
+        vm.SeleccionarMesaCommand.Execute(vm.Mesas[0]);
+        vm.SolicitarCierreGrupoCommand.Execute(null);
+        await vm.CerrarGrupoCommand.ExecuteAsync(null);
+        Assert.False(vm.PuedeCerrarGrupo);
+        Assert.Equal(uncertain, vm.ResultadoIncierto);
+        Assert.Contains(uncertain ? "no demuestra" : "cuenta pendiente", vm.MensajeAccion);
+        (await service.NextAsync()).SetResult([new MesaDto(1, 9, 1, 4, "Agrupada", 1)]);
+        await WaitUntilAsync(() => uncertain ? vm.PuedeReconocer : vm.PuedeCerrarGrupo);
+        if (uncertain)
+        {
+            Assert.False(vm.PuedeCerrarGrupo);
+            vm.ReconocerIncertidumbreCommand.Execute(null);
+            Assert.True(vm.PuedeCerrarGrupo);
+        }
+        Assert.Equal(1, groups.CloseCalls);
+    }
+
+    private sealed class FakeGroups : IGruposMesaApiService
+    {
+        public IReadOnlyList<MesaVersionRequest>? Created { get; private set; }
+        public int? Closed { get; private set; }
+        public int CloseCalls { get; private set; }
+        public Exception? Failure { get; init; }
+        public Task<GrupoMesaDto> CreateAsync(IReadOnlyList<MesaVersionRequest> mesas, CancellationToken cancellationToken = default)
+        {
+            Created = mesas;
+            var result = mesas.Select(m => new MesaDto(m.IdMesa, 9, m.IdMesa, 4, "Agrupada", m.Version + 1)).ToArray();
+            return Task.FromResult(new GrupoMesaDto(9, 1, DateTimeOffset.UtcNow, true, result));
+        }
+        public Task CloseAsync(int id, CancellationToken cancellationToken = default)
+        {
+            CloseCalls++;
+            Closed = id;
+            return Failure is null ? Task.CompletedTask : Task.FromException(Failure);
+        }
     }
 
     private sealed class ControlledMesas : IMesasApiService
@@ -243,6 +444,7 @@ public sealed class MesasPollingLifecycleTests
 
     private sealed class FakeSession : ISessionManager
     {
+        public Func<HttpResponseMessage>? PollResponse { get; init; }
         public event EventHandler<SessionStateChangedEventArgs>? SessionStateChanged;
         public SessionLifecycleState State { get; private set; } = SessionLifecycleState.Active;
         public bool HasSession => State is SessionLifecycleState.Active or SessionLifecycleState.Expiring or SessionLifecycleState.Paused;
@@ -257,7 +459,8 @@ public sealed class MesasPollingLifecycleTests
         public Task NotifyHumanInteractionAsync(CancellationToken cancellationToken = default) { HumanInteractions++; return Task.CompletedTask; }
         public Task<AuthSessionResponse> LoginAsync(string nombre, string contrasena, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<HttpResponseMessage> SendHumanAsync(Func<HttpRequestMessage> requestFactory, bool isRead, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<HttpResponseMessage> SendPollingAsync(Func<HttpRequestMessage> requestFactory, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<HttpResponseMessage> SendPollingAsync(Func<HttpRequestMessage> requestFactory, CancellationToken cancellationToken = default) =>
+            PollResponse is null ? throw new NotSupportedException() : Task.FromResult(PollResponse());
         public Task ContinueSessionAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task LogoutAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task LogoutForShutdownAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
