@@ -42,7 +42,7 @@ Quedan fuera de este módulo las altas de empleados, cambios de rol, desactivaci
 
 ### RF-03: Consulta de Mesas
 - **MIENTRAS** el usuario tenga cualquiera de los cinco roles autorizados, **EL SISTEMA DEBE** mostrar las 15 mesas con número, capacidad, grupo, estado y versión.
-- **CUANDO** el estado de una mesa cambie y API/red estén saludables, **EL SISTEMA DEBE** reflejarlo en Desktop en no más de dos segundos mediante polling.
+- **CUANDO** el estado de una mesa cambie y API/red estén saludables, **EL SISTEMA DEBE** iniciar polling con cadencia nominal de dos segundos, sin solapar solicitudes. La latencia observable de convergencia se mide como espera hasta el siguiente GET más su duración y el despacho/render; el objetivo nominal es 2 s más la latencia medida de GET y presentación, no un límite absoluto de 2 s. Nunca se solapan solicitudes para aparentar cumplirlo.
 - **MIENTRAS** Desktop realice polling, **EL SISTEMA NO DEBE** considerarlo actividad humana ni generar un evento de auditoría por cada consulta.
 - **SI** una consulta sigue en curso o la API falla, **EL SISTEMA NO DEBE** solapar polling; debe aplicar backoff 2→5→10→30 segundos, mostrar estado sin conexión y recuperar automáticamente el intervalo normal tras un éxito.
 - **MIENTRAS** Desktop indique estado sin conexión, **EL SISTEMA DEBE** conservar la última vista solo para lectura, bloquear mutaciones y no encolar cambios offline.
@@ -141,7 +141,7 @@ Quedan fuera de este módulo las altas de empleados, cambios de rol, desactivaci
 - T3.0–T3.11 completadas y verificadas en orden; T4 permanece bloqueada hasta entonces.
 - Login, refresh, actividad y logout cumplen los contratos y límites de sesión definidos.
 - Los cinco roles consultan mesas; solo Jefa, Encargado de Caja, Mesero y Supervisor pueden modificarlas o agruparlas.
-- Las 15 mesas se renderizan con los cuatro estados y reflejan cambios en no más de dos segundos durante operación saludable.
+- Las 15 mesas se renderizan con los cuatro estados; polling nominal de dos segundos sin solapamiento y latencia de convergencia medida/documentada como espera de polling más GET y presentación bajo condiciones LAN saludables.
 - Migraciones funcionan sobre una base vacía y sobre la base de desarrollo existente sin reescribir `InitialCreate` ni perder datos.
 - Una tabla `pedido` preexistente fuera del historial EF solo se adopta después de un preflight compatible; cualquier problema aborta transaccionalmente con diagnóstico y sin cambios parciales.
 - Auditoría, logs y configuración LAN operan sin Internet y sin exponer secretos.

@@ -62,7 +62,7 @@ public sealed class ApiClientService : IApiClientService, IDisposable
         {
             return await _httpClient.SendAsync(
                 request,
-                HttpCompletionOption.ResponseHeadersRead,
+                HttpCompletionOption.ResponseContentRead,
                 timeoutSource.Token);
         }
         catch (HttpRequestException exception) when (IsTlsFailure(exception))

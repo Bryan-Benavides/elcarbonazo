@@ -238,7 +238,9 @@ EF Core mapea a snake_case en BD; la serialización expone camelCase.
 - `Views/ConfigurationErrorView.axaml` ↔ `ViewModels/ConfigurationErrorViewModel.cs`
 - `Views/SecurityErrorView.axaml` ↔ `ViewModels/SecurityErrorViewModel.cs`
 - `Views/MesasView.axaml` ↔ `ViewModels/MesasViewModel.cs`
-- `Services/ApiClientService.cs` (Gestión centralizada de HTTPClient y Bearer Token)
+- `Services/ApiClientService.cs` (transporte HTTP/TLS, `X-Installation-Id` y timeouts por operación; no conserva tokens ni renueva sesiones)
+- `Services/SessionManager.cs` / `ISessionManager` (tokens en memoria, autenticación, refresh single-flight, actividad, logout y ciclo explícito de sesión)
+- `Services/ServerClock.cs` / `IServerClock` (desfase UTC del servidor y conversión a Managua únicamente para presentación)
 - `Services/MesasApiService.cs` (Consumo exclusivo de endpoints de mesa)
 - `Services/GruposMesaApiService.cs` (Creación y cierre de grupos)
 - `MesasView` muestra `Agrupar mesas` solo a roles de modificación. El botón activa modo de selección, resalta únicamente mesas `Libre`, muestra `n seleccionadas`, habilita Confirmar desde 2 y ofrece Cancelar.
@@ -246,6 +248,13 @@ EF Core mapea a snake_case en BD; la serialización expone camelCase.
 - Clic en una mesa `Agrupada` abre un detalle derivado de `idGrupo` y la colección actual. Para roles autorizados incluye `Cerrar grupo` con confirmación; Cocina ve el detalle sin acción.
 - El encabezado de MesasView muestra nombre, rol y `Cerrar sesión`. La acción confirmada cancela polling/actividad, intenta logout con tiempo acotado, limpia estado sensible y navega a LoginView incluso ante fallo de red.
 - El modo de selección guarda `idMesa`, no copias congeladas del DTO. Polling continúa; al confirmar resuelve versiones actuales y elimina con aviso IDs cuyo estado/grupo ya no sea elegible.
+- Los DTOs de Desktop son contratos cliente propios y no referencian tipos del proyecto API. El JSON usa camelCase; `numero` es el campo físico. `MesaDto.Version` se conserva como `uint` opaco para concurrencia y no se interpreta como timestamp.
+- **Propiedad de requests:** `MesasViewModel` o un servicio coordinador de mesas mantiene como máximo un GET activo y un flujo de mutación serializado. Cada resultado de GET lleva una generación local; al iniciar una mutación se invalida la generación previa. Una respuesta de polling de generación obsoleta se descarta. Las respuestas de escritura no se sustituyen por polling anterior; las respuestas `PUT`/`POST` satisfactorias se aplican inmediatamente.
+- **Delete y reconciliación:** un `DELETE` de grupo satisfactorio (204) no contiene DTOs; se mantienen bloqueadas las mutaciones hasta un `GET /api/mesas` satisfactorio posterior. Un conflicto también invalida los datos previos y solicita GET antes de permitir confirmar otra mutación.
+- **Timeout e incertidumbre:** el timeout de lectura de 5 s comprende recepción y consumo del body JSON. En mutaciones, una vez iniciado el envío, timeout, cancelación o fallo de transporte sin respuesta concluyente no demuestra que el servidor no aplicó el cambio. Se presenta estado incierto, se impiden nuevas mutaciones y se hace GET de reconciliación; no se reintenta la mutación. Una respuesta HTTP explícita se clasifica según su `ProblemDetails`; 5xx también se trata como incierto para mutaciones.
+- **Problemas API:** conflicto de versión (`MESA_CONFLICTO_CONCURRENCIA`, `GRUPO_CONFLICTO_CONCURRENCIA`) implica GET inmediato y nueva confirmación. Los códigos de pedido pendiente muestran rechazo de dominio; los errores de elegibilidad reconcilian el estado y notifican. 401/403, sesión pausada, sesión expirada, TLS y fallos de red mantienen semánticas distintas. La API sigue siendo autoridad sobre pedidos pendientes, ya que `MesaDto` no incluye esa información.
+- **Cadencia medible:** polling nominal cada 2 s entre inicios de solicitudes saludables, sin solapamiento; una consulta que sigue activa impide iniciar otra y la siguiente empieza al completar la anterior. Backoff 2→5→10→30 s ante errores recuperables. La latencia de convergencia es intervalo de espera + GET + despacho/render y se mide/documenta de extremo a extremo. El objetivo nominal es 2 s más la latencia medida de GET y presentación; no se afirma un SLA absoluto ≤2 s ni se solapan requests para simularlo.
+- **Prerrequisitos de integración de sesión:** `ISessionManager.SendHumanAsync` no debe retornar una respuesta ya dispuesta cuando refresh falla; timeout de `ApiClientService` debe cubrir también lectura del contenido de respuesta. Mantener `SecurityBlocked`/`Expired` terminales y no clasificar sus errores como desconexión recuperable. Estos comportamientos deben quedar cubiertos por pruebas de integración Desktop planificadas en T6.
 - `Converters/EstadoMesaColorConverter.cs` — Mapea estado → color del Design System:
   - `Libre` → `ColorMesaLibre` `#7CB342`
   - `Ocupada` → `ColorMesaOcupada` `#8C2331`
@@ -254,7 +263,7 @@ EF Core mapea a snake_case en BD; la serialización expone camelCase.
 
 ## 5. Configuración Técnica Requerida
 - **Program.cs (API)**: `builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);`
-- **Polling MesasView**: bucle cancelable single-flight, sin solapar solicitudes. Usa 2 s tras éxito y backoff 2→5→10→30 s tras fallos; conserva los últimos datos, muestra estado sin conexión y vuelve a 2 s al recuperarse.
+- **Polling MesasView**: bucle cancelable single-flight, sin solapar solicitudes. Mantiene cadencia nominal de 2 s entre inicios cuando la consulta anterior ya terminó; si excede el intervalo, inicia la siguiente al completar. Aplica backoff 2→5→10→30 s tras fallos; conserva los últimos datos, muestra estado sin conexión y vuelve a 2 s al recuperarse. La convergencia observable incluye espera, duración GET y despacho/render; objetivo nominal: 2 s más la latencia medida, sin prometer ≤2 s absoluto.
 - **Modo sin conexión**: la colección visible permanece como último estado conocido, pero comandos de cambio/agrupación quedan deshabilitados hasta un GET exitoso. No existe cola de mutaciones offline.
 - **Conflictos 409**: `MESA_CONFLICTO_CONCURRENCIA` y `GRUPO_CONFLICTO_CONCURRENCIA` fuerzan GET inmediato, mensaje al usuario y nueva confirmación; nunca se reintenta la mutación obsoleta.
 - **Sesión en pausa**: es distinta de “sin conexión”. JWT vencido durante polling detiene consultas y mutaciones sin refresh automático; interacción humana dispara refresh single-flight y, si funciona, reanuda polling.

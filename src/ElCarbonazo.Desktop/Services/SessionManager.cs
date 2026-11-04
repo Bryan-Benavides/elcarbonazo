@@ -165,6 +165,7 @@ public sealed class SessionManager : ISessionManager, IDisposable
                     polling: false,
                     cancellationToken);
             }
+            throw new SessionExpiredException();
         }
 
         return response;
@@ -401,7 +402,7 @@ public sealed class SessionManager : ISessionManager, IDisposable
             }
 
             var session = await ReadRequiredAsync<AuthSessionResponse>(response, cancellationToken);
-            if (!ApplySession(session, sentAt, receivedAt))
+            if (!ApplySession(session, sentAt, receivedAt, refreshToken))
             {
                 return false;
             }
@@ -410,7 +411,7 @@ public sealed class SessionManager : ISessionManager, IDisposable
         }
         catch (SecurityConnectionException)
         {
-            return false;
+            throw;
         }
     }
 
@@ -529,7 +530,7 @@ public sealed class SessionManager : ISessionManager, IDisposable
             throw new SessionExpiredException();
         }
 
-        var request = requestFactory();
+        using var request = requestFactory();
         AddAuthentication(request);
         try
         {
@@ -575,22 +576,30 @@ public sealed class SessionManager : ISessionManager, IDisposable
     private bool ApplySession(
         AuthSessionResponse session,
         DateTimeOffset sentAt,
-        DateTimeOffset receivedAt)
+        DateTimeOffset receivedAt,
+        string? expectedRefreshToken = null)
     {
-        _serverClock.Synchronize(session.ServerTime, sentAt, receivedAt);
-        var now = _serverClock.UtcNow;
-        var target = session.InactivityExpiresAt - now <= TimeSpan.FromMinutes(1) ||
-            session.AbsoluteSessionExpiresAt - now <= TimeSpan.FromMinutes(5)
-            ? SessionLifecycleState.Expiring
-            : SessionLifecycleState.Active;
+        SessionLifecycleState target;
         SessionLifecycleState previous;
         lock (_sessionGate)
         {
             previous = _state;
+            if (expectedRefreshToken is not null &&
+                (!string.Equals(_refreshToken, expectedRefreshToken, StringComparison.Ordinal) ||
+                 previous is not (SessionLifecycleState.Active or SessionLifecycleState.Expiring or SessionLifecycleState.Paused)))
+            {
+                return false;
+            }
             if (previous is SessionLifecycleState.SecurityBlocked or SessionLifecycleState.ShuttingDown)
             {
                 return false;
             }
+            _serverClock.Synchronize(session.ServerTime, sentAt, receivedAt);
+            var now = _serverClock.UtcNow;
+            target = session.InactivityExpiresAt - now <= TimeSpan.FromMinutes(1) ||
+                session.AbsoluteSessionExpiresAt - now <= TimeSpan.FromMinutes(5)
+                ? SessionLifecycleState.Expiring
+                : SessionLifecycleState.Active;
             if (!IsTransitionAllowed(previous, target) && previous != target)
             {
                 throw new InvalidOperationException($"Transición de sesión no válida: {previous} -> {target}.");
