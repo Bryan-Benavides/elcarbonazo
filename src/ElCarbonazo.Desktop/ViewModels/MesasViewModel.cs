@@ -47,7 +47,9 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void SeleccionarMesa(MesaDto? mesa)
     {
-        MesaSeleccionada = mesa is null ? null : Mesas.FirstOrDefault(m => m.IdMesa == mesa.IdMesa);
+        MesaSeleccionada = mesa is null || MesaSeleccionada?.IdMesa == mesa.IdMesa
+            ? null
+            : Mesas.FirstOrDefault(m => m.IdMesa == mesa.IdMesa);
     }
 
     [RelayCommand]

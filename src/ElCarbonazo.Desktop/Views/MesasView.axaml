@@ -9,7 +9,33 @@
              Background="{StaticResource FondoPrincipalBrush}">
     <UserControl.Resources>
         <converters:EstadoMesaColorConverter x:Key="EstadoColor" />
+        <converters:MesaSeleccionadaConverter x:Key="MesaSeleccionadaConverter" />
     </UserControl.Resources>
+    <UserControl.Styles>
+        <Style Selector="ToggleButton.mesa">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="ToggleButton.mesa:pointerover">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ToggleButton.mesa:checked">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ToggleButton.mesa:pressed">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ToggleButton.mesa:pointerover Border.tarjeta">
+            <Setter Property="BorderBrush" Value="{StaticResource AcentoFuegoBrush}" />
+            <Setter Property="RenderTransform" Value="translateY(-3px)" />
+        </Style>
+        <Style Selector="ToggleButton.mesa:checked Border.tarjeta">
+            <Setter Property="BorderBrush" Value="{StaticResource AcentoFuegoBrush}" />
+        </Style>
+        <Style Selector="ToggleButton.mesa:focus-visible Border.tarjeta">
+            <Setter Property="BorderBrush" Value="{StaticResource TextoPrincipalBrush}" />
+        </Style>
+    </UserControl.Styles>
     <Grid ColumnDefinitions="180,*">
         <Border Grid.Column="0" Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="0,0,1,0">
             <Grid RowDefinitions="Auto,*,Auto" Margin="16,24">
@@ -43,10 +69,28 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:MesaDto">
-                            <Button Width="210" Margin="0,0,12,12" Padding="0" HorizontalContentAlignment="Stretch"
+                            <ToggleButton Classes="mesa" Width="210" Margin="0,0,12,12" Padding="0" HorizontalContentAlignment="Stretch"
                                     Command="{Binding #Root.((vm:MesasViewModel)DataContext).SeleccionarMesaCommand}"
                                     CommandParameter="{Binding}">
-                            <Border MinHeight="150" Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1" CornerRadius="7">
+                            <ToggleButton.IsChecked>
+                                <MultiBinding Converter="{StaticResource MesaSeleccionadaConverter}" Mode="OneWay">
+                                    <Binding />
+                                    <Binding Path="#Root.((vm:MesasViewModel)DataContext).MesaSeleccionada" />
+                                </MultiBinding>
+                            </ToggleButton.IsChecked>
+                            <Border Classes="tarjeta" MinHeight="150" Background="{StaticResource FondoPanelBrush}" BorderThickness="1" CornerRadius="7">
+                                <Border.Styles>
+                                    <Style Selector="Border.tarjeta">
+                                        <Setter Property="BorderBrush" Value="{StaticResource BordePanelBrush}" />
+                                        <Setter Property="RenderTransform" Value="translateY(0px)" />
+                                    </Style>
+                                </Border.Styles>
+                                <Border.Transitions>
+                                    <Transitions>
+                                        <BrushTransition Property="BorderBrush" Duration="0:0:0.16" />
+                                        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.18" />
+                                    </Transitions>
+                                </Border.Transitions>
                                 <Grid RowDefinitions="4,*">
                                     <Border Grid.Row="0" Background="{Binding Estado, Converter={StaticResource EstadoColor}}" CornerRadius="7,7,0,0" />
                                     <StackPanel Grid.Row="1" Margin="15,13" Spacing="8">
@@ -57,7 +101,7 @@
                                     </StackPanel>
                                 </Grid>
                             </Border>
-                            </Button>
+                            </ToggleButton>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

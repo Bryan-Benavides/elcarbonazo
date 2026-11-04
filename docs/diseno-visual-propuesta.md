@@ -48,6 +48,7 @@ La referencia propone blanco sobre fondos brillantes, pero el contraste calculad
 - La navegación muestra únicamente destinos implementados. No agregar botones de Pedidos, Caja u otros módulos que aparenten funcionar si aún no existen.
 - La barra lateral puede ser compacta o plegable cuando el ancho de ventana lo requiera. El área de mesas conserva desplazamiento vertical sin recortar controles.
 - Usar tarjetas rectangulares oscuras adaptables con acento y etiqueta de estado; se sustituyen las mesas circulares y sillas decorativas anteriores.
+- Las tarjetas mantienen un borde discreto en reposo; al pasar el cursor se eleva sutilmente solo esa tarjeta y su borde cambia al acento fuego con una transición breve. La mesa seleccionada conserva el borde de acento sin animación continua. El foco de teclado debe seguir siendo visible. Selección y estado de mesa son indicadores distintos.
 - Cada mesa muestra número, capacidad y estado; el detalle de grupo se deriva de los datos disponibles y no inventa pedidos ni importes.
 - Al seleccionar una mesa, usar un panel o diálogo claro con las acciones disponibles según estado y rol. Liberar y cerrar grupo requieren confirmación.
 - El modo Agrupar muestra selección, contador, Confirmar y Cancelar; no permite elegir mesas no elegibles.
