@@ -336,10 +336,11 @@ public sealed class SessionManager : ISessionManager, IDisposable
         {
             if (_refreshTask is null)
             {
-                _refreshTask = RefreshCoreAsync(_lifetime.Token);
-                _ = ClearRefreshTaskWhenCompletedAsync(_refreshTask);
+                task = RefreshCoreAsync(_lifetime.Token);
+                _refreshTask = task;
+                _ = ClearRefreshTaskWhenCompletedAsync(task);
             }
-            task = _refreshTask;
+            else task = _refreshTask;
         }
 
         return await task.WaitAsync(cancellationToken);

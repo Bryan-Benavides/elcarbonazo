@@ -51,7 +51,7 @@ Quedan fuera de este módulo las altas de empleados, cambios de rol, desactivaci
 - **SI** una lectura supera 5 segundos o una escritura/login supera 10 segundos, **EL SISTEMA DEBE** cancelar la espera; una escritura con resultado desconocido no debe reintentarse automáticamente. En el prototipo, Desktop informa que el resultado es incierto, conserva solo lectura, consulta el estado actual y exige revisión y reconocimiento explícitos del usuario antes de permitir nuevas acciones. Un GET es una fotografía y no demuestra que una escritura anterior terminó; esta limitación se comunica y el prototipo no se presenta como seguro para operación real ante ese fallo.
 
 ### RF-04: Cambio de Estado de Mesa
-- **CUANDO** se pulse una mesa individual fuera del modo de agrupación, **EL SISTEMA DEBE** mostrar su detalle y únicamente las acciones válidas por estado y rol; Liberar debe exigir confirmación.
+- **CUANDO** se pulse una mesa individual fuera del modo de agrupación, **EL SISTEMA DEBE** mostrar su detalle y habilitar únicamente las acciones válidas por estado y rol; las demás pueden permanecer visibles deshabilitadas con explicación contextual. Liberar debe exigir confirmación.
 - **CUANDO** una Jefa, Encargado de Caja, Mesero o Supervisor solicite un cambio válido, **EL SISTEMA DEBE** aplicar la transición de forma atómica y devolver la mesa completa con su nueva versión.
 - **MIENTRAS** el usuario tenga rol Personal de Cocina, **EL SISTEMA DEBE** permitir consulta de mesas, pero **NO DEBE** permitir cambios de estado ni agrupaciones.
 - **CUANDO** se solicite una transición, **EL SISTEMA DEBE** permitir únicamente Libre→Reservada/Ocupada, Reservada→Libre/Ocupada y Ocupada→Libre sin pedidos pendientes.
@@ -137,6 +137,20 @@ Quedan fuera de este módulo las altas de empleados, cambios de rol, desactivaci
 - Desktop **DEBE** tener pruebas xUnit unitarias de servicios y ViewModels con HTTP/reloj falsos; la presentación XAML se valida manualmente sin automatización UI completa.
 - Para el prototipo se ejecutan las pruebas API existentes y pruebas Desktop focalizadas de contratos, roles, transiciones, polling y errores. El objetivo de cobertura ≥80% de lógica crítica API y Desktop queda como objetivo previo a producción, no como bloqueo del perfil universitario.
 - Antes de T4 **DEBEN** pasar formato, build, pruebas unitarias, pruebas de integración y auditoría de paquetes vulnerables.
+
+### RNF-06: Mejora de presentación y claridad del MVP
+- Login y mapa usan la dirección oscura «Carbón & Fuego», con texto legible y estados de foco visibles; no se cambian autenticación ni políticas de seguridad.
+- El mapa incluye una leyenda textual de los cuatro estados y explica, con datos disponibles, restricciones por rol, grupo o conectividad; nunca afirma conocer pedidos que el DTO no informa.
+- En agrupación se muestran instrucciones, selección y contador; cerrar grupo exige una confirmación central con cancelar y confirmar. Los mensajes distinguen errores, sesión pausada y resultados inciertos sin prometer recuperación definitiva.
+- Los controles y confirmaciones deben poder operarse con teclado, con foco visible y sin quedar inaccesibles al tamaño mínimo. La aceptación visual manual debe registrarse por separado de la compilación.
+- La guía local documenta requisitos, configuración, migraciones explícitas, perfiles y demostración sin credenciales reales ni cambios destructivos sobre bases existentes.
+- El login utiliza la imagen local suministrada como fondo con tratamiento oscuro para conservar contraste; no descarga recursos de Internet. El usuario puede mostrar u ocultar la contraseña mediante control accesible; inicia oculta y vuelve a ocultarse al completar un intento. La contraseña nunca se registra ni persiste.
+- La ventana debe conservar minimizar, maximizar/restaurar, cerrar y redimensionar, con barra compacta coherente con el tema oscuro. La verificación real en Windows incluye tamaño mínimo y maximizada; no se da por validada mediante compilación.
+- Pueden usarse acentos cálidos más luminosos en el login sin modificar los colores semánticos aprobados de estados de mesa; el texto debe mantener contraste legible y el color no sustituye etiquetas.
+- El mapa dispone de navegación lateral plegable con apertura y cierre animados, sin agregar destinos no implementados. Al desplegarse ocupa su propio espacio y el mapa se redistribuye sin superposición; el control para abrirla permanece disponible por teclado.
+- El mapa utiliza variantes luminosas de los colores semánticos para barras y leyenda, siempre acompañadas de texto. La cabecera compacta muestra el estado real de consulta con indicador visual y texto, sin presentar carga, pausa o error como conexión confirmada; las advertencias y acciones de agrupación siguen accesibles.
+- El detalle de mesa y las tarjetas aprovechan el espacio disponible, sin espacios innecesarios ni pérdida de acceso a acciones, confirmaciones, selección o mensajes. Validar también tamaño mínimo, escalado, foco y lectura con conexión interrumpida.
+- La leyenda muestra el número de mesas visibles por estado y se actualiza con lecturas y mutaciones, incluidos los últimos datos conservados sin conexión. La acción de unir mesas en un grupo se identifica claramente y su modo de selección reúne instrucciones, contador, selección, confirmación y cancelación en una zona compacta sin ocultar advertencias.
 
 ## Criterios de Finalización
 - Para la entrega universitaria, T3.10 (aceptación física LAN sin Internet) puede permanecer pendiente y documentada; no bloquea T5/T6. La configuración segura y comprobación física siguen siendo necesarias antes de operación real.

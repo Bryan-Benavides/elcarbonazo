@@ -8,6 +8,31 @@ namespace ElCarbonazo.Desktop.Tests;
 
 public sealed class MesasPollingLifecycleTests
 {
+    [Fact]
+    public async Task StateCountsFollowVisibleCollectionChanges()
+    {
+        var service = new ControlledMesas();
+        using var viewModel = new MesasViewModel("Ana", "Mesero", new FakeSession(), service, DispatchInline);
+        await service.NextAsync();
+        var notifications = new List<string?>();
+        viewModel.PropertyChanged += (_, e) => notifications.Add(e.PropertyName);
+
+        viewModel.Mesas.Add(new MesaDto(1, null, 1, 4, "Libre", 1));
+        viewModel.Mesas.Add(new MesaDto(2, null, 2, 4, "Ocupada", 1));
+        viewModel.Mesas.Add(new MesaDto(3, null, 3, 4, "Reservada", 1));
+        viewModel.Mesas.Add(new MesaDto(4, 7, 4, 4, "Agrupada", 1));
+        Assert.Equal((1, 1, 1, 1), (viewModel.MesasLibres, viewModel.MesasOcupadas, viewModel.MesasReservadas, viewModel.MesasAgrupadas));
+
+        viewModel.Mesas[0] = new MesaDto(1, null, 1, 4, "Ocupada", 2);
+        Assert.Equal((0, 2, 1, 1), (viewModel.MesasLibres, viewModel.MesasOcupadas, viewModel.MesasReservadas, viewModel.MesasAgrupadas));
+        viewModel.Mesas.Clear();
+        Assert.Equal((0, 0, 0, 0), (viewModel.MesasLibres, viewModel.MesasOcupadas, viewModel.MesasReservadas, viewModel.MesasAgrupadas));
+        Assert.Contains(nameof(MesasViewModel.MesasLibres), notifications);
+        Assert.Contains(nameof(MesasViewModel.MesasOcupadas), notifications);
+        Assert.Contains(nameof(MesasViewModel.MesasReservadas), notifications);
+        Assert.Contains(nameof(MesasViewModel.MesasAgrupadas), notifications);
+    }
+
     private static Task DispatchInline(Action action)
     {
         action();
@@ -154,6 +179,21 @@ public sealed class MesasPollingLifecycleTests
         Assert.Equal(reservar, vm.PuedeReservar);
         Assert.Equal(ocupar, vm.PuedeOcupar);
         Assert.Equal(liberar, vm.PuedeLiberar);
+    }
+
+    [Theory]
+    [InlineData("Personal de Cocina", "Libre", null, "consultar")]
+    [InlineData("Mesero", "Agrupada", 9, "pertenece a un grupo")]
+    [InlineData("Mesero", "Ocupada", null, "API verificará")]
+    [InlineData("Mesero", "Libre", null, "reservar u ocupar")]
+    public async Task ActionHelpUsesAvailableRoleAndMesaData(string role, string estado, int? group, string expected)
+    {
+        var service = new ControlledMesas();
+        using var vm = new MesasViewModel("Ana", role, new FakeSession(), service, DispatchInline);
+        (await service.NextAsync()).SetResult([new MesaDto(1, group, 1, 4, estado, 1)]);
+        await WaitUntilAsync(() => vm.EstadoConexion == "Conectado");
+        vm.SeleccionarMesaCommand.Execute(vm.Mesas[0]);
+        Assert.Contains(expected, vm.AyudaAcciones);
     }
 
     [Fact]
@@ -343,6 +383,7 @@ public sealed class MesasPollingLifecycleTests
         vm.SeleccionarMesaCommand.Execute(vm.Mesas[0]);
         vm.SeleccionarMesaCommand.Execute(vm.Mesas[1]);
         Assert.True(vm.PuedeConfirmarGrupo);
+        Assert.Equal("Selección: 01, 02", vm.SeleccionGrupoTexto);
         (await service.NextAsync()).SetResult([new MesaDto(1, null, 1, 4, "Libre", 7), new MesaDto(2, null, 2, 4, "Libre", 8)]);
         await WaitUntilAsync(() => vm.Mesas.FirstOrDefault()?.Version == 7 && vm.Mesas.Count == 2);
         await vm.CrearGrupoCommand.ExecuteAsync(null);
@@ -407,6 +448,11 @@ public sealed class MesasPollingLifecycleTests
         await WaitUntilAsync(() => vm.Mesas.Count == 1);
         vm.SeleccionarMesaCommand.Execute(vm.Mesas[0]);
         await vm.CerrarGrupoCommand.ExecuteAsync(null);
+        Assert.Null(groups.Closed);
+        vm.SolicitarCierreGrupoCommand.Execute(null);
+        Assert.True(vm.ConfirmarCierreGrupo);
+        vm.CancelarCierreGrupoCommand.Execute(null);
+        Assert.False(vm.ConfirmarCierreGrupo);
         Assert.Null(groups.Closed);
         vm.SolicitarCierreGrupoCommand.Execute(null);
         await vm.CerrarGrupoCommand.ExecuteAsync(null);

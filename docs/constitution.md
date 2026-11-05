@@ -24,7 +24,8 @@
     - Fondo principal `#1E1E1E`; fondo secundario `#2D2D30`; bordes `#3F3F46`.
     - Texto principal `#F3F4F6`; texto secundario `#9CA3AF`.
     - Acento primario `#FF5722`; acento alterno `#E65100`.
-    - Libre `#10B981` | Ocupada `#EF4444` | Reservada `#F59E0B` | Agrupada `#06B6D4`.
+     - Libre `#10B981` | Ocupada `#EF4444` | Reservada `#F59E0B` | Agrupada `#06B6D4`.
+     - Variantes luminosas para indicadores del mapa autorizadas por el usuario: Libre `#27E7A0`, Ocupada `#FF5B66`, Reservada `#FFBF36`, Agrupada `#32D9F4`; conservan la misma semántica y no sustituyen el texto.
     - Dirección visual aprobada: tema oscuro «Carbón & Fuego», con navegación lateral inspirada en la referencia del usuario. Ver `docs/diseno-visual-propuesta.md`; la aplicación actual aún requiere adaptación.
     - Los colores semánticos deben acompañarse de texto y contraste legible; no se exige texto blanco sobre fondos brillantes.
 

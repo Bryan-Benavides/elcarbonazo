@@ -19,6 +19,8 @@ public partial class MesasViewModel
     public bool PuedeConfirmarGrupo => !_disposed && RolPuedeModificar && _coordinator.CanMutate && !Mutando && SeleccionandoGrupo && _idsGrupo.Count is >= 2 and <= 15;
     public bool PuedeCerrarGrupo => !_disposed && RolPuedeModificar && _coordinator.CanMutate && !Mutando && !SeleccionandoGrupo && !ConfirmarCierreGrupo && MesaSeleccionada is { Estado: "Agrupada", IdGrupo: not null };
     public string ContadorGrupo => $"Mesas seleccionadas: {_idsGrupo.Count} (mínimo 2)";
+    public string SeleccionGrupoTexto => _idsGrupo.Count == 0 ? "Seleccione mesas libres en el mapa." :
+        $"Selección: {string.Join(", ", Mesas.Where(m => _idsGrupo.Contains(m.IdMesa)).Select(m => m.Numero).Order().Select(n => $"{n:00}"))}";
 
     private void ActualizarAccionesGrupo()
     {
@@ -26,6 +28,7 @@ public partial class MesasViewModel
         OnPropertyChanged(nameof(PuedeConfirmarGrupo));
         OnPropertyChanged(nameof(PuedeCerrarGrupo));
         OnPropertyChanged(nameof(ContadorGrupo));
+        OnPropertyChanged(nameof(SeleccionGrupoTexto));
     }
 
     partial void OnSeleccionandoGrupoChanged(bool value) => ActualizarAcciones();
@@ -54,6 +57,7 @@ public partial class MesasViewModel
         SeleccionandoGrupo = false;
         _idsGrupo.Clear();
         PublicarSeleccionGrupo();
+        if (MensajeAccion == "Seleccione entre 2 y 15 mesas libres.") MensajeAccion = "";
     }
 
     private void AlternarMesaGrupo(MesaDto? mesa)
@@ -136,7 +140,7 @@ public partial class MesasViewModel
                 "GRUPO_MESAS_NO_ELEGIBLES" => "Una o más mesas ya no son elegibles para agrupar.",
                 _ when (int)ex.StatusCode == 401 => "La autenticación no es válida. Inicie sesión nuevamente.",
                 _ when (int)ex.StatusCode == 403 => "Su rol no tiene permiso para realizar esta acción.",
-                _ => $"La API rechazó el cambio: {ex.Message}"
+                _ => "La API rechazó la operación. Revise las mesas actualizadas antes de intentar otra acción."
             };
         }
         catch (SessionPausedException) { MensajeAccion = "Sesión en pausa. Interactúe para continuar."; }

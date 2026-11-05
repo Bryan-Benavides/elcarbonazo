@@ -9,6 +9,7 @@
              Background="{StaticResource FondoPrincipalBrush}">
     <UserControl.Resources>
         <converters:EstadoMesaColorConverter x:Key="EstadoColor" />
+        <converters:ConexionColorConverter x:Key="ConexionColor" />
         <converters:MesaSeleccionadaConverter x:Key="MesaSeleccionadaConverter" />
         <!-- Sin la plantilla genérica de SukiUI: evita su fondo de hover blanco. -->
         <ControlTheme x:Key="MesaButtonTheme" TargetType="ToggleButton">
@@ -71,11 +72,20 @@
             <Setter Property="BorderBrush" Value="{StaticResource AcentoFuegoBrush}" />
         </Style>
         <Style Selector="Border.tarjeta.enfocada">
-            <Setter Property="BorderBrush" Value="{StaticResource AcentoFuegoBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource TextoPrincipalBrush}" />
         </Style>
     </UserControl.Styles>
-    <Grid ColumnDefinitions="180,*">
+    <Grid ColumnDefinitions="58,Auto,*">
         <Border Grid.Column="0" Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="0,0,1,0">
+            <Button Content="☰" FontSize="21" Margin="6,14,6,0" Padding="5,7" VerticalAlignment="Top"
+                    Command="{Binding AlternarNavegacionCommand}" AutomationProperties.Name="{Binding TextoNavegacion}"
+                    ToolTip.Tip="{Binding TextoNavegacion}" />
+        </Border>
+        <Border Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                Width="{Binding AnchoNavegacion}" ClipToBounds="True"
+                Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="0,0,1,0">
+            <Border.Transitions><Transitions><DoubleTransition Property="Width" Duration="0:0:0.2" /></Transitions></Border.Transitions>
+            <Panel Width="200" HorizontalAlignment="Left" IsVisible="{Binding NavegacionAbierta}">
             <Grid RowDefinitions="Auto,*,Auto" Margin="16,24">
                 <StackPanel Spacing="4">
                     <TextBlock Text="EL CARBONAZO" FontSize="17" FontWeight="Bold" Foreground="{StaticResource AcentoFuegoBrush}" />
@@ -90,25 +100,45 @@
                     <Button Content="Cerrar sesión" Command="{Binding SolicitarCierreCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="0,10,0,0" />
                 </StackPanel>
             </Grid>
+            </Panel>
         </Border>
-        <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*" Margin="24,20">
-            <StackPanel Spacing="5">
+        <Grid Grid.Column="2" RowDefinitions="Auto,Auto,*" Margin="20,16">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <StackPanel Spacing="4">
                 <TextBlock Text="Mapa de mesas" FontSize="27" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
                 <TextBlock Text="Salón principal · Consulta de mesas" Foreground="{StaticResource TextoSecundarioBrush}" />
+                <WrapPanel Margin="0,8,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,16,4"><Border Width="10" Height="10" Background="#27E7A0" CornerRadius="5" /><TextBlock Text="{Binding MesasLibres, StringFormat='{}{0} libres'}" Foreground="{StaticResource TextoPrincipalBrush}" /></StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,16,4"><Border Width="10" Height="10" Background="#FF5B66" CornerRadius="5" /><TextBlock Text="{Binding MesasOcupadas, StringFormat='{}{0} ocupadas'}" Foreground="{StaticResource TextoPrincipalBrush}" /></StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,16,4"><Border Width="10" Height="10" Background="#FFBF36" CornerRadius="5" /><TextBlock Text="{Binding MesasReservadas, StringFormat='{}{0} reservadas'}" Foreground="{StaticResource TextoPrincipalBrush}" /></StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,16,4"><Border Width="10" Height="10" Background="#32D9F4" CornerRadius="5" /><TextBlock Text="{Binding MesasAgrupadas, StringFormat='{}{0} agrupadas'}" Foreground="{StaticResource TextoPrincipalBrush}" /></StackPanel>
+                </WrapPanel>
             </StackPanel>
-            <Border Grid.Row="1" Margin="0,18,0,16" Padding="12,10" CornerRadius="6" Background="{StaticResource FondoPanelBrush}">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="{Binding EstadoConexion}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding MensajeAccion}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+            <StackPanel Grid.Column="1" Spacing="8" HorizontalAlignment="Right">
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                    <Border Width="10" Height="10" CornerRadius="5" Background="{Binding EstadoConexion, Converter={StaticResource ConexionColor}}" />
+                    <TextBlock Text="{Binding EstadoConexion}" MaxWidth="240" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+                <Button Classes="primario" Content="Agrupar mesas existentes" IsEnabled="{Binding PuedeIniciarGrupo}" Command="{Binding IniciarGrupoCommand}" HorizontalAlignment="Right" ToolTip.Tip="Unir mesas libres existentes en un grupo" />
+            </StackPanel>
+            </Grid>
+            <Border Grid.Row="1" Margin="0,8,0,10">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="{Binding MensajeAccion}" IsVisible="{Binding !SeleccionandoGrupo}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
                     <Button Content="He revisado las mesas" IsVisible="{Binding ResultadoIncierto}" IsEnabled="{Binding PuedeReconocer}" Command="{Binding ReconocerIncertidumbreCommand}" />
-                    <Button Classes="primario" Content="Agrupar mesas" IsEnabled="{Binding PuedeIniciarGrupo}" Command="{Binding IniciarGrupoCommand}" HorizontalAlignment="Left" />
-                    <StackPanel IsVisible="{Binding SeleccionandoGrupo}" Spacing="8">
-                        <TextBlock Text="{Binding ContadorGrupo}" Foreground="{StaticResource TextoPrincipalBrush}" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button Content="Confirmar grupo" IsEnabled="{Binding PuedeConfirmarGrupo}" Command="{Binding CrearGrupoCommand}" />
-                            <Button Content="Cancelar" Command="{Binding CancelarGrupoCommand}" />
-                        </StackPanel>
-                    </StackPanel>
+                    <Border IsVisible="{Binding SeleccionandoGrupo}" Background="{StaticResource FondoPanelBrush}"
+                            BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1" CornerRadius="8" Padding="12,8">
+                        <WrapPanel>
+                            <StackPanel Spacing="3" Margin="0,0,18,4" VerticalAlignment="Center">
+                                <TextBlock Text="Unir mesas existentes" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                <TextBlock Text="{Binding MensajeAccion}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" MaxWidth="350" />
+                                <TextBlock Text="{Binding ContadorGrupo}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                <TextBlock Text="{Binding SeleccionGrupoTexto}" Foreground="{StaticResource TextoSecundarioBrush}" TextWrapping="Wrap" MaxWidth="350" />
+                            </StackPanel>
+                            <Button Classes="primario" Content="Crear grupo" IsEnabled="{Binding PuedeConfirmarGrupo}" Command="{Binding CrearGrupoCommand}" Margin="0,2,8,2" VerticalAlignment="Center" />
+                            <Button Content="Cancelar" Command="{Binding CancelarGrupoCommand}" Margin="0,2,0,2" VerticalAlignment="Center" />
+                        </WrapPanel>
+                    </Border>
                 </StackPanel>
             </Border>
             <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
@@ -119,7 +149,7 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:MesaDto">
-                            <ToggleButton x:Name="MesaButton" Theme="{StaticResource MesaButtonTheme}" Classes="mesa" Width="210" Margin="0,0,12,12" Padding="0" HorizontalContentAlignment="Stretch"
+                            <ToggleButton x:Name="MesaButton" Theme="{StaticResource MesaButtonTheme}" Classes="mesa" Width="180" Margin="0,0,10,10" Padding="0" HorizontalContentAlignment="Stretch" AutomationProperties.Name="{Binding Numero, StringFormat='Mesa {0}'}"
                                     Command="{Binding #Root.((vm:MesasViewModel)DataContext).SeleccionarMesaCommand}"
                                     CommandParameter="{Binding}">
                             <ToggleButton.IsChecked>
@@ -131,7 +161,7 @@
                             </ToggleButton.IsChecked>
                             <Border Classes="tarjeta" Classes.seleccionada="{Binding #MesaButton.IsChecked}"
                                     Classes.enfocada="{Binding #MesaButton.IsKeyboardFocusWithin}"
-                                    MinHeight="150" Background="{StaticResource FondoPanelBrush}" BorderThickness="1" CornerRadius="7">
+                                    MinHeight="126" Background="{StaticResource FondoPanelBrush}" BorderThickness="1" CornerRadius="7">
                                 <Border.Transitions>
                                     <Transitions>
                                         <BrushTransition Property="BorderBrush" Duration="0:0:0.16" />
@@ -140,8 +170,8 @@
                                 </Border.Transitions>
                                 <Grid RowDefinitions="4,*">
                                     <Border Grid.Row="0" Background="{Binding Estado, Converter={StaticResource EstadoColor}}" CornerRadius="7,7,0,0" />
-                                    <StackPanel Grid.Row="1" Margin="15,13" Spacing="8">
-                                        <TextBlock Text="{Binding Numero, StringFormat='Mesa {0:00}'}" FontSize="19" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                    <StackPanel Grid.Row="1" Margin="12,10" Spacing="5">
+                                        <TextBlock Text="{Binding Numero, StringFormat='Mesa {0:00}'}" FontSize="17" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
                                         <TextBlock Text="{Binding Capacidad, StringFormat='Capacidad: {0} personas'}" Foreground="{StaticResource TextoSecundarioBrush}" />
                                         <TextBlock Text="{Binding Estado, StringFormat='Estado: {0}'}" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" />
                                         <TextBlock Text="{Binding GrupoTexto}" FontSize="12" Foreground="{StaticResource TextoSecundarioBrush}" />
@@ -153,36 +183,45 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
-            <ScrollViewer Grid.Column="1" Width="242" IsVisible="{Binding HayMesaSeleccionada}"
+            <ScrollViewer Grid.Column="1" Width="226" IsVisible="{Binding HayMesaSeleccionada}"
                           HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <Border Margin="12,0,0,0" Padding="16" VerticalAlignment="Top"
+            <Border Margin="8,0,0,0" Padding="14" VerticalAlignment="Top"
                     Background="{StaticResource FondoPanelBrush}"
                     BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1" CornerRadius="7">
-                <StackPanel Spacing="12">
+                <StackPanel Spacing="9">
                     <TextBlock Text="Detalle de mesa" Foreground="{StaticResource TextoSecundarioBrush}" FontSize="13" />
                     <TextBlock Text="{Binding DetalleTitulo}" Foreground="{StaticResource TextoPrincipalBrush}" FontSize="21" FontWeight="Bold" />
                     <TextBlock Text="{Binding DetalleCapacidad}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding DetalleEstado}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
-                     <TextBlock Text="{Binding DetalleGrupo}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding DetalleGrupo}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding AyudaAcciones}" Foreground="{StaticResource TextoSecundarioBrush}" TextWrapping="Wrap" FontSize="12" />
                      <Button Content="Reservar" IsEnabled="{Binding PuedeReservar}" Command="{Binding ReservarCommand}" HorizontalAlignment="Stretch" />
                      <Button Content="Ocupar" IsEnabled="{Binding PuedeOcupar}" Command="{Binding OcuparCommand}" HorizontalAlignment="Stretch" />
                       <Button Content="Liberar" IsEnabled="{Binding PuedeLiberar}" Command="{Binding SolicitarLiberacionCommand}" HorizontalAlignment="Stretch" />
                       <Button Content="Cerrar grupo" IsEnabled="{Binding PuedeCerrarGrupo}" Command="{Binding SolicitarCierreGrupoCommand}" HorizontalAlignment="Stretch" />
-                      <StackPanel IsVisible="{Binding ConfirmarCierreGrupo}" Spacing="8">
-                          <TextBlock Text="¿Confirmar el cierre de este grupo?" TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
-                          <Button Content="Confirmar cierre" Command="{Binding CerrarGrupoCommand}" />
-                          <Button Content="Cancelar" Command="{Binding CancelarCierreGrupoCommand}" />
-                      </StackPanel>
                     <Button Content="Cerrar detalle" Command="{Binding CerrarDetalleCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
                 </StackPanel>
             </Border>
             </ScrollViewer>
             </Grid>
         </Grid>
-        <Border Grid.ColumnSpan="2" Background="#B0000000" IsVisible="{Binding ConfirmarLiberacion}" ZIndex="110">
+        <Border Grid.ColumnSpan="3" Background="#B0000000" IsVisible="{Binding ConfirmarCierreGrupo}" ZIndex="110">
+            <Border Width="380" Padding="24" CornerRadius="10" Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel Spacing="16" KeyboardNavigation.TabNavigation="Cycle">
+                    <TextBlock Text="¿Cerrar grupo?" FontSize="21" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="{Binding DetalleGrupo}" TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="La API verificará si el grupo tiene una cuenta pendiente." TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+                        <Button Content="Cancelar" Command="{Binding CancelarCierreGrupoCommand}" />
+                        <Button Classes="primario" Content="Cerrar grupo" Command="{Binding CerrarGrupoCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Border>
+        <Border Grid.ColumnSpan="3" Background="#B0000000" IsVisible="{Binding ConfirmarLiberacion}" ZIndex="110">
             <Border Width="380" MaxWidth="380" Padding="24" CornerRadius="10" Background="{StaticResource FondoPanelBrush}"
                     BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <StackPanel Spacing="16">
+                <StackPanel Spacing="16" KeyboardNavigation.TabNavigation="Cycle">
                     <TextBlock Text="¿Liberar mesa?" FontSize="21" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
                     <TextBlock Text="{Binding DetalleTitulo}" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" />
                     <TextBlock Text="Confirma solo si deseas dejar esta mesa libre. La API verificará si tiene una cuenta pendiente." TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
@@ -193,9 +232,9 @@
                 </StackPanel>
             </Border>
         </Border>
-        <Border Grid.ColumnSpan="2" Background="#B0000000" IsVisible="{Binding ConfirmarCierre}" ZIndex="100">
+        <Border Grid.ColumnSpan="3" Background="#B0000000" IsVisible="{Binding ConfirmarCierre}" ZIndex="100">
             <Border Width="380" Padding="24" CornerRadius="10" Background="{StaticResource FondoPanelBrush}" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <StackPanel Spacing="16">
+                <StackPanel Spacing="16" KeyboardNavigation.TabNavigation="Cycle">
                     <TextBlock Text="¿Cerrar sesión?" FontSize="21" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
                     <TextBlock Text="Se detendrá la consulta de mesas y volverá al inicio de sesión." TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">

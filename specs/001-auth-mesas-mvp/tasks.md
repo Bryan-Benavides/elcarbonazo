@@ -190,7 +190,7 @@ Versiones estables consultadas en NuGet y verificadas mediante restore/build par
   - **Criterios de aceptación T5:** las 15 mesas presentan número, capacidad, estado/color y datos de grupo disponibles; permisos y transiciones coinciden con contratos; no hay escrituras offline, requests solapados ni respuestas antiguas aplicadas; creación/cierre/conflictos/resultado incierto se reconcilian según lo indicado. Se verifica polling nominal de 2 s en LAN/API saludables y se mide/documenta la latencia de convergencia incluyendo GET y render; latencias fuera del presupuesto no se ocultan ni rompen single-flight.
   - T5 deja componentes testeables; T6 cubre pruebas focalizadas y revisión manual. Cobertura integral ≥80% y checklist exhaustivo quedan como mejoras previas a producción.
 
-- [ ] **T6: Pruebas Automatizadas y Aceptación Desktop**
+- [x] **T6: Pruebas Automatizadas y Aceptación Desktop** — aceptada para el perfil universitario; evidencia y límites de la revisión visual en `docs/validacion-t6.md`.
   - Crear `tests/ElCarbonazo.Desktop.Tests` con xUnit, referencia solo a Desktop y versiones estables exactas compatibles con .NET 10.
   - Probar servicios/ViewModels con HTTP, reloj y navegación falsos: login, refresh single-flight, actividad, avisos, logout, timeouts, polling/backoff, offline, TLS/configuración, agrupación y conflictos.
   - Verificar que el proyecto Desktop/tests no referencia EF Core, Npgsql ni la API.
@@ -198,3 +198,18 @@ Versiones estables consultadas en NuGet y verificadas mediante restore/build par
   - Revisar manualmente login, mapa, dimensiones, colores, acciones, agrupación, sesión y desconexión; checklist exhaustivo queda para producción.
   - Ejecutar formato → build → pruebas API → pruebas Desktop → auditoría de paquetes.
   - *Criterio de Aceptación:* Toda lógica Desktop crítica pasa pruebas unitarias y el checklist visual cumple el Design System sin acceso directo a PostgreSQL.
+
+- [ ] **T7: Claridad y presentación del MVP** — Alinear login oscuro; explicar restricciones por rol, grupo y conexión sin inferir pedidos; mejorar selección y confirmación de grupos; mostrar leyenda textual; revisar teclado y tamaño mínimo; mejorar mensajes; actualizar guía local y documentación visual. Validar tests y build; registrar por separado lo no comprobado visualmente.
+  - [x] Implementar login oscuro coherente con el mapa.
+  - [x] Añadir ayuda contextual basada en rol, estado, grupo y disponibilidad, sin asumir cuentas pendientes.
+  - [x] Mostrar mesas seleccionadas para agrupar y confirmación central para cerrar grupo.
+  - [x] Añadir leyenda textual de los estados existentes.
+  - [ ] Verificar en ejecución teclado, foco, confirmaciones y tamaño mínimo; se añadieron nombres accesibles y estilos de foco, pero no sustituyen la revisión manual.
+  - [x] Aclarar mensajes de rechazo sin mostrar detalles arbitrarios de la API ni alterar el tratamiento de incertidumbre.
+  - [x] Documentar preparación y demostración local en `README.md`.
+  - [x] Actualizar el estado de la propuesta visual en `docs/diseno-visual-propuesta.md`.
+  - [ ] Comprobar visualmente el login oscuro, selección de grupo, leyenda y botones habilitados/deshabilitados en la aplicación real.
+
+- [ ] **T8: Identidad visual y ventana del login** — Incorporar el recurso fotográfico local con atenuación y diseño adaptable; agregar mostrar/ocultar contraseña con estado seguro y prueba; ajustar barra oscura compacta y controles de ventana; usar acentos cálidos luminosos accesibles sin cambiar colores de mesa. Compilar y probar; comprobar visualmente ventana, maximizar/restaurar, imagen, contraste y teclado antes de cerrar.
+
+- [ ] **T9: Mapa de mesas compacto** — Navegación plegable animada en columna propia, que redistribuye el mapa; indicadores luminosos con cantidades actualizadas; cabecera compacta con conexión veraz y mensajes; agrupación identificable y controles agrupados; tarjetas y detalle que aprovechen mejor el espacio. Conservar acciones, confirmaciones y reglas; probar conexión, agrupación y teclado, y validar visualmente en tamaño mínimo y maximizado antes de cerrar.

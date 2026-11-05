@@ -19,6 +19,12 @@ public partial class LoginViewModel(
     private string _contrasena = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TextoVisibilidadContrasena))]
+    private bool _mostrarContrasena;
+
+    public string TextoVisibilidadContrasena => MostrarContrasena ? "Ocultar contraseña" : "Mostrar contraseña";
+
+    [ObservableProperty]
     private string? _errorMessage;
 
     [ObservableProperty]
@@ -80,6 +86,7 @@ public partial class LoginViewModel(
         finally
         {
             Contrasena = string.Empty;
+            MostrarContrasena = false;
             IsBusy = false;
             LoginCommand.NotifyCanExecuteChanged();
         }

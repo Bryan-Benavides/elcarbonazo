@@ -1,6 +1,10 @@
 # Dirección visual — El Carbonazo Desktop
 
-**Estado: paleta oscura «Carbón & Fuego» y tarjetas rectangulares aprobadas.** No representa funcionalidades ya implementadas; el panel de detalle y la barra plegable se definirán al integrar las acciones.
+**Estado:** dirección oscura «Carbón & Fuego» y tarjetas rectangulares aprobadas. T9 reorganiza el mapa y añade navegación plegable; la aceptación visual y de teclado se registra por separado.
+
+**T9:** barra lateral plegable en su propia columna, con control permanente y redistribución del mapa; cabecera compacta, conexión textual con indicador verde solo tras consulta satisfactoria, rojo ante fallo de red/respuesta y ámbar para estados no confirmados. La leyenda cuenta los estados de las mesas visibles; sin conexión corresponde a los últimos datos conservados. La acción «Agrupar mesas existentes» y un panel compacto aclaran la selección y confirmación sin crear mesas nuevas. Las tarjetas mantienen texto y bandas luminosas: libre `#27E7A0`, ocupada `#FF5B66`, reservada `#FFBF36` y agrupada `#32D9F4`. El detalle permanece lateral. La versión anterior de T9 recibió una valoración positiva del usuario; estos ajustes posteriores requieren revisión con ratón, teclado, escala y tamaño mínimo.
+
+**Extensión T8 para login y ventana:** se usa la fotografía local `Assets/logo_cabonazo.jfif` como fondo, atenuada para priorizar el formulario. La tarjeta incorpora el acento cálido luminoso `#FFB488` para el título y conserva superficies oscuras; no se cambian los colores semánticos de las mesas. Se añade un control accesible para mostrar/ocultar la contraseña, inicialmente oculta y reiniciada al terminar cada intento. `SukiWindow` usa una barra compacta oscura, con minimizar, maximizar/restaurar y cerrar. La apariencia y el comportamiento se revisan en ejecución, también con teclado, escalado y tamaño mínimo.
 
 ## 1. Objetivo
 
@@ -28,6 +32,8 @@ Una aplicación de restaurante moderna, cálida y clara: identidad de marca visi
 | Reservada / Agrupada | `#F59E0B` / `#06B6D4` | Aprobado |
 
 La referencia propone blanco sobre fondos brillantes, pero el contraste calculado frente a blanco es 2.54:1 (verde), 3.76:1 (rojo), 2.15:1 (ámbar), 2.43:1 (cian) y 3.16:1 (naranja), insuficiente para texto normal de 4.5:1. Preferir estados con fondo oscuro y texto/borde semántico; para fondos brillantes seleccionar texto oscuro u otra variante probada. Rojo `#EF4444` sobre `#1E1E1E` da 4.43:1: requiere ajustar superficie/texto o tamaño, no afirmarlo accesible sin comprobación. Texto y/o icono acompañan al color.
+
+Para T8, el título `#FFB488` sobre una superficie de referencia `#27272B` da aproximadamente 8,60:1; texto `#F3F4F6` sobre `#A93817` da 5,84:1 y sobre `#9F3517` 6,37:1. La tarjeta usa transparencia sobre una fotografía: estos cálculos son de colores de referencia, no sustituyen comprobar el contraste compuesto ni los controles en pantalla.
 
 ## 3. Distribución de MesasView
 
@@ -86,9 +92,9 @@ La referencia propone blanco sobre fondos brillantes, pero el contraste calculad
 4. Aplicar el diseño de navegación y componentes reutilizables sin adelantar módulos futuros.
 5. Ejecutar build, pruebas focalizadas y revisión visual manual; registrar limitaciones y mejoras posteriores.
 
-## 8. Pendientes de decisión
+## 8. Estado y pendientes
 
-- Paleta «Carbón & Fuego» aprobada; falta aplicarla a la interfaz y probar contraste visual.
-- ¿Detalle de mesa en panel lateral o en diálogo? El panel permite comparar el mapa; el diálogo es más sencillo en pantallas pequeñas.
-- ¿Barra lateral expandida siempre o plegable? Confirmar según el espacio disponible a `800×560`.
-- La propuesta aún no ha sido probada visualmente ni revisada mediante mediciones de contraste.
+- La paleta y las tarjetas están aplicadas al mapa; el usuario verificó el hover y los colores de botones. T7 unifica el login y agrega leyenda y ayudas; no se consideran visualmente aceptados solo por compilar.
+- El detalle se presenta en panel lateral; liberar usa una confirmación central. T7 aplica una confirmación central también al cierre de grupo.
+- La barra lateral T9 ocupa una columna propia y redistribuye el mapa; revisar el tamaño mínimo `800×560`, escalado, navegación y foco.
+- Hay cálculos de contraste y verificaciones parciales en `docs/validacion-t5.md` y `docs/validacion-t6.md`; siguen pendientes la revisión visual exhaustiva y los controles interactivos en ejecución.

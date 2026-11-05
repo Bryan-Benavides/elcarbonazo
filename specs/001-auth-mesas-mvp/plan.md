@@ -236,6 +236,10 @@ EF Core mapea a snake_case en BD; la serialización expone camelCase.
 - **Roles que modifican agrupaciones**: `Jefa`, `Encargado de Caja`, `Mesero`, `Supervisor`; `Personal de Cocina` solo consulta.
 
 ## 4. Componentes Desktop (Avalonia UI + SukiUI)
+- Mejora de presentación aprobada: alinear login y mapa con Carbón & Fuego; añadir leyenda, razones contextuales no especulativas, instrucciones de selección y confirmación central para cierre de grupo. Mantener botones deshabilitados para acciones no disponibles y API como autoridad; no inferir pedidos pendientes. Verificar teclado/foco y tamaños visualmente, sin introducir paquetes o code-behind de vistas.
+- Extensión visual aprobada: imagen local `Assets/logo_cabonazo.jfif` como fondo atenuado del login; control MVVM de mostrar/ocultar contraseña usando `TextBox.RevealPassword`, reiniciado tras cada intento. Ajustar barra de `SukiWindow` con propiedades nativas de la versión instalada y acentos luminosos locales; probar minimizar/maximizar/restaurar y contraste en ejecución sin afirmar resultado solo por compilar.
+- Ante el fallo reportado del botón de maximizar de SukiUI 7.0.1 con clic real en Windows, sustituir solo ese botón en la plantilla aplicada, preservando el estado y los demás controles. El reemplazo no ofrece el menú Snap Layout al pasar el puntero; confirmar la corrección con clic real y teclado en la configuración del usuario.
+- T9: navegación en columna propia con transición breve y mando accesible; el mapa se redistribuye al abrirla. Tarjetas compactas y detalle lateral; cabecera con mensajes visibles, estado de consulta distinguible y totales derivados de la colección visible. Agrupación explícita con controles compactos adaptables. Usar variantes luminosas de la paleta en indicadores, sin inferir conectividad ni alterar permisos, polling o reglas. Verificar diseño real, estados, ratón y teclado en tamaño mínimo y maximizado.
 - `Views/LoginView.axaml` ↔ `ViewModels/LoginViewModel.cs`
 - `Views/ConfigurationErrorView.axaml` ↔ `ViewModels/ConfigurationErrorViewModel.cs`
 - `Views/SecurityErrorView.axaml` ↔ `ViewModels/SecurityErrorViewModel.cs`
@@ -245,9 +249,9 @@ EF Core mapea a snake_case en BD; la serialización expone camelCase.
 - `Services/ServerClock.cs` / `IServerClock` (desfase UTC del servidor y conversión a Managua únicamente para presentación)
 - `Services/MesasApiService.cs` (Consumo exclusivo de endpoints de mesa)
 - `Services/GruposMesaApiService.cs` (Creación y cierre de grupos)
-- `MesasView` muestra `Agrupar mesas` solo a roles de modificación. El botón activa modo de selección, resalta únicamente mesas `Libre`, muestra `n seleccionadas`, habilita Confirmar desde 2 y ofrece Cancelar.
-- Fuera del modo de selección, clic en una mesa individual abre detalle con acciones contextuales Reservar/Ocupar/Liberar según la matriz y el rol. Liberar requiere confirmación; Cocina, modo offline y sesión pausada no muestran acciones.
-- Clic en una mesa `Agrupada` abre un detalle derivado de `idGrupo` y la colección actual. Para roles autorizados incluye `Cerrar grupo` con confirmación; Cocina ve el detalle sin acción.
+- `MesasView` mantiene `Agrupar mesas` habilitado solo para roles de modificación en condiciones válidas. El botón activa modo de selección, resalta únicamente mesas `Libre`, muestra `n seleccionadas`, habilita Confirmar desde 2 y ofrece Cancelar.
+- Fuera del modo de selección, clic en una mesa individual abre detalle con acciones contextuales Reservar/Ocupar/Liberar según la matriz y el rol. Liberar requiere confirmación; para Cocina, modo offline y sesión pausada las acciones permanecen deshabilitadas con explicación contextual.
+- Clic en una mesa `Agrupada` abre un detalle derivado de `idGrupo` y la colección actual. `Cerrar grupo` requiere rol autorizado y confirmación; Cocina puede verlo deshabilitado con explicación de solo lectura.
 - El encabezado de MesasView muestra nombre, rol y `Cerrar sesión`. La acción confirmada cancela polling/actividad, intenta logout con tiempo acotado, limpia estado sensible y navega a LoginView incluso ante fallo de red.
 - El modo de selección guarda `idMesa`, no copias congeladas del DTO. Polling continúa; al confirmar resuelve versiones actuales y elimina con aviso IDs cuyo estado/grupo ya no sea elegible.
 - Los DTOs de Desktop son contratos cliente propios y no referencian tipos del proyecto API. El JSON usa camelCase; `numero` es el campo físico. `MesaDto.Version` se conserva como `uint` opaco para concurrencia y no se interpreta como timestamp.

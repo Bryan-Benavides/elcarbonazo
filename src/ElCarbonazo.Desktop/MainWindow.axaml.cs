@@ -1,9 +1,9 @@
 using Avalonia.Markup.Xaml;
-using SukiUI.Controls;
+using ElCarbonazo.Desktop.Controls;
 
 namespace ElCarbonazo.Desktop;
 
-public partial class MainWindow : SukiWindow
+public partial class MainWindow : VentanaPrincipal
 {
     public MainWindow()
     {

@@ -1,7 +1,8 @@
-<suki:SukiWindow x:Class="ElCarbonazo.Desktop.MainWindow"
+<controls:VentanaPrincipal x:Class="ElCarbonazo.Desktop.MainWindow"
                  xmlns="https://github.com/avaloniaui"
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:suki="clr-namespace:SukiUI.Controls;assembly=SukiUI"
+                 xmlns:controls="using:ElCarbonazo.Desktop.Controls"
                  xmlns:vm="using:ElCarbonazo.Desktop.ViewModels"
                  x:DataType="vm:ShellViewModel"
                  Title="El Carbonazo"
@@ -9,9 +10,30 @@
                  Height="720"
                  MinWidth="800"
                  MinHeight="560"
-                 Background="{StaticResource ColorHuesoBrush}"
+                 CanResize="True"
+                 CanMinimize="True"
+                 CanMaximize="True"
+                 MaxWidthScreenRatio="1"
+                 MaxHeightScreenRatio="1"
+                 ExtendClientAreaToDecorationsHint="True"
+                 ExtendClientAreaTitleBarHeightHint="-1"
+                 WindowDecorations="Full"
+                 RequestedThemeVariant="Dark"
+                 TitleBarControlSize="14"
+                 TitleFontSize="13"
+                 ShowTitlebarBackground="True"
+                 Background="{StaticResource FondoPrincipalBrush}"
                  BackgroundStyle="Flat"
                  IsMenuVisible="False">
+    <suki:SukiWindow.Resources>
+        <SolidColorBrush x:Key="SukiGlassCardOpaqueBackground" Color="#1E1E1E" />
+    </suki:SukiWindow.Resources>
+    <suki:SukiWindow.Styles>
+        <Style Selector="suki|SukiWindow /template/ suki|GlassCard#PART_TitleBarBackground">
+            <Setter Property="IsOpaque" Value="True" />
+            <Setter Property="Background" Value="{StaticResource FondoPrincipalBrush}" />
+        </Style>
+    </suki:SukiWindow.Styles>
     <Grid RowDefinitions="Auto,Auto,*">
         <Border Grid.Row="0"
                 Background="#FFF3CD"
@@ -76,4 +98,4 @@
             </Border>
         </Border>
     </Grid>
-</suki:SukiWindow>
+</controls:VentanaPrincipal>

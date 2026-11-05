@@ -24,11 +24,34 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private bool _resultadoIncierto;
     [ObservableProperty] private bool _consultaTrasIncertidumbre;
     [ObservableProperty] private bool _mutando;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AnchoNavegacion))]
+    [NotifyPropertyChangedFor(nameof(TextoNavegacion))]
+    private bool _navegacionAbierta;
+
+    public double AnchoNavegacion => NavegacionAbierta ? 200 : 0;
+    public string TextoNavegacion => NavegacionAbierta ? "Ocultar navegación" : "Mostrar navegación";
+
+    [RelayCommand] private void AlternarNavegacion() => NavegacionAbierta = !NavegacionAbierta;
 
     public bool PuedeReservar => PuedeCambiar("Reservada");
     public bool PuedeOcupar => PuedeCambiar("Ocupada");
     public bool PuedeLiberar => PuedeCambiar("Libre");
     public bool PuedeReconocer => ResultadoIncierto && ConsultaTrasIncertidumbre && _coordinator.CanAcknowledgeUncertainty;
+    public string AyudaAcciones =>
+        ResultadoIncierto ? "Revise las mesas y reconozca el aviso antes de realizar cambios." :
+        _session.State == SessionLifecycleState.Paused ? "La sesión está en pausa; interactúe para continuar." :
+        Mutando ? "Hay una operación en curso. Espere su resultado." :
+        !RolPuedeModificar ? "Su rol permite consultar las mesas, pero no modificarlas." :
+        !_coordinator.CanMutate ? "Los cambios estarán disponibles después de una consulta satisfactoria." :
+        MesaSeleccionada?.IdGrupo is not null ? "Esta mesa pertenece a un grupo; los cambios se realizan cerrando el grupo." :
+        MesaSeleccionada?.Estado switch
+        {
+            "Libre" => "Puede reservar u ocupar esta mesa.",
+            "Reservada" => "Puede ocupar o liberar esta mesa.",
+            "Ocupada" => "Puede solicitar la liberación; la API verificará si hay una cuenta pendiente.",
+            _ => "Seleccione una mesa para consultar sus acciones."
+        };
 
     private bool PuedeCambiar(string destino) => !_disposed && !Mutando && !ConfirmarLiberacion && !SeleccionandoGrupo &&
         _coordinator.CanMutate && Rol is "Jefa" or "Encargado de Caja" or "Mesero" or "Supervisor" &&
@@ -42,6 +65,7 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(PuedeOcupar));
         OnPropertyChanged(nameof(PuedeLiberar));
         OnPropertyChanged(nameof(PuedeReconocer));
+        OnPropertyChanged(nameof(AyudaAcciones));
         ActualizarAccionesGrupo();
     }
 
@@ -103,7 +127,7 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
                 "MESA_PERTENECE_A_GRUPO" => "La mesa pertenece a un grupo; no puede cambiarse individualmente.",
                 _ when (int)ex.StatusCode == 401 => "La autenticación no es válida. Inicie sesión nuevamente.",
                 _ when (int)ex.StatusCode == 403 => "Su rol no tiene permiso para realizar esta acción.",
-                _ => $"La API rechazó el cambio: {ex.Message}"
+                _ => "La API rechazó el cambio. Revise la mesa actualizada antes de intentar otra acción."
             };
         }
         catch (SessionPausedException) { MensajeAccion = "Sesión en pausa. Interactúe para continuar."; }
@@ -135,6 +159,18 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     public string Nombre { get; }
     public string Rol { get; }
     public ObservableCollection<MesaDto> Mesas { get; } = [];
+    public int MesasLibres => Mesas.Count(m => m.Estado == "Libre");
+    public int MesasOcupadas => Mesas.Count(m => m.Estado == "Ocupada");
+    public int MesasReservadas => Mesas.Count(m => m.Estado == "Reservada");
+    public int MesasAgrupadas => Mesas.Count(m => m.Estado == "Agrupada");
+
+    private void AlCambiarMesas(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(MesasLibres));
+        OnPropertyChanged(nameof(MesasOcupadas));
+        OnPropertyChanged(nameof(MesasReservadas));
+        OnPropertyChanged(nameof(MesasAgrupadas));
+    }
 
     [ObservableProperty]
     private string _estadoConexion = "Cargando mesas…";
@@ -193,6 +229,7 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
         _mesasService = mesasService;
         _gruposService = gruposService ?? new GruposMesaApiService(session);
         _dispatch = dispatch ?? DispatchToUiAsync;
+        Mesas.CollectionChanged += AlCambiarMesas;
         _coordinator.SetSessionActive(session.State is SessionLifecycleState.Active or SessionLifecycleState.Expiring);
         _session.SessionStateChanged += OnSessionStateChanged;
         _ = PollAsync(_lifetime.Token);
@@ -318,6 +355,11 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
         _coordinator.SetSessionActive(args.State is SessionLifecycleState.Active or SessionLifecycleState.Expiring);
         _ = _dispatch(() =>
         {
+            if (args.State == SessionLifecycleState.Paused)
+                EstadoConexion = "Sesión en pausa. Interactúe para continuar.";
+            else if (args.PreviousState == SessionLifecycleState.Paused &&
+                     args.State is SessionLifecycleState.Active or SessionLifecycleState.Expiring)
+                EstadoConexion = "Actualizando mesas…";
             if (args.State is not (SessionLifecycleState.Active or SessionLifecycleState.Expiring))
                 ConsultaTrasIncertidumbre = false;
             ActualizarAcciones();
@@ -341,6 +383,7 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
         if (_disposed) return;
         _disposed = true;
         _session.SessionStateChanged -= OnSessionStateChanged;
+        Mesas.CollectionChanged -= AlCambiarMesas;
         _coordinator.Stop();
         _lifetime.Cancel();
     }

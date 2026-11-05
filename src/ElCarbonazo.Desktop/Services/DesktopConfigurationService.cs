@@ -7,17 +7,23 @@ public sealed class DesktopConfigurationService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public string ConfigurationPath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-        "ElCarbonazo",
-        "desktop.json");
+    private readonly Func<string, string?> _getEnvironmentVariable;
+
+    public DesktopConfigurationService(string? configurationPath = null, Func<string, string?>? getEnvironmentVariable = null)
+    {
+        ConfigurationPath = configurationPath ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ElCarbonazo", "desktop.json");
+        _getEnvironmentVariable = getEnvironmentVariable ?? Environment.GetEnvironmentVariable;
+    }
+
+    public string ConfigurationPath { get; }
 
     public DesktopConfiguration Load()
     {
-        var environment = Environment.GetEnvironmentVariable("ELCARBONAZO_ENVIRONMENT");
+        var environment = _getEnvironmentVariable("ELCARBONAZO_ENVIRONMENT");
         var isDevelopment = string.Equals(environment, "Development", StringComparison.OrdinalIgnoreCase);
         var overrideUrl = isDevelopment
-            ? Environment.GetEnvironmentVariable("ELCARBONAZO_API_BASE_URL")
+            ? _getEnvironmentVariable("ELCARBONAZO_API_BASE_URL")
             : null;
 
         DesktopConfigurationFile? file = null;
