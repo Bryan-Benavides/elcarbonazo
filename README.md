@@ -32,3 +32,5 @@ Para pruebas y configuración de instalación ver `AGENTS.md`, `docs/installatio
 - `src/ElCarbonazo.Desktop` — Cliente Avalonia (solo HTTP a API)
 - `docs/` — Dominio, Constitución
 - `specs/` — Especificaciones por módulo (SDD)
+
+El módulo [`003-pedidos-kds`](specs/003-pedidos-kds/spec.md) está en preparación documental: pedidos, catálogo y cocina todavía no están implementados. Su plan y tareas requieren revisión y aprobación de las decisiones pendientes antes de programar. La propuesta `002-operaciones-seguras` permanece separada y pospuesta.

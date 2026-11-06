@@ -94,6 +94,10 @@ Para T8, el título `#FFB488` sobre una superficie de referencia `#27272B` da ap
 
 ## 8. Estado y pendientes
 
+### Propuesta futura 003 — Pedidos y cocina
+
+La documentación en `specs/003-pedidos-kds/` plantea un borrador de comanda con categorías y controles táctiles, resumen de cuenta con envíos separados y una cola de cocina con cantidades y notas destacadas. Es una dirección pendiente de implementación y revisión visual: conservar texto además del color, foco, tamaños accesibles y navegación solo a destinos reales. No afirmar que el KDS o el catálogo ya existen ni prometer notificaciones instantáneas.
+
 - La paleta y las tarjetas están aplicadas al mapa; el usuario verificó el hover y los colores de botones. T7 unifica el login y agrega leyenda y ayudas; no se consideran visualmente aceptados solo por compilar.
 - El detalle se presenta en panel lateral; liberar usa una confirmación central. T7 aplica una confirmación central también al cierre de grupo.
 - La barra lateral T9 ocupa una columna propia y redistribuye el mapa; revisar el tamaño mínimo `800×560`, escalado, navegación y foco.

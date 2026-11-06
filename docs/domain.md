@@ -3,7 +3,7 @@
 ## Contexto Operativo y Fiscal
 - **Negocio:** Bar Restaurante "El Carbonazo" (Managua, Nicaragua).
 - **Infraestructura:** 15 mesas físicas, 8 colaboradores, ~90 productos en menú.
-- **Reglas Fiscales:** IVA 15% (RD-01), Propina voluntaria 10%, Sistema Bimonetario (NIO / USD) (RD-02).
+- **Referencias generales del modelo:** IVA general 15% (RD-01), propina voluntaria 10%, sistema bimonetario NIO/USD (RD-02). **Aplicación al negocio según información del usuario:** opera bajo régimen de cuota fija y no añadirá IVA 15 % en el alcance 003. Los pedidos de 003 usarán `impuestos = 0` y `total = subtotal`; no son facturas. Esta información comercial no ha sido verificada legalmente. Si cambia el régimen, confirmar con responsable/asesor competente y revisar la especificación antes de cambiar el sistema.
 - **Red local:** La API se publica mediante HTTPS en un hostname LAN fijo (referencia operativa: `elcarbonazo-api.local`); los clientes confían el certificado desde el almacén del sistema operativo.
 - **Configuración:** Direcciones, certificados, contraseñas y claves no se compilan ni se guardan como secretos en archivos versionados.
 - **Desktop Windows:** `ApiBaseUrl` e `idInstalacion` residen en `%ProgramData%\ElCarbonazo\desktop.json`; el instalador los crea y usuarios normales solo tienen lectura.
@@ -14,7 +14,9 @@
 - **Respaldos:** Producción genera un respaldo PostgreSQL diario, cifrado y almacenado en otro disco o NAS local; conserva 30 días y verifica una restauración aislada cada mes.
 - **Tiempo:** Backend y PostgreSQL persisten, comparan y emiten instantes en UTC; Desktop convierte únicamente para mostrar mediante la zona `America/Managua`.
 
-## Esquema Relacional PostgreSQL (3FN)
+## Modelo relacional de dominio (referencia; no equivale al esquema desplegado)
+> Esta lista conserva entidades conceptuales del dominio. En el esquema EF Core actual de 001 existen `usuario`, `sesion_usuario`, `token_refresh_sesion`, `grupo_mesa`, `grupo_mesa_miembro`, `mesa`, `pedido` y `evento_auditoria`. En particular, `producto`, `ingrediente`, `receta`, `detalle_receta`, `detalle_pedido` y `factura` no están implementadas como tablas en la API actual. No asumir que una fila aquí descrita está creada en una base ni migrarla como si ya existiera; 003 debe introducir y probar solamente las entidades aprobadas en su nueva migración.
+
 1. `usuario` (id_usuario [PK, SERIAL], nombre [UNIQUE], contrasena_hash, rol, email [UNIQUE], activo, intentos_fallidos, bloqueo_hasta [NULL])
 2. `sesion_usuario` (id_sesion [PK, UUID], id_usuario [FK], fecha_creacion, ultima_actividad, expiracion_absoluta, fecha_revocacion [NULL])
 3. `token_refresh_sesion` (id_token [PK, BIGSERIAL], id_sesion [FK], token_hash [UNIQUE], fecha_emision, fecha_consumo [NULL])
@@ -83,6 +85,11 @@
 - Desktop limita lecturas a 5 segundos y login/mutaciones a 10 segundos; una escritura con timeout nunca se reintenta automáticamente. En el prototipo se avisa del resultado incierto y se solicita revisión humana tras consultar mesas; una lectura no demuestra que terminó la escritura. El protocolo recuperable 002 se pospone para una fase futura.
 
 ## Reglas de Pedido
+- **Evolución propuesta, no implementada:** `specs/003-pedidos-kds/` prepara una separación entre cuenta (`pedido`) y envíos a cocina (`comanda`). El usuario aprobó la matriz de roles, estados/agregación, política de cuentas activas heredadas sin comandas y regla fiscal de 003. `plan.md` contiene propuestas técnicas detalladas de idempotencia, límites, HTTP, concurrencia y migración que requieren revisión explícita antes de implementación; las reglas vigentes y el esquema existente no cambian por esta nota. No inferir que ya existen catálogo, comandas, detalles o KDS operativos.
+- Estados acordados para la propuesta 003: cada comanda pasa `Abierta` → `En Preparación` → `Lista`. La cuenta activa está `Abierto` si alguna comanda sigue Abierta; si no, `En Preparación` si alguna está en ese estado; y `Listo` solo cuando todas están Listas. Un nuevo envío añade otra comanda Abierta y devuelve la cuenta a Abierto, sin reiniciar las anteriores. `Listo` sigue siendo pedido activo: no equivale a pago, retiro ni autorización para liberar mesa/grupo.
+- Matriz acordada para 003: Jefa, Supervisor, Mesero y Encargado de Caja pueden consultar cuentas/comandas de todas las mesas y enviar pedidos. Jefa, Supervisor y Personal de Cocina pueden ver la cola KDS y cambiar estado de comanda. Mesero y Encargado de Caja ven los estados desde la cuenta, no operan la cola; Cocina no accede al envío de pedidos ni modifica mesas/grupos. La API deberá autorizar cada solicitud. Esta matriz todavía no está implementada.
+- Cuenta activa heredada sin comandas: se conserva intacta, se muestra como cuenta anterior de solo lectura y bloquea nuevos envíos al destino hasta resolución futura explícita y auditable. No se inventan productos, detalle ni pago; esta regla de 003 aún no está implementada.
+- Para la propuesta 003, cada comanda nueva representa un envío separado de una cuenta activa; no modifica silenciosamente comandas enviadas. El catálogo de demostración no representa inventario, la anulación de artículos enviados queda pospuesta y no se simula pago ni liberación automática. Los campos y relaciones de `detalle_pedido` listados arriba son un inventario de dominio previo y deberán conciliarse con la relación a comanda antes de aprobar la migración, sin recrear `pedido` ni inventar datos históricos.
 - Cada pedido pertenece exactamente a una mesa individual o a un grupo: uno y solo uno de `id_mesa` e `id_grupo` debe tener valor.
 - Una mesa o grupo puede tener como máximo un pedido activo (`Abierto`, `En Preparación` o `Listo`).
 - Los pedidos de un grupo representan una única cuenta compartida por todas sus mesas.

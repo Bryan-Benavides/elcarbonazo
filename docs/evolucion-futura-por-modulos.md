@@ -59,40 +59,46 @@ Las referencias autoritativas siguen siendo `docs/constitution.md`, `docs/domain
 
 **Base existente:** el dominio y parte de la persistencia permiten representar pedidos y comprobar cuentas pendientes para las reglas de mesas/grupos. Eso **no significa que exista un flujo completo de pedidos en Desktop o una API funcional de toma de pedidos**.
 
+**Preparación 003:** [`specs/003-pedidos-kds/`](../specs/003-pedidos-kds/) define una cuenta por destino, envíos separados, catálogo de demostración y cocina. Están acordados roles, estados/agregación, cuentas activas heredadas sin comandas en solo lectura y bloqueantes de nuevos envíos, y la regla de no añadir IVA por el régimen de cuota fija informado por el usuario. La especificación también documenta propuestas técnicas detalladas para idempotencia, validación, HTTP, concurrencia, sondeo y migración; no están implementadas ni aprobadas tácitamente. Revisar `spec.md §10` antes de programar.
+
 **Por definir:**
 
-- Apertura y edición de pedidos individuales o de grupo, selección de productos, cantidades, notas y permisos.
-- Transiciones y coordinación con cocina, cancelaciones, historial y prevención de pedidos activos duplicados.
-- Comportamiento transaccional entre pedido y mesa/grupo. La apertura futura debe respetar las reglas de `docs/domain.md` y el orden de locks establecido para grupos.
-- Manejo de errores, concurrencia y escrituras inciertas; no liberar automáticamente una mesa o grupo por cerrar un pedido sin una regla aprobada.
+- Los flujos específicos de apertura, borrador local, envío idempotente y estados se detallan como propuestas en `specs/003-pedidos-kds/`; falta aprobación de contratos antes de implementar.
+- Cancelación, edición de envíos, pagos y cierre permanecen fuera de 003 y requieren especificación posterior.
+- La implementación deberá respetar transacciones y locks del módulo 001; las propuestas de orden y las carreras se revisan antes de codificar y prueban en PostgreSQL temporal.
+- Ante resultado incierto no se reintenta automáticamente ni se usa un GET como prueba de terminación; el alcance y límite tras reinicio están documentados en 003.
 
 ## 6. Cocina
 
 **Base existente:** el rol `Personal de Cocina` puede consultar mesas y no modificarlas. El módulo 001 no implementa una pantalla operativa de cocina.
 
-**Por definir:** recepción y visualización de pedidos, prioridades, estados de preparación, notas, responsabilidades, permisos y comunicación con salón. Evaluar actualizaciones en red local y qué debe ocurrir ante desconexión sin inventar pedidos o estados.
+**Preparación 003:** se propone una cola de comandas; Cocina puede operar estados sin modificar mesas. La matriz acordada incluye Jefa/Supervisor en KDS y permite a Mesero/Caja consultar estados desde la cuenta. Rutas, errores, cursores y polling están detallados como propuestas revisables en `specs/003-pedidos-kds/plan.md`; aún no están implementados ni aprobados tácitamente.
+
+La especificación 003 define recepción, orden FIFO, estados, notas, roles y comunicación visible en salón. La implementación y validación del polling, volumen, accesibilidad y desconexión siguen pendientes; no se garantizan notificaciones instantáneas.
 
 ## 7. Productos, menú y precios
 
 **Base de dominio:** `docs/domain.md` describe productos y precios; una entidad descrita en el diccionario no implica pantallas o gestión implementadas.
 
-**Por definir:** catálogo, categorías, disponibilidad, precios, permisos para cambiarlos, preservación del precio aplicado a cada pedido e historial. Determinar quién administra el menú y cómo se corrigen errores sin alterar ventas anteriores.
+003 propone catálogo demostrativo, categorías, disponibilidad, precios históricos y revalidación de versión; no incluye administración de menú ni cambio de precios por usuarios. La gestión real del menú, permisos, correcciones e historial de cambios requieren especificación posterior.
 
 ## 8. Inventario, ingredientes y recetas
 
 **Base de dominio:** el diccionario describe ingredientes, recetas y sus relaciones; no se declara implementada una operación completa de inventario.
 
+En la primera entrega propuesta de 003, `disponible` describe solo el catálogo; no hay comprobación, reserva ni reversión de ingredientes. Integrar inventario exige una especificación posterior y no debe simularse.
+
 **Por definir:** unidades, entradas y salidas, ajustes autorizados, recetas, consumos, mermas, alertas y trazabilidad. Acordar si el inventario cambia al preparar, vender o mediante otro evento, y cómo se revierten o corrigen movimientos. Requiere especificación y pruebas transaccionales propias.
 
 ## 9. Caja, pagos, facturación y moneda
 
-**Reglas de referencia existentes:** importes de pedido en NIO, operación bimonetaria NIO/USD a tasa fija, IVA 15 % y propina voluntaria del 10 %, según `docs/domain.md` y `docs/constitution.md`. Estos valores no implican que el flujo de cobro esté implementado o validado fiscalmente.
+**Reglas de referencia generales:** importes en NIO, posible operación bimonetaria NIO/USD y referencias preliminares a IVA 15 %/propina 10 % en el modelo de dominio. No son por sí solas una regla fiscal validada ni se aplican automáticamente al restaurante. **Para el negocio actual**, según información del usuario sobre su régimen de cuota fija, 003 no añade IVA y los pedidos no son facturas. Cualquier módulo futuro de caja debe confirmar con el negocio/asesor competente el régimen, precios, documentos e impuestos vigentes antes de especificar o calcular cobros.
 
 **Por definir:**
 
 - Apertura y cierre de caja, responsables, medios de pago, pagos mixtos, anulación y conciliación.
 - Aplicación y vigencia de la tasa de cambio, redondeo, moneda de presentación y conservación de la tasa utilizada en cada factura.
-- Momento y base de cálculo de IVA y propina voluntaria, documentos, correcciones y reportes, de acuerdo con requisitos legales y comerciales vigentes confirmados con el negocio.
+- Si corresponde algún impuesto o propina, su momento/base de cálculo, documentos, correcciones y reportes, de acuerdo con requisitos legales y comerciales vigentes confirmados con el negocio; no asumir que aplica el IVA general del 15 %.
 - Cómo se relaciona el pago con el pedido, la cuenta de grupo y la liberación explícita de mesas; pruebas con importes, concurrencia y fallos.
 
 No asumir aprobación fiscal o contable solo por existir reglas de dominio preliminares.

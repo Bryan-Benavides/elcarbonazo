@@ -112,8 +112,8 @@ static async Task PreparePendingOrdersAsync(HttpClient client, TemporaryPostgres
     var idGrupo = grupo.RootElement.GetProperty("idGrupo").GetInt32();
     await using var context = database.CreateContext();
     context.Pedidos.AddRange(
-        new Pedido { IdMesa = idMesa1, IdUsuario = 1, FechaHora = DateTimeOffset.UtcNow, Subtotal = 100, Impuestos = 15, Total = 115, Estado = PedidoStates.Abierto },
-        new Pedido { IdGrupo = idGrupo, IdUsuario = 1, FechaHora = DateTimeOffset.UtcNow, Subtotal = 100, Impuestos = 15, Total = 115, Estado = PedidoStates.Abierto });
+        new Pedido { IdMesa = idMesa1, IdUsuario = 1, FechaHora = DateTimeOffset.UtcNow, Subtotal = 100, Impuestos = 0, Total = 100, Estado = PedidoStates.Abierto },
+        new Pedido { IdGrupo = idGrupo, IdUsuario = 1, FechaHora = DateTimeOffset.UtcNow, Subtotal = 100, Impuestos = 0, Total = 100, Estado = PedidoStates.Abierto });
     await context.SaveChangesAsync(token);
     using var logout = await client.PostAsync("api/auth/logout", null, token);
     logout.EnsureSuccessStatusCode();

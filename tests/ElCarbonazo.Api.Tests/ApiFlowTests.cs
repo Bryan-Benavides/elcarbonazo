@@ -142,8 +142,8 @@ public sealed class ApiFlowTests : IAsyncLifetime
                 IdUsuario = 1,
                 FechaHora = DateTimeOffset.UtcNow,
                 Subtotal = 100m,
-                Impuestos = 15m,
-                Total = 115m,
+                Impuestos = 0m,
+                Total = 100m,
                 Estado = PedidoStates.Abierto
             });
             await context.SaveChangesAsync();
@@ -204,8 +204,8 @@ public sealed class ApiFlowTests : IAsyncLifetime
                 IdUsuario = 1,
                 FechaHora = DateTimeOffset.UtcNow,
                 Subtotal = 100m,
-                Impuestos = 15m,
-                Total = 115m,
+                Impuestos = 0m,
+                Total = 100m,
                 Estado = PedidoStates.Listo
             });
             await context.SaveChangesAsync();
