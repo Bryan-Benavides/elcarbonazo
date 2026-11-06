@@ -59,11 +59,11 @@ Las referencias autoritativas siguen siendo `docs/constitution.md`, `docs/domain
 
 **Base existente:** el dominio y parte de la persistencia permiten representar pedidos y comprobar cuentas pendientes para las reglas de mesas/grupos. Eso **no significa que exista un flujo completo de pedidos en Desktop o una API funcional de toma de pedidos**.
 
-**Preparación 003:** [`specs/003-pedidos-kds/`](../specs/003-pedidos-kds/) define una cuenta por destino, envíos separados, catálogo de demostración y cocina. Están acordados roles, estados/agregación, cuentas activas heredadas sin comandas en solo lectura y bloqueantes de nuevos envíos, y la regla de no añadir IVA por el régimen de cuota fija informado por el usuario. La especificación también documenta propuestas técnicas detalladas para idempotencia, validación, HTTP, concurrencia, sondeo y migración; no están implementadas ni aprobadas tácitamente. Revisar `spec.md §10` antes de programar.
+**Módulo 003 en curso:** [`specs/003-pedidos-kds/`](../specs/003-pedidos-kds/) define cuenta por destino, envíos separados, catálogo de demostración y cocina. El usuario aprobó roles, estados/agregación, cuentas activas heredadas sin comandas, regla fiscal, límites, líneas repetidas independientes, idempotencia y contrato HTTP/sincronización. D1 (persistencia aditiva, privilegios mínimos y comando de catálogo ficticio aislado) está implementado y probado; la migración no se ha aplicado a una base persistente. D2 está en progreso: catálogo paginado implementado; cuentas/envío, Desktop y KDS siguen pendientes.
 
 **Por definir:**
 
-- Los flujos específicos de apertura, borrador local, envío idempotente y estados se detallan como propuestas en `specs/003-pedidos-kds/`; falta aprobación de contratos antes de implementar.
+- Los flujos específicos de apertura, borrador local, envío idempotente y estados están aprobados en `specs/003-pedidos-kds/`; su implementación y pruebas siguen pendientes.
 - Cancelación, edición de envíos, pagos y cierre permanecen fuera de 003 y requieren especificación posterior.
 - La implementación deberá respetar transacciones y locks del módulo 001; las propuestas de orden y las carreras se revisan antes de codificar y prueban en PostgreSQL temporal.
 - Ante resultado incierto no se reintenta automáticamente ni se usa un GET como prueba de terminación; el alcance y límite tras reinicio están documentados en 003.
@@ -72,7 +72,7 @@ Las referencias autoritativas siguen siendo `docs/constitution.md`, `docs/domain
 
 **Base existente:** el rol `Personal de Cocina` puede consultar mesas y no modificarlas. El módulo 001 no implementa una pantalla operativa de cocina.
 
-**Preparación 003:** se propone una cola de comandas; Cocina puede operar estados sin modificar mesas. La matriz acordada incluye Jefa/Supervisor en KDS y permite a Mesero/Caja consultar estados desde la cuenta. Rutas, errores, cursores y polling están detallados como propuestas revisables en `specs/003-pedidos-kds/plan.md`; aún no están implementados ni aprobados tácitamente.
+**Preparación 003:** se propone una cola de comandas; Cocina puede operar estados sin modificar mesas. La matriz acordada incluye Jefa/Supervisor en KDS y permite a Mesero/Caja consultar estados desde la cuenta. La línea base HTTP, errores, cursores y polling está aprobada y documentada en `specs/003-pedidos-kds/plan.md`; aún no está implementada.
 
 La especificación 003 define recepción, orden FIFO, estados, notas, roles y comunicación visible en salón. La implementación y validación del polling, volumen, accesibilidad y desconexión siguen pendientes; no se garantizan notificaciones instantáneas.
 

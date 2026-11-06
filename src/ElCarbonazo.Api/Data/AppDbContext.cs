@@ -13,6 +13,10 @@ public class AppDbContext : DbContext
     public DbSet<GrupoMesa> GruposMesa => Set<GrupoMesa>();
     public DbSet<GrupoMesaMiembro> GruposMesaMiembros => Set<GrupoMesaMiembro>();
     public DbSet<Pedido> Pedidos => Set<Pedido>();
+    public DbSet<Producto> Productos => Set<Producto>();
+    public DbSet<Comanda> Comandas => Set<Comanda>();
+    public DbSet<DetallePedido> DetallesPedido => Set<DetallePedido>();
+    public DbSet<EnvioPedido> EnviosPedido => Set<EnvioPedido>();
     public DbSet<SesionUsuario> SesionesUsuario => Set<SesionUsuario>();
     public DbSet<TokenRefreshSesion> TokensRefreshSesion => Set<TokenRefreshSesion>();
     public DbSet<EventoAuditoria> EventosAuditoria => Set<EventoAuditoria>();
@@ -264,6 +268,213 @@ public class AppDbContext : DbContext
             entity.HasOne(e => e.Usuario)
                 .WithMany(e => e.Pedidos)
                 .HasForeignKey(e => e.IdUsuario)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Producto>(entity =>
+        {
+            entity.ToTable("producto", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_producto_nombre",
+                    "char_length(nombre) BETWEEN 1 AND 120 AND nombre = normalize(nombre, NFC)");
+                table.HasCheckConstraint(
+                    "CK_producto_categoria",
+                    "categoria IN ('Comida', 'Bebida', 'Licor')");
+                table.HasCheckConstraint(
+                    "CK_producto_precio",
+                    "precio BETWEEN 0.01 AND 999999.99");
+                table.HasCheckConstraint("CK_producto_version", "version > 0");
+            });
+            entity.HasKey(producto => producto.IdProducto);
+            entity.Property(producto => producto.IdProducto)
+                .HasColumnName("id_producto")
+                .ValueGeneratedOnAdd();
+            entity.Property(producto => producto.Nombre)
+                .HasColumnName("nombre")
+                .HasMaxLength(120)
+                .IsRequired();
+            entity.Property(producto => producto.Categoria)
+                .HasColumnName("categoria")
+                .HasMaxLength(20)
+                .IsRequired();
+            entity.Property(producto => producto.Precio)
+                .HasColumnName("precio")
+                .HasPrecision(8, 2)
+                .IsRequired();
+            entity.Property(producto => producto.Disponible)
+                .HasColumnName("disponible")
+                .IsRequired();
+            entity.Property(producto => producto.Version)
+                .HasColumnName("version")
+                .HasDefaultValue(1)
+                .IsRequired();
+            entity.HasIndex(producto => new
+            {
+                producto.Disponible,
+                producto.Categoria,
+                producto.Nombre,
+                producto.IdProducto
+            })
+                .HasDatabaseName("IX_producto_disponible_categoria_nombre_id_producto");
+        });
+
+        modelBuilder.Entity<Comanda>(entity =>
+        {
+            entity.ToTable("comanda", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_comanda_estado",
+                    "estado IN ('Abierta', 'En Preparación', 'Lista')");
+            });
+            entity.HasKey(comanda => comanda.IdComanda);
+            entity.Property(comanda => comanda.IdComanda)
+                .HasColumnName("id_comanda")
+                .ValueGeneratedOnAdd();
+            entity.Property(comanda => comanda.IdPedido)
+                .HasColumnName("id_pedido")
+                .IsRequired();
+            entity.Property(comanda => comanda.IdUsuario)
+                .HasColumnName("id_usuario")
+                .IsRequired();
+            entity.Property(comanda => comanda.FechaHora)
+                .HasColumnName("fecha_hora")
+                .IsRequired();
+            entity.Property(comanda => comanda.Estado)
+                .HasColumnName("estado")
+                .HasMaxLength(20)
+                .IsRequired();
+            entity.Property(comanda => comanda.Version)
+                .IsRowVersion();
+            entity.HasIndex(comanda => new { comanda.Estado, comanda.FechaHora, comanda.IdComanda })
+                .HasDatabaseName("IX_comanda_estado_fecha_hora_id_comanda");
+            entity.HasIndex(comanda => new { comanda.IdPedido, comanda.IdComanda })
+                .HasDatabaseName("IX_comanda_id_pedido_id_comanda");
+            entity.HasOne(comanda => comanda.Pedido)
+                .WithMany(pedido => pedido.Comandas)
+                .HasForeignKey(comanda => comanda.IdPedido)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(comanda => comanda.Usuario)
+                .WithMany()
+                .HasForeignKey(comanda => comanda.IdUsuario)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<DetallePedido>(entity =>
+        {
+            entity.ToTable("detalle_pedido", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_detalle_pedido_nombre_producto",
+                    "char_length(nombre_producto) BETWEEN 1 AND 120 AND nombre_producto = normalize(nombre_producto, NFC)");
+                table.HasCheckConstraint(
+                    "CK_detalle_pedido_cantidad",
+                    "cantidad BETWEEN 1 AND 99");
+                table.HasCheckConstraint(
+                    "CK_detalle_pedido_precio_unitario",
+                    "precio_unitario BETWEEN 0.01 AND 999999.99");
+                table.HasCheckConstraint(
+                    "CK_detalle_pedido_subtotal",
+                    "subtotal >= 0 AND subtotal = cantidad * precio_unitario");
+                table.HasCheckConstraint(
+                    "CK_detalle_pedido_notas",
+                    "char_length(notas) <= 150 AND notas = normalize(notas, NFC)");
+            });
+            entity.HasKey(detalle => detalle.IdDetalle);
+            entity.Property(detalle => detalle.IdDetalle)
+                .HasColumnName("id_detalle")
+                .ValueGeneratedOnAdd();
+            entity.Property(detalle => detalle.IdComanda)
+                .HasColumnName("id_comanda")
+                .IsRequired();
+            entity.Property(detalle => detalle.IdProducto)
+                .HasColumnName("id_producto")
+                .IsRequired();
+            entity.Property(detalle => detalle.NombreProducto)
+                .HasColumnName("nombre_producto")
+                .HasMaxLength(120)
+                .IsRequired();
+            entity.Property(detalle => detalle.Cantidad)
+                .HasColumnName("cantidad")
+                .IsRequired();
+            entity.Property(detalle => detalle.PrecioUnitario)
+                .HasColumnName("precio_unitario")
+                .HasPrecision(8, 2)
+                .IsRequired();
+            entity.Property(detalle => detalle.Subtotal)
+                .HasColumnName("subtotal")
+                .HasPrecision(12, 2)
+                .IsRequired();
+            entity.Property(detalle => detalle.Notas)
+                .HasColumnName("notas")
+                .HasMaxLength(150)
+                .HasDefaultValue(string.Empty)
+                .IsRequired();
+            entity.HasIndex(detalle => new { detalle.IdComanda, detalle.IdDetalle })
+                .HasDatabaseName("IX_detalle_pedido_id_comanda_id_detalle");
+            entity.HasOne(detalle => detalle.Comanda)
+                .WithMany(comanda => comanda.Detalles)
+                .HasForeignKey(detalle => detalle.IdComanda)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(detalle => detalle.Producto)
+                .WithMany(producto => producto.DetallesPedido)
+                .HasForeignKey(detalle => detalle.IdProducto)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<EnvioPedido>(entity =>
+        {
+            entity.ToTable("envio_pedido", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_envio_pedido_hash_solicitud",
+                    "hash_solicitud ~ '^[0-9a-f]{64}$'");
+                table.HasCheckConstraint(
+                    "CK_envio_pedido_status_code",
+                    "status_code = 201");
+                table.HasCheckConstraint(
+                    "CK_envio_pedido_response_json",
+                    "jsonb_typeof(response_json) = 'object'");
+            });
+            entity.HasKey(envio => envio.EnvioId);
+            entity.Property(envio => envio.EnvioId)
+                .HasColumnName("envio_id")
+                .ValueGeneratedNever();
+            entity.Property(envio => envio.IdUsuario)
+                .HasColumnName("id_usuario")
+                .IsRequired();
+            entity.Property(envio => envio.HashSolicitud)
+                .HasColumnName("hash_solicitud")
+                .HasColumnType("character(64)")
+                .HasMaxLength(64)
+                .IsRequired();
+            entity.Property(envio => envio.IdComanda)
+                .HasColumnName("id_comanda")
+                .IsRequired();
+            entity.Property(envio => envio.StatusCode)
+                .HasColumnName("status_code")
+                .IsRequired();
+            entity.Property(envio => envio.Location)
+                .HasColumnName("location")
+                .HasMaxLength(200)
+                .IsRequired();
+            entity.Property(envio => envio.ResponseJson)
+                .HasColumnName("response_json")
+                .HasColumnType("jsonb")
+                .IsRequired();
+            entity.Property(envio => envio.FechaHora)
+                .HasColumnName("fecha_hora")
+                .IsRequired();
+            entity.HasIndex(envio => envio.IdComanda)
+                .IsUnique()
+                .HasDatabaseName("IX_envio_pedido_id_comanda");
+            entity.HasOne(envio => envio.Usuario)
+                .WithMany()
+                .HasForeignKey(envio => envio.IdUsuario)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(envio => envio.Comanda)
+                .WithOne(comanda => comanda.Envio)
+                .HasForeignKey<EnvioPedido>(envio => envio.IdComanda)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

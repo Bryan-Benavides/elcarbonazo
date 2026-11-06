@@ -1,6 +1,6 @@
 # Tareas — 003 Pedidos y monitor KDS
 
-**Estado:** preparación documental; ninguna tarea de implementación está completa. Las decisiones funcionales indicadas como aprobadas están acordadas; las propuestas técnicas de `plan.md` requieren revisión explícita en `spec.md §10` antes de construir lo afectado. No aplicar migraciones ni modificar bases persistentes sin autorización expresa y destino confirmado. `002-operaciones-seguras` sigue pospuesto y separado.
+**Estado:** D0 y D1 completos; D2 en ejecución. El catálogo paginado está implementado; consulta de cuenta y envío siguen pendientes. Implementar conforme a `spec.md`/`plan.md`; cualquier cambio de alcance requiere actualizar y aprobar la especificación antes de codificarlo. No aplicar migraciones ni modificar bases persistentes sin autorización expresa y destino confirmado. `002-operaciones-seguras` sigue pospuesto y separado.
 
 ## D0 — Acuerdos y diseño
 
@@ -9,25 +9,29 @@
 - [x] Aprobar visibilidad del estado `Lista`: visible para todos los roles de salón autorizados a consultar cuentas, sin afirmar que el plato fue retirado ni añadir acuse de lectura.
 - [x] Aprobar cuentas activas heredadas sin comandas como solo lectura, visibles como cuenta anterior sin detalle y bloqueantes de nuevos envíos al destino; conservar filas/estado, no inventar líneas ni pagos y exigir resolución futura explícita/auditable.
 - [x] Decidir para el régimen de cuota fija informado: no añadir IVA 15 %, `impuestos = 0`, `total = subtotal`; no presentar pedidos como facturas.
-- [x] Documentar línea base técnica propuesta para `envioId` persistido, deduplicación transaccional y cobertura de carreras/resultado incierto; no reintentar escrituras automáticamente ni tomar GET como confirmación.
-- [x] Documentar límites técnicos candidatos, validación Unicode, aritmética `impuestos=0`/`total=subtotal`, contratos HTTP/ProblemDetails, conflictos, cursor/paginación y criterios de aceptación en `plan.md`.
-- [x] Documentar orden de locks candidato, coordinación de sondeo, migración no destructiva, datos de demostración y recuperación limitada sin asumir implementación.
-- [ ] Revisar/aprobar o corregir las propuestas técnicas de `plan.md` y confirmar máximos comerciales de líneas/cantidad/precio; anotar acuerdos explícitos antes de D1/D2.
-- [ ] Revisar el orden de locks frente a servicios existentes y congelar decisiones de auditoría, avisos y respuesta ante resultado incierto. Una revisión documental no prueba concurrencia.
+- [x] Documentar y aprobar `envioId` persistido, deduplicación transaccional y cobertura de carreras/resultado incierto; no reintentar escrituras automáticamente ni tomar GET como confirmación.
+- [x] Documentar y aprobar límites iniciales, validación Unicode, aritmética `impuestos=0`/`total=subtotal`, contratos HTTP/ProblemDetails, conflictos, cursor/paginación y criterios de aceptación en `plan.md`.
+- [x] Documentar y aprobar orden de locks candidato, coordinación de sondeo, migración no destructiva, datos de demostración y recuperación limitada sin asumir implementación.
+- [x] Revisar y aprobar la línea base técnica de `plan.md`, incluidos máximos, líneas repetidas, idempotencia, HTTP, polling y paginación.
+- [x] Revisar el orden de locks frente a `GruposMesaService`; cerrar reglas de auditoría, aviso persistente y resultado incierto. La revisión documental no sustituye las pruebas de concurrencia de D1/D2.
 
 ## D1 — Persistencia y migraciones
 
-- [ ] Diseñar entidades, FK restrictivas, CHECK, precisión, índices, versiones y compatibilidad con `pedido` existente.
-- [ ] Diseñar persistencia de idempotencia y hash semántico; respuesta durable en la misma transacción que cuenta/comanda/detalle/auditoría, con índice único y retención sin caducidad en 003.
-- [ ] Implementar migración nueva sin alterar migraciones históricas; establecer precondiciones y tratamiento explícito para datos heredados.
-- [ ] Probar aplicación limpia, actualización desde 001 con datos válidos/legados, detección de incompatibilidades y ausencia de pérdidas, solo en PostgreSQL temporal.
-- [ ] Preparar catálogo de demostración mediante mecanismo explícito y aislado, sin sobrescribir ni sembrar producción automáticamente.
+- [x] Diseñar entidades, FK restrictivas, CHECK, precisión, índices, versiones y compatibilidad con `pedido` existente.
+- [x] Diseñar persistencia de idempotencia y hash semántico; respuesta durable en la misma transacción que cuenta/comanda/detalle/auditoría, con índice único y retención sin caducidad en 003.
+- [x] Diseñar `producto.version` monotónica; mapear `Mesa.Version` y `Comanda.Version` a tokens opacos `xmin` y validar igualdad, nunca ordenarlos.
+- [x] Implementar migración nueva sin alterar migraciones históricas; abortar de forma atómica ante colisión incompatible y preservar legados.
+- [x] Probar aplicación limpia, actualización desde 001 con cuenta activa legada sin comandas, detección de tabla incompatible y ausencia de pérdidas, solo en PostgreSQL temporal.
+- [x] Probar `deploy/runtime-grants.sql` con roles temporales y verificar privilegios mínimos de tablas/secuencias y ausencia de permisos de escritura indebidos.
+- [x] Preparar catálogo de demostración con comando explícito, idempotente y transaccional, restringido a Development y bases `elcarbonazo_demo_*`/`elcarbonazo_test_*`; probar que no sobrescribe un catálogo distinto.
 
 ## D2 — API de catálogo y cuentas
 
-- [ ] Implementar contratos validados de catálogo, consulta de cuenta y envío; validar autorización, destino XOR y reglas de grupo/mesa.
+- [x] Implementar `GET /api/productos` con autorización de salón, filtro de disponibilidad, cursor opaco ligado al filtro y páginas de 1–100 (25 por defecto).
+- [ ] Implementar contratos validados de consulta de cuenta y envío; validar autorización, destino XOR y reglas de grupo/mesa.
 - [ ] Congelar nombres/precios de demostración y calcular importes en API; pruebas de límites, cambio de precio/disponibilidad, aritmética exacta (sin impuesto), rechazo completo y auditoría.
 - [ ] Confirmar primer envío y ocupación en transacción; envíos posteriores crean comanda adicional en la misma cuenta. Comprobar unicidad y respuesta/versiones.
+- [ ] Probar idempotencia en repetición secuencial/concurrente, mismo ID con contenido distinto, timeout tras commit, rollback/fallo de auditoría y reinicio de API; comprobar resultado original y ausencia de duplicados.
 - [ ] Probar carreras independientes abrir/abrir, enviar/liberar y enviar/cerrar grupo; verificar auditoría atómica y que 001 conserva comportamiento.
 
 ## D3 — API de cocina

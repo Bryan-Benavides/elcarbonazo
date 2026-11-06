@@ -15,4 +15,5 @@ public sealed class Pedido
     public Mesa? Mesa { get; set; }
     public GrupoMesa? Grupo { get; set; }
     public Usuario Usuario { get; set; } = null!;
+    public ICollection<Comanda> Comandas { get; set; } = [];
 }

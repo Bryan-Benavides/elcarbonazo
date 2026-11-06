@@ -185,11 +185,13 @@ builder.Services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
 builder.Services.AddHostedService<PasswordHasherWarmupService>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 builder.Services.AddScoped<IAdminBootstrapService, AdminBootstrapService>();
+builder.Services.AddScoped<DemoCatalogSeeder>();
 builder.Services.AddScoped<IAuditRecorder, AuditRecorder>();
 builder.Services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IMesasService, MesasService>();
 builder.Services.AddScoped<IGruposMesaService, GruposMesaService>();
+builder.Services.AddScoped<IProductosService, ProductosService>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -291,6 +293,14 @@ if (args.Contains("--bootstrap-admin", StringComparer.Ordinal))
     await using var scope = app.Services.CreateAsyncScope();
     return await AdminBootstrapCommand.RunAsync(
         scope.ServiceProvider.GetRequiredService<IAdminBootstrapService>(),
+        CancellationToken.None);
+}
+
+if (args.Contains("--seed-demo-catalog", StringComparer.Ordinal))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    return await DemoCatalogCommand.RunAsync(
+        scope.ServiceProvider.GetRequiredService<DemoCatalogSeeder>(),
         CancellationToken.None);
 }
 

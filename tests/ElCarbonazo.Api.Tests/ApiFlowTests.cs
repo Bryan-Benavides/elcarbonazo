@@ -355,6 +355,71 @@ public sealed class ApiFlowTests : IAsyncLifetime
             eventType => eventType == "SesionRevocadaPorReusoRefresh");
     }
 
+    [Fact]
+    public async Task Product_catalog_is_authorized_filtered_and_cursor_paged()
+    {
+        var anonymous = await _client.GetAsync("/api/productos");
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+        await using (var context = _database.CreateContext())
+        {
+            context.Productos.AddRange(Enumerable.Range(1, 30).Select(index => new Producto
+            {
+                Nombre = $"Producto de prueba {index:D2}",
+                Categoria = index % 2 == 0 ? "Comida" : "Bebida",
+                Precio = index,
+                Disponible = true
+            }));
+            context.Productos.Add(new Producto
+            {
+                Nombre = "Producto no disponible",
+                Categoria = "Licor",
+                Precio = 50m,
+                Disponible = false
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var ownerToken = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        var firstResponse = await _client.GetAsync("/api/productos?limite=25");
+        firstResponse.EnsureSuccessStatusCode();
+        var first = await firstResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var firstItems = first.GetProperty("items").EnumerateArray().ToArray();
+        Assert.Equal(25, firstItems.Length);
+        Assert.All(firstItems, item => Assert.True(item.GetProperty("disponible").GetBoolean()));
+        Assert.All(firstItems, item => Assert.True(item.TryGetProperty("version", out _)));
+        var cursor = first.GetProperty("cursorSiguiente").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(cursor));
+
+        var secondResponse = await _client.GetAsync($"/api/productos?limite=25&cursor={Uri.EscapeDataString(cursor!)}");
+        secondResponse.EnsureSuccessStatusCode();
+        var second = await secondResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var secondItems = second.GetProperty("items").EnumerateArray().ToArray();
+        Assert.Equal(5, secondItems.Length);
+        Assert.Null(second.GetProperty("cursorSiguiente").GetString());
+        Assert.Empty(firstItems.Select(item => item.GetProperty("idProducto").GetInt32())
+            .Intersect(secondItems.Select(item => item.GetProperty("idProducto").GetInt32())));
+
+        var mismatchedCursor = await _client.GetAsync(
+            $"/api/productos?disponibles=false&cursor={Uri.EscapeDataString(cursor!)}");
+        Assert.Equal(HttpStatusCode.BadRequest, mismatchedCursor.StatusCode);
+        using (var problem = JsonDocument.Parse(await mismatchedCursor.Content.ReadAsStringAsync()))
+        {
+            Assert.Equal("VALIDATION_ERROR", problem.RootElement.GetProperty("code").GetString());
+        }
+
+        var invalidLimit = await _client.GetAsync("/api/productos?limite=101");
+        Assert.Equal(HttpStatusCode.BadRequest, invalidLimit.StatusCode);
+
+        _client.DefaultRequestHeaders.Authorization = null;
+        var kitchenToken = await LoginAsync("cocina", "kitchen password");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", kitchenToken);
+        var kitchenResponse = await _client.GetAsync("/api/productos");
+        Assert.Equal(HttpStatusCode.Forbidden, kitchenResponse.StatusCode);
+    }
+
     private async Task<string> LoginAsync(string name, string password)
     {
         var response = await _client.PostAsJsonAsync("/api/auth/login", new { nombre = name, contrasena = password });
@@ -495,7 +560,9 @@ internal sealed class TemporaryPostgresDatabase : IAsyncLifetime
     public string ConnectionString { get; private set; } = null!;
     public string LogDirectory { get; } = Path.Combine(Path.GetTempPath(), $"elcarbonazo-api-tests-{Guid.NewGuid():N}");
 
-    public async Task InitializeAsync()
+    public Task InitializeAsync() => InitializeAsync(null);
+
+    public async Task InitializeAsync(string? migrationTarget)
     {
         var adminConnectionString = Environment.GetEnvironmentVariable("ELCARBONAZO_TEST_ADMIN_CONNECTION");
         if (string.IsNullOrWhiteSpace(adminConnectionString))
@@ -530,7 +597,7 @@ internal sealed class TemporaryPostgresDatabase : IAsyncLifetime
 
         await using (var context = CreateContext())
         {
-            await context.Database.MigrateAsync();
+            await context.Database.MigrateAsync(migrationTarget);
             var passwordHasher = new BCryptPasswordHasher(Options.Create(new ElCarbonazo.Api.Configuration.PasswordHashingOptions
             {
                 WorkFactor = 10

@@ -1,6 +1,6 @@
 # Especificación 003 — Pedidos y monitor de cocina (KDS)
 
-**Estado: preparación documental; no implementado.** El usuario aprobó dirección general, alcance, matriz de roles, semántica de estados y política fiscal descritas aquí. El contrato técnico de idempotencia, límites y HTTP queda como línea base propuesta para revisión antes de codificar; las decisiones de negocio no confirmadas siguen pendientes en §10. No altera las garantías vigentes de 001 ni convierte el MVP universitario en un sistema apto para operación real.
+**Estado: D0 y D1 completos; D2 en ejecución.** El usuario aprobó alcance, roles, estados, política fiscal, límites iniciales, líneas repetidas separadas, protocolo idempotente y línea base HTTP/sincronización descritos aquí y en `plan.md`. Persistencia y catálogo demostrativo están implementados; `GET /api/productos` ya está disponible con autorización y paginación, mientras cuenta/envíos, Desktop y KDS siguen pendientes. La migración no se ha aplicado a una base persistente. Las decisiones fuera de alcance requieren especificaciones posteriores. No altera las garantías vigentes de 001 ni convierte el MVP universitario en un sistema apto para operación real.
 
 ## 1. Objetivo y contexto
 
@@ -29,8 +29,8 @@ Digitalizar la toma de consumos para una mesa individual o una cuenta compartida
 
 ### RF-01. Catálogo y borrador
 1. Una consulta autorizada devuelve solo productos habilitados para seleccionar; la API vuelve a comprobar disponibilidad al confirmar. Categoría, precio y nombre provienen del servidor.
-2. El borrador permite añadir varias líneas, modificar cantidad o notas y retirarlas antes del envío. Cantidades enteras positivas y notas máximo 150 caracteres Unicode; límites operativos propuestos en `plan.md §2.4` requieren aprobación antes de implementación. Rechazar artículos ausentes o no disponibles en vez de sustituirlos silenciosamente.
-3. Si el precio cambia entre consulta y envío, la propuesta exige conflicto con información suficiente para que el usuario revise y confirme un nuevo borrador; no se factura un precio diferente sin informar. La forma exacta de versión de catálogo y la respuesta requieren aprobación técnica.
+2. El borrador permite añadir varias líneas, modificar cantidad o notas y retirarlas antes del envío. Cantidades enteras positivas y notas máximo 150 valores escalares Unicode tras NFC; los límites aprobados están en `plan.md §2.4`. Rechazar artículos ausentes o no disponibles en vez de sustituirlos silenciosamente.
+3. Si precio o disponibilidad cambia entre consulta y envío, devolver `409 CATALOGO_CAMBIADO` sin crear comanda; informar valores actuales para que la persona revise y cree una nueva intención con nuevo `envioId`. No aplicar un precio diferente silenciosamente. `producto.version` es monotónica y las líneas repetidas del mismo producto se preservan separadas.
 
 ### RF-02. Cuenta y envío
 1. Una cuenta tiene exactamente uno de `id_mesa` o `id_grupo`; como máximo una cuenta activa por destino. Las cuentas de grupo son compartidas y no se duplican por cada mesa miembro.
@@ -99,22 +99,22 @@ La tabla `pedido` puede contener registros adoptados o usados para verificar cue
 
 Inventario/recetas, autorización administrativa y anulación enviada, caja/pago/facturación, gestión de catálogo, recuperación definitiva y despliegue real tendrán especificaciones o ampliaciones propias. Sus nombres y números todavía no están asignados; `004` y `005` mencionados en material inicial no se reservan automáticamente.
 
-## 10. Decisiones a aprobar antes de implementar
+## 10. Decisiones cerradas para iniciar implementación
 
 - Matriz de roles y alcance de cuentas/comandas: **aprobada** según RF-05. Las consultas de salón abarcan todas las mesas; el estado `Lista` aparece en la cuenta para los roles de salón autorizados y no afirma retiro físico del plato.
 - Semántica de estados de cuenta y comandas: **aprobada** según RF-03/RF-04; los valores y agregación son reglas acordadas para esta especificación, no cambios ya implementados en base/API.
 - Visibilidad del estado listo: **aprobada** para todos los roles de salón con acceso a cuentas, no solo para quien envió la comanda. No hay todavía acción de “retirado” ni acuse de lectura.
 - Política para pedidos activos heredados sin comandas: **aprobada**. Se conservan intactos, se exponen como cuenta anterior de solo lectura y bloquean nuevos envíos al destino hasta resolución explícita futura. La migración debe probarlo con PostgreSQL temporal; ante una incompatibilidad estructural que impida preservar reglas, aborta sin pérdida de datos.
-- Aprobación de la línea base técnica de `plan.md`: `envioId` idempotente persistido, límites propuestos, contrato HTTP/códigos y paginación/polling. Cualquier cambio de cifras o rutas antes de implementar debe reflejarse aquí.
-- Límite comercial de cantidad por línea y cantidad de productos por comanda: validar propuesta con el usuario antes de congelar; no inferir que el valor técnico propuesto representa una regla del negocio.
-- Versión de catálogo/cuenta y detalle final de conflictos. Acordar el manejo de nombres/duplicados de líneas y ejemplos de máximos antes de D1/D2.
-- Definir si un envío admite líneas repetidas del mismo producto cuando difieren notas; no agregarlas ni separarlas silenciosamente.
+- Línea base técnica de `plan.md`: **aprobada** por el usuario para iniciar D1. Cambios posteriores de rutas, códigos o parámetros requieren actualizar esta especificación y sus pruebas.
+- Límites iniciales: **aprobados**: máximo 50 líneas por envío, 1–99 unidades por línea, precio unitario C$0.01–C$999,999.99, body hasta 64 KiB y notas máximo 150 valores escalares Unicode tras NFC.
+- Versiones: **aprobado** el token opaco `xmin` para Mesa y Comanda; producto tendrá una versión monotónica explícita. Grupo activo y pedido se validan/bloquean transaccionalmente; no se inventa `versionCuenta`/`versionGrupo`.
+- Líneas repetidas: **aprobado** preservar cada línea del borrador como detalle independiente, incluso para el mismo producto; no combinar ni eliminar automáticamente.
 - Cálculo fiscal 003: **decidido para el régimen informado por el usuario**. No aplicar ni mostrar IVA 15 %; el total de pedido coincide con el subtotal. Si el régimen cambia, revisar la regla con el negocio/asesor competente y especificar el cambio antes de implementarlo. Los pedidos no son facturas.
-- Revisión del protocolo de sondeo/frescura y paginación propuestos en `plan.md`; el aviso de lista es visible mientras la cuenta permanece abierta y no constituye entrega garantizada ni acuse.
+- Protocolo HTTP/sincronización de `plan.md`: **aprobado** como línea base, incluidas las rutas documentadas, errores compatibles con 001, polling 2 s con backoff y páginas de 25 (máximo 100). Indicador de lista persistente en cuenta abierta, sin push/sonido, acuse ni promesa de entrega instantánea.
 - Riesgo universitario aceptado de escrituras inciertas, bloqueo y revisión humana, con la limitación de reinicio explícita. La clave persistida propuesta puede reproducir una respuesta si el cliente conserva la misma intención; recuperar la intención tras perder el estado local, resolverla entre terminales y operar con garantías reales requieren diseño aparte.
 
-### Línea base técnica preparada para revisión (no implica aprobación)
+### Línea base técnica aprobada para D1 (no implementada)
 
-`plan.md` documenta una recomendación completa para idempotencia persistida (`envioId`), contratos HTTP/ProblemDetails, límites técnicos candidatos, validación Unicode, concurrencia/locks, polling/paginación y migración no destructiva. Son propuestas técnicas que se pueden corregir en conjunto o por punto; no son requisitos comerciales confirmados ni están implementadas. Antes de D1/D2, registrar en tareas la aprobación explícita o los cambios acordados. En particular, confirmar máximos de líneas/cantidad/precio con el negocio. La política de no reintentar automáticamente y de no inferir éxito desde un GET permanece obligatoria aunque se apruebe la clave idempotente.
+El usuario revisó y aprobó en esta conversación la recomendación de `plan.md` para idempotencia persistida (`envioId`), límites, contratos HTTP/ProblemDetails, concurrencia/locks, sondeo y paginación. Se conserva como línea base del módulo, no como código ya existente. La política de no reintentar automáticamente y de no inferir éxito desde un GET permanece obligatoria. Las tareas de implementación y sus pruebas siguen pendientes.
 
 La aprobación de contratos no autoriza aplicar migraciones a bases persistentes ni implementar elementos fuera de alcance. La preparación documental no equivale a aceptación visual, pruebas de migración ni validación para operación real.
