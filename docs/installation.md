@@ -39,6 +39,8 @@ Los logs técnicos se escriben en JSON a consola y a `%ProgramData%\ElCarbonazo\
 
 Después de aplicar las migraciones, el arranque de la API en `Development` crea o reutiliza la fila heredada neutralizada como `admin/admin123`. Este seeder no se ejecuta en otros entornos y no reemplaza usuarios existentes.
 
+Para ejecutar pedidos 003 en una base local, la API también debe tener aplicado el esquema 003. El arranque no aplica migraciones automáticamente. Ejecutar `dotnet ef database update` desde `src/ElCarbonazo.Api` solo después de confirmar configuración y destino exacto; respaldar primero bases con datos que deban conservarse. La tabla `producto` es parte de esa migración: si falta, el catálogo no puede consultarse. El catálogo ficticio se carga por separado mediante `--seed-demo-catalog`, solo en Development, con `DemoCatalog:Enabled=true` y base llamada `elcarbonazo_demo_*` o `elcarbonazo_test_*`. No habilitar el seed ni ejecutar migraciones sobre una base persistente sin autorización y destino confirmado.
+
 ## Provisión prevista para operaciones recuperables
 
 **Pendiente de implementación y verificación:** al desplegar el módulo 002, el instalador deberá crear el diario inicial `recovery\journal.json` bajo `%ProgramData%\ElCarbonazo`, con estado `SinPendientes` e identificador de instalación coincidente. En actualización no sobrescribirá un diario existente. Si falta o está corrupto, no se debe crear uno vacío para desbloquear la terminal; se requiere recuperación administrativa segura. Las ACL y el reemplazo atómico se verificarán con las cuentas Windows de operación. El procedimiento detallado y los permisos de las nuevas tablas se publicarán junto con la implementación, no se consideran disponibles todavía.

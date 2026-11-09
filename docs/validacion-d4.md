@@ -4,7 +4,7 @@
 
 **D4 aceptada por el usuario para el alcance Desktop de salón, no para operación real.** El usuario confirmó que verificó satisfactoriamente los puntos 1, 2, 3, 5, 6 y 7 del checklist: conexión/catálogo, borrador, confirmación/envío, cuenta heredada de solo lectura, botón deshabilitado e interacción/layout. La captura posterior muestra catálogo cargado, cuenta 3 abierta, dos comandas abiertas y total C$ 490.00. Verifica la representación de cuenta y comandas, pero no muestra una comanda `Lista`.
 
-El checklist inicial pedía comprobar la transición a `Lista` desde Cocina. Se corrigió esa instrucción: la vista Desktop de Cocina corresponde a D5 y aún no está implementada. No era un paso ejecutable en D4. D3 sí implementa la API de Cocina y el smoke automatizado recorrió una transición a `Lista`, pero eso no equivale a revisión visual Desktop. La comprobación visual del aviso `Lista` en salón queda para la integración D5/D6.
+El checklist inicial pedía comprobar la transición a `Lista` desde Cocina. Se corrigió esa instrucción: la vista Desktop de Cocina correspondía a D5 y no estaba disponible al cerrar D4, por lo que no era un paso ejecutable entonces. D5 se implementó después, y el usuario confirmó el recorrido integrado; la evidencia de D5 consta en `docs/validacion-d5.md`. D3 también implementa la API y el smoke recorrió la transición, pero esa evidencia automatizada no sustituye la visual.
 
 Se ajustó el diagnóstico para distinguir problemas de autorización, ruta/destino, servidor o datos inválidos, sin revelar excepciones ni credenciales. El usuario confirmó también la apariencia/funcionalidad del botón deshabilitado y la interacción/layout en su ejecución.
 
@@ -26,6 +26,6 @@ El anfitrión muestra su URL HTTP loopback, las variables de Development y crede
 
 ## Pendiente fuera de D4: D5/D6
 
-- [ ] En D5/D6, operar una comanda desde KDS Desktop hasta `Lista` y comprobar en salón el estado agregado/aviso. No afirmar observación visual antes de ejecutar esta integración.
-- [ ] En D5, validar KDS con teclado/táctil, foco, FIFO, notas, estados vacíos, reconexión y concurrencia según su especificación.
+- [x] En D5, el usuario confirmó operar una comanda desde KDS Desktop hasta `Lista` y comprobar en salón el estado/aviso. Ver `docs/validacion-d5.md`.
+- [x] En D5, el usuario confirmó revisión KDS de teclado/táctil, foco, FIFO, notas, estados vacíos, reconexión y concurrencia según su checklist; la última evidencia del botón de navegación queda en D6.
 - [x] D4 de salón aceptada por confirmación del usuario para los puntos 1, 2, 3, 5, 6 y 7; la captura verifica cuenta con comandas abiertas. No incluye UI KDS ni aceptación para operación real.

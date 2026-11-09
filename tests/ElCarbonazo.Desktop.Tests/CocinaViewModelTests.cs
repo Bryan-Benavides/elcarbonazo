@@ -91,9 +91,14 @@ public sealed class CocinaViewModelTests
         var api = new FakeApi();
         var session = new FakeSession();
         using var vm = new CocinaViewModel(session, api, () => { }, Dispatch);
+        using var initialTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (!vm.Conectado) await Task.Delay(25, initialTimeout.Token);
         var ticket = Assert.Single(vm.Comandas);
         session.ChangeState(SessionLifecycleState.Paused);
         Assert.False(vm.PuedeOperar);
+        var readsWhilePaused = api.Reads;
+        await Task.Delay(2200);
+        Assert.Equal(readsWhilePaused, api.Reads);
         await vm.AvanzarCommand.ExecuteAsync(ticket);
         Assert.Equal(0, api.Writes);
         session.ChangeState(SessionLifecycleState.Active);
@@ -131,8 +136,10 @@ public sealed class CocinaViewModelTests
         public bool Empty { get; init; }
         public bool ReadFailure { get; init; }
         public int Writes { get; private set; }
+        public int Reads { get; private set; }
         public Task<CocinaPaginaDto> ConsultarAsync(string? cursor = null, CancellationToken cancellationToken = default)
         {
+            Reads++;
             if (ReadFailure) throw new HttpRequestException();
             return Task.FromResult(new CocinaPaginaDto(Empty ? [] : [Ticket()], null));
         }

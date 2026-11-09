@@ -105,6 +105,21 @@ Copiar este formato y completar solo lo que se haya verificado:
 - **Prevención:** antes de pedir pruebas manuales, contrastar cada paso con `specs/003-pedidos-kds/tasks.md` y comprobar que exista una ruta/UI implementada para el rol y acción. Distinguir estado implementado en API, estado disponible en Desktop y escenario de integración futuro. No presentar una vista planificada como disponible.
 - **Evidencia:** confirmación del usuario de que los puntos 1, 2, 3, 5, 6 y 7 de la lista D4 funcionan; captura de mesa 04 con dos comandas `Abierta`; `tasks.md` D5 deja KDS Desktop pendiente. La transición `Lista` está cubierta por smoke de API/REST, no observada en UI.
 
+### ERR-020 — Polling de KDS seguía consultando durante la pausa de sesión
+- **Estado:** corregido y cubierto por prueba automatizada.
+- **Contexto y causa confirmada por revisión:** el ViewModel publicaba el estado de sesión pausada, pero el ciclo de polling seguía intentando solicitudes, que fallaban en el transporte en vez de esperar la reanudación.
+- **Corrección:** Cocina ahora suspende el polling en estado `Paused`, lo reanuda al recibir transición a sesión activa y detiene su ciclo al cerrar/terminar sesión.
+- **Prevención:** probar tanto que una mutación se bloquea en pausa como que no se emiten nuevas lecturas hasta reanudación; una etiqueta visual de pausa no demuestra que el trabajo de fondo esté suspendido.
+- **Evidencia:** `CocinaViewModel.cs` y `Paused_session_blocks_mutation_and_recovers_only_after_read` en `CocinaViewModelTests.cs`.
+
+### ERR-021 — API de pedidos apuntaba a una base sin esquema 003
+- **Estado:** causa confirmada; migración pendiente de autorización y destino exacto.
+- **Contexto:** el mapa responde por HTTPS como usuario `admin`/rol mostrado `Jefa`, pero Pedidos de salón no carga catálogo/cuenta. El log de API identifica `Npgsql.PostgresException 42P01`, relación `producto` inexistente, desde `ProductosService.GetPageAsync`.
+- **Causa confirmada:** el proceso API está conectado a una base cuyo esquema no contiene la tabla creada por la migración D1 de 003. La API no aplica migraciones al arrancar por diseño. HTTPS y el rol no crean el esquema. No se ha determinado el nombre de la base ni si contiene datos que deban preservarse.
+- **Corrección:** todavía no se aplicó ninguna migración ni se cargó catálogo. Primero confirmar nombre exacto de base, entorno y que sea destino autorizado. Después respaldar si contiene datos valiosos, aplicar `dotnet ef database update` con la configuración de esa API, y preparar catálogo ficticio solo mediante el comando protegido en Development y bases con prefijo permitido `elcarbonazo_demo_*` o `elcarbonazo_test_*`. No ejecutar seed en bases ajenas/no elegibles.
+- **Prevención:** probar conexión API contra esquema vigente antes de declarar catálogo operativo; no añadir migración automática en startup. Verificar entorno/base efectivos, migrar con rol autorizado y realizar seed explícito e idempotente únicamente en destino aislado permitido.
+- **Evidencia:** log aportado por el usuario (SQLSTATE 42P01, tabla `producto` ausente); capturas de mapa conectado y vista de pedidos sin catálogo. No imprimir ni registrar la cadena de conexión.
+
 ### ERR-004 — Carrera cuando refresh termina inmediatamente
 - **Estado:** corregido y cubierto por regresión automatizada.
 - **Contexto y síntoma:** una prueba de refresh rechazado produjo `NullReferenceException` en vez de informar sesión expirada.

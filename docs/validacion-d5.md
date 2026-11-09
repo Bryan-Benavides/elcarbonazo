@@ -14,7 +14,7 @@ El 9 de noviembre de 2026 pasaron formato de solución y AcceptanceHost, compila
 
 ## Revisión realizada por el usuario
 
-El usuario informa que revisó los puntos de conexión/navegación, cola y detalle, transiciones, desaparición de cola y persistencia en la cuenta, además de los restantes controles y estados descritos arriba; confirma que funcionaron. En particular, una comanda marcada lista deja la cola y aparece como lista desde el pedido de mesa. El usuario pidió que el botón Cocina adopte el estilo del elemento Mesas activo en la barra lateral; el cambio acaba de incorporarse y queda pendiente de comprobar visualmente en la compilación actual.
+El usuario informa que revisó los puntos de conexión/navegación, cola y detalle, transiciones, desaparición de cola y persistencia en la cuenta, además de los restantes controles y estados descritos arriba; confirma que funcionaron. En particular, una comanda marcada lista deja la cola y aparece como lista desde el pedido de mesa. El usuario pidió que el botón Cocina adopte el estilo del elemento Mesas activo en la barra lateral; el cambio se incorporó después de esa revisión. Su apariencia final se solicita confirmar durante D6.
 
 ## Alcance que sigue pendiente para D6/operación
 

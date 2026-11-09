@@ -59,9 +59,9 @@ Las referencias autoritativas siguen siendo `docs/constitution.md`, `docs/domain
 
 **Base existente:** el dominio y la API 003 permiten consultar catálogo/cuentas y registrar envíos idempotentes, además de comprobar cuentas pendientes para las reglas de mesas/grupos. Eso **no significa que exista un flujo completo de pedidos en Desktop ni un sistema listo para operación real**.
 
-**Módulo 003 en curso:** [`specs/003-pedidos-kds/`](../specs/003-pedidos-kds/) define cuenta por destino, envíos separados, catálogo de demostración y cocina. D1 y API de D2/D3 están implementados con pruebas automatizadas; la migración no se ha aplicado a una base persistente. D4 de salón se aceptó localmente y D5 incluye una pantalla de cocina pendiente de revisión visual e integración. Hay casos Unicode compartidos de API y Desktop; la recuperación probada es controlada, no una aceptación de red física.
+**Módulo 003 terminado para el perfil local aislado/de demostración:** [`specs/003-pedidos-kds/`](../specs/003-pedidos-kds/) define cuenta por destino, envíos separados, catálogo de demostración y cocina. D4/D5/D6 fueron aceptadas por el usuario; migración/compatibilidad, suites y smoke se verificaron en PostgreSQL temporal. No se aplicó migración persistente. Una API HTTPS alternativa del usuario sigue apuntando a una base sin tabla `producto`; migrarla y preparar catálogo allí será necesario antes de utilizar Pedidos contra esa base, previa confirmación de destino. La recuperación probada es controlada, no aceptación de red física.
 
-La validación de D4 y sus límites se registran en [`docs/validacion-d4.md`](validacion-d4.md). El usuario confirmó la revisión visual y funcional del alcance de salón. La pantalla Desktop Cocina se implementó en D5, pero el aviso visual de una comanda `Lista` en salón aún requiere revisión integrada, aunque la transición ya se probó por API.
+La validación de D4/D5 y sus límites se registran en [`docs/validacion-d4.md`](validacion-d4.md) y [`docs/validacion-d5.md`](validacion-d5.md). La evidencia y secuencia D6 constan en [`docs/validacion-d6.md`](validacion-d6.md).
 
 **Por definir:**
 
@@ -74,7 +74,7 @@ La validación de D4 y sus límites se registran en [`docs/validacion-d4.md`](va
 
 **Base existente:** el rol `Personal de Cocina` puede consultar mesas y no modificarlas. El módulo 001 no implementa una pantalla operativa de cocina.
 
-**003 en curso:** la API de cola FIFO y transición de comandas está implementada y probada; Cocina opera estados sin modificar mesas. La matriz incluye Jefa/Supervisor en KDS y permite a Mesero/Caja consultar estados desde la cuenta. D5 incorpora pantalla Desktop y polling con pruebas automatizadas; el usuario aceptó su flujo e integración local con salón. Ver `docs/validacion-d5.md`; el ajuste final del acceso Cocina requiere confirmación visual y D6 sigue pendiente.
+**003 terminado:** el usuario aceptó el flujo de Cocina e integración local con salón. La API HTTPS alternativa sin esquema `producto` se registra como una base pendiente de provisión antes de usar Pedidos allí. Ver `docs/validacion-d5.md` y `docs/validacion-d6.md`.
 
 La especificación 003 define recepción, orden FIFO, estados, notas, roles y comunicación visible en salón. La implementación y validación del polling, volumen, accesibilidad y desconexión siguen pendientes; no se garantizan notificaciones instantáneas.
 

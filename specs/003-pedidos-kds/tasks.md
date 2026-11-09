@@ -1,6 +1,6 @@
 # Tareas — 003 Pedidos y monitor KDS
 
-**Estado:** D0, D1, D2/D3 API, D4 salón y D5 KDS aceptadas por el usuario para el perfil universitario local; pruebas automatizadas completadas. La nueva apariencia de navegación Cocina está pendiente de confirmación visual en la compilación actual; D6/operación real y red LAN física siguen pendientes. Pruebas controladas no sustituyen red física. No aplicar migraciones ni modificar bases persistentes sin autorización expresa y destino confirmado. `002-operaciones-seguras` sigue pospuesto y separado.
+**Estado:** Módulo 003 (D0–D6) oficialmente terminado y aceptado por el usuario para el entorno local aislado/de demostración de dos terminales. Suites, migración temporal, smoke y validación visual/funcional reportada completados. Una API HTTPS alternativa del usuario apunta a una base sin tabla `producto`; queda como requisito de provisión de ese entorno antes de usar Pedidos allí, no se modificó. Esto no es aceptación para operación real ni LAN física. `002-operaciones-seguras` sigue pospuesto y separado.
 
 ## D0 — Acuerdos y diseño
 
@@ -69,8 +69,8 @@
 
 ## D6 — Integración y aceptación
 
-- [ ] Ejecutar migraciones y pruebas API solo en bases de prueba aisladas, incluida la compatibilidad de 001 y pruebas de fallo/reinicio según alcance aprobado.
-- [ ] Ejecutar formato → build → pruebas API → pruebas Desktop → auditoría de paquetes. Si se usa o cambia AcceptanceHost, compilarlo/probarlo aparte de la solución.
-- [ ] Validar visualmente y con usuario: táctil, teclado, foco, contraste, tamaño mínimo/escalado, desconexión, selección, cola y alertas; registrar evidencia y pendientes.
-- [ ] Documentar demostración, datos ficticios, decisiones, limitación de pagos/inventario y ausencia de recuperación definitiva. Mantener fuera de producción hasta resolver los requisitos correspondientes.
-- [ ] Solicitar aceptación del usuario; no marcar completo por compilar ni por preparar esta documentación.
+- [x] Ejecutar migraciones y pruebas API solo en bases de prueba aisladas, incluida la compatibilidad de 001 y pruebas de fallo/reinicio según alcance aprobado. Ver `docs/validacion-d6.md`.
+- [x] Ejecutar formato → build → pruebas API → pruebas Desktop → auditoría de paquetes. AcceptanceHost compilado, formateado y probado aparte de la solución.
+- [x] Validación visual/funcional de D4/D5 informada por usuario, incluido flujo integrado Lista en salón y captura del acceso Cocina; registrar evidencia y límites.
+- [x] Documentar demostración, datos ficticios, decisiones, limitación de pagos/inventario y ausencia de recuperación definitiva; mantener fuera de producción.
+- [x] Usuario acepta oficialmente el módulo 003 para el entorno aislado/local de demostración. La base HTTPS alternativa sin esquema 003 queda anotada como configuración no migrada, no como aceptación de Pedidos contra esa base.

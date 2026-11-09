@@ -16,6 +16,7 @@ public partial class CocinaViewModel : ViewModelBase, IDisposable
     private readonly Func<Action, Task> _dispatch;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly SemaphoreSlim _operacion = new(1, 1);
+    private readonly SemaphoreSlim _reanudar = new(0, 1);
     private bool _disposed;
 
     [ObservableProperty] private string _estadoConexion = "Consultando cocina…";
@@ -117,12 +118,19 @@ public partial class CocinaViewModel : ViewModelBase, IDisposable
         {
             while (!token.IsCancellationRequested)
             {
+                if (_session.State == SessionLifecycleState.Paused)
+                {
+                    await _dispatch(() => { Conectado = false; EstadoConexion = "Sesión en pausa. Interactúe para continuar."; });
+                    await _reanudar.WaitAsync(token);
+                    continue;
+                }
+                if (_session.State is not (SessionLifecycleState.Active or SessionLifecycleState.Expiring)) return;
                 try
                 {
                     await _operacion.WaitAsync(token);
                     try
                     {
-                        if (!SesionActiva) { await _dispatch(() => { Conectado = false; EstadoConexion = "Sesión en pausa o finalizada."; }); }
+                        if (!SesionActiva) return;
                         else
                         {
                             var items = new List<CocinaComandaDto>();
@@ -169,11 +177,25 @@ public partial class CocinaViewModel : ViewModelBase, IDisposable
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
     }
 
-    private void AlCambiarSesion(object? sender, SessionStateChangedEventArgs e) => _ = _dispatch(() =>
+    private void AlCambiarSesion(object? sender, SessionStateChangedEventArgs e)
     {
-        if (!SesionActiva) { Conectado = false; EstadoConexion = "Sesión en pausa o finalizada."; }
-        ActualizarPermisos();
-    });
+        _ = _dispatch(() =>
+        {
+            if (!SesionActiva)
+            {
+                Conectado = false;
+                EstadoConexion = e.State == SessionLifecycleState.Paused
+                    ? "Sesión en pausa. Interactúe para continuar."
+                    : "Sesión finalizada.";
+            }
+            ActualizarPermisos();
+        });
+        if (e.PreviousState == SessionLifecycleState.Paused && SesionActiva && _reanudar.CurrentCount == 0)
+            try { _reanudar.Release(); } catch (SemaphoreFullException) { }
+        else if (e.State is SessionLifecycleState.SignedOut or SessionLifecycleState.Expired or
+                 SessionLifecycleState.SecurityBlocked or SessionLifecycleState.ShuttingDown)
+            _lifetime.Cancel();
+    }
 
     public void Dispose()
     {
