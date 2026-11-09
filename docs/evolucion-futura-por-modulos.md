@@ -96,14 +96,13 @@ En la primera entrega propuesta de 003, `disponible` describe solo el catálogo;
 
 **Reglas de referencia generales:** importes en NIO, posible operación bimonetaria NIO/USD y referencias preliminares a IVA 15 %/propina 10 % en el modelo de dominio. No son por sí solas una regla fiscal validada ni se aplican automáticamente al restaurante. **Para el negocio actual**, según información del usuario sobre su régimen de cuota fija, 003 no añade IVA y los pedidos no son facturas. Cualquier módulo futuro de caja debe confirmar con el negocio/asesor competente el régimen, precios, documentos e impuestos vigentes antes de especificar o calcular cobros.
 
-**Por definir:**
+**Módulo 004 planificado y aprobado para iniciar implementación:** [`specs/004-caja-cobros/`](../specs/004-caja-cobros/) contiene las reglas funcionales y la línea base técnica aprobadas para una caja compartida, cobro completo, turnos, recuperación durable y comprobante interno de demostración. La implementación aún no ha comenzado; no hay migración 004 aplicada.
 
-- Apertura y cierre de caja, responsables, medios de pago, pagos mixtos, anulación y conciliación.
-- Aplicación y vigencia de la tasa de cambio, redondeo, moneda de presentación y conservación de la tasa utilizada en cada factura.
-- Si corresponde algún impuesto o propina, su momento/base de cálculo, documentos, correcciones y reportes, de acuerdo con requisitos legales y comerciales vigentes confirmados con el negocio; no asumir que aplica el IVA general del 15 %.
-- Cómo se relaciona el pago con el pedido, la cuenta de grupo y la liberación explícita de mesas; pruebas con importes, concurrencia y fallos.
+Para el alcance de demostración se acordaron: roles Jefa/Encargado de Caja; efectivo, tarjeta o transferencia (un método por cuenta); tarjeta/transferencia con verificación humana externa y referencia; solo NIO, sin propina/FX/egresos; cierre con total contado y motivo de diferencia; cuentas listas y detalladas únicamente; comprobante DEMOSTRACIÓN no fiscal; sin anulación/edición; pago no libera destino; operaciones inciertas con recuperación durable, nunca reintento automático.
 
-No asumir aprobación fiscal o contable solo por existir reglas de dominio preliminares.
+**Cambio contractual pendiente respecto de 003:** se acordó que una cuenta de grupo pagada exige cerrar explícitamente el grupo antes de admitir una cuenta nueva. 003 actualmente permite añadir un envío a un grupo activo que conserva pedido `Pagado`; no se debe cambiar silenciosamente. La especificación 003 y sus pruebas cruzadas deberán actualizarse/aprobarse antes de implementar el gate.
+
+El alcance no es apto para operación real ni valida impuestos, documentos, conciliación bancaria o procedimientos de anulación. Antes de uso real deben confirmarse con el negocio/asesoría competente el régimen y documentos, además de procedimientos de corrección, privacidad, seguridad, respaldo/restauración, LAN física y aceptación operativa. No usar dinero real en la demostración ni presentar el comprobante interno como factura.
 
 ## 10. Reportes y auditoría
 

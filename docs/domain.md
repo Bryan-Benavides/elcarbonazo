@@ -98,6 +98,17 @@
 - Un pedido `Pagado` o `Cancelado` no se considera pendiente; los demás estados bloquean la liberación de la mesa o el cierre del grupo.
 - Los importes son no negativos y `total = subtotal + impuestos`; la propina voluntaria se calcula posteriormente en factura.
 
+## Caja y Cobros — Módulo 004 planificado
+
+- **Estado:** el usuario aprobó las reglas funcionales de `specs/004-caja-cobros/spec.md` para una demostración universitaria local aislada. `plan.md` y `tasks.md` son el diseño y backlog previos a implementación; no hay todavía caja, cobros, comprobantes ni migración 004 implementados. Esto no autoriza dinero real ni constituye validación fiscal.
+- Se propone una caja compartida con un solo turno abierto. Jefa y Encargado de Caja pueden abrir, registrar cobros y cerrar; abridor, cobrador y cerrador se registran separadamente. Logout no cierra turno; uno cerrado no se reabre ni modifica. Fondo inicial admite C$0.00 con confirmación.
+- Solo se cobra una cuenta completa con importe positivo y detalle verificable, cuando todas sus comandas están `Lista`. Las cuentas no elegibles, heredadas sin comandas, anómalas o de total cero se muestran bloqueadas con motivo. API revalida total/estado y usa historial de 003, no el catálogo actual.
+- Alcance demo: NIO, `impuestos = 0`, sin propina, FX ni egresos. Efectivo esperado al cierre = fondo inicial + efectivo neto recibido (recibido menos vuelto) de cobros confirmados. Tarjeta/transferencia requieren verificación humana externa y referencia; no hay integración bancaria ni datos completos de tarjeta.
+- El cobro no libera mesa ni cierra grupo. Mesa pagada se libera explícitamente. El grupo pagado se cierra explícitamente antes de crear una cuenta nueva: **esto cambia la regla de 003 que permite envío posterior al mismo grupo activo** y requiere cambio contractual y pruebas aprobadas antes de implementar; no altera cuentas históricas.
+- Cobro, `pedido=Pagado`, snapshot interno, auditoría y resultado durable deberán ser atómicos. Comprobante es demostrativo/no fiscal y no pide datos del cliente. No hay anulación, edición, reembolso ni corrección automática; no hay impresión/PDF.
+- Recuperación durable de apertura/cobro/cierre es requisito de diseño, no prueba de preparación para producción. No reintentar automáticamente escrituras inciertas ni interpretar GET como confirmación. Operaciones no terminales bloquean acciones conflictivas y cierre.
+- Antes de operación real se deben validar requisitos fiscales/documentales con el negocio y asesor competente, procedimientos de error/anulación, adquirentes/conciliación, seguridad, privacidad, backup/restauración, LAN física y aceptación del restaurante. Ver §7 de la especificación 004.
+
 ## Reglas de Sesión
 - El access token JWT dura 5 minutos e incluye `sub`, `rol` y `sid` (identificador de sesión).
 - El JWT se firma con HS256 y una clave aleatoria externa de al menos 32 bytes; la API no arranca con una clave ausente, corta o inválida.
