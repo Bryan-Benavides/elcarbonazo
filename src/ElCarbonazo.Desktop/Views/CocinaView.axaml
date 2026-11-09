@@ -1,0 +1,49 @@
+<UserControl x:Class="ElCarbonazo.Desktop.Views.CocinaView" x:Name="Root"
+             xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:ElCarbonazo.Desktop.ViewModels" xmlns:models="using:ElCarbonazo.Desktop.Models"
+             xmlns:design="using:ElCarbonazo.Desktop.Design" mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
+             x:CompileBindings="True" x:DataType="vm:CocinaViewModel" Background="{StaticResource FondoPrincipalBrush}">
+    <Design.DataContext><design:CocinaDesignViewModel /></Design.DataContext>
+    <UserControl.Resources>
+        <ControlTheme x:Key="CocinaButtonTheme" TargetType="Button">
+            <Setter Property="Background" Value="#3F3F46" /><Setter Property="Foreground" Value="#F3F4F6" />
+            <Setter Property="BorderBrush" Value="#71717A" /><Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="16,12" /><Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="Template"><ControlTemplate><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}"><ContentPresenter Content="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" /></Border></ControlTemplate></Setter>
+            <Style Selector="^:pointerover"><Setter Property="BorderBrush" Value="#FF784E" /></Style>
+            <Style Selector="^:focus-visible"><Setter Property="BorderBrush" Value="#F3F4F6" /><Setter Property="BorderThickness" Value="2" /></Style>
+            <Style Selector="^:disabled"><Setter Property="Background" Value="#303034" /><Setter Property="Foreground" Value="#A1A1AA" /></Style>
+        </ControlTheme>
+    </UserControl.Resources>
+    <UserControl.Styles><Style Selector="Button"><Setter Property="Theme" Value="{StaticResource CocinaButtonTheme}" /></Style></UserControl.Styles>
+    <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="20,16" RowSpacing="10">
+        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+            <Button Content="← Mesas" Command="{Binding VolverCommand}" IsEnabled="{Binding PuedeVolver}" />
+            <StackPanel Grid.Column="1"><TextBlock Text="Cocina" FontSize="26" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" /><TextBlock Text="Comandas pendientes · orden de recepción" Foreground="{StaticResource TextoSecundarioBrush}" /></StackPanel>
+            <TextBlock Grid.Column="2" Text="DEMOSTRACIÓN" Foreground="#FFB488" FontWeight="Bold" VerticalAlignment="Center" />
+        </Grid>
+        <Border Grid.Row="1" Background="{StaticResource FondoPanelBrush}" Padding="12,8" CornerRadius="6"><TextBlock Text="{Binding EstadoConexion}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" /></Border>
+        <StackPanel Grid.Row="2" Spacing="4">
+            <TextBlock Text="{Binding Mensaje}" Foreground="#FFB488" TextWrapping="Wrap" />
+            <TextBlock Text="Se muestran las primeras 100 comandas. Termine las anteriores para ver las siguientes." IsVisible="{Binding HayMas}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+            <TextBlock Text="No hay comandas pendientes." IsVisible="{Binding ColaVacia}" Foreground="{StaticResource TextoPrincipalBrush}" />
+        </StackPanel>
+        <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Comandas}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate><DataTemplate x:DataType="models:CocinaComandaDto">
+                    <Border Width="300" Margin="0,0,12,12" Padding="16" Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1" CornerRadius="8">
+                        <StackPanel Spacing="10">
+                            <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding Destino}" FontSize="22" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" /><TextBlock Grid.Column="1" Text="{Binding IdComanda, StringFormat='Comanda #{0}'}" Foreground="{StaticResource TextoPrincipalBrush}" /></Grid>
+                            <TextBlock Text="{Binding Hora, StringFormat='Recibida: {0}'}" Foreground="{StaticResource TextoSecundarioBrush}" />
+                            <TextBlock Text="{Binding Estado}" FontWeight="Bold" Foreground="#FFB488" />
+                            <ItemsControl ItemsSource="{Binding Lineas}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="models:CocinaLineaDto"><Border BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="0,0,0,1" Padding="0,8"><StackPanel Spacing="4"><TextBlock Text="{Binding NombreProducto}" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" /><TextBlock Text="{Binding Cantidad, StringFormat='Cantidad: {0}'}" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" /><TextBlock Text="{Binding Notas, StringFormat='Nota: {0}'}" Foreground="#FFB488" TextWrapping="Wrap" /></StackPanel></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                            <Button Content="{Binding Accion}" IsEnabled="{Binding #Root.((vm:CocinaViewModel)DataContext).PuedeOperar}" Command="{Binding #Root.((vm:CocinaViewModel)DataContext).AvanzarCommand}" CommandParameter="{Binding}" HorizontalAlignment="Stretch" />
+                        </StackPanel>
+                    </Border>
+                </DataTemplate></ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

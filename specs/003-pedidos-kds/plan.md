@@ -1,6 +1,6 @@
 # Plan técnico — 003 Pedidos y KDS
 
-**Estado: D0, D1 y API de D2/D3 completos; D4 en ejecución.** Cola FIFO y transición KDS están implementadas, con pruebas de concurrencia, permisos y rollback. D4 incluye pantalla de salón, cuenta, borrador y envío, con pruebas focalizadas; faltan comprobaciones de integración y revisión visual real. Hay casos Unicode compartidos de API y Desktop. No se ha aplicado la migración a una base persistente.
+**Estado: D0, D1 y API de D2/D3 completos; D4 de salón aceptada localmente.** D5 incorpora cola y transiciones KDS Desktop con pruebas automatizadas; la revisión visual y la integración de extremo a extremo siguen pendientes. Hay casos Unicode compartidos de API y Desktop. No se ha aplicado la migración a una base persistente.
 
 ## 1. Arquitectura y límites
 

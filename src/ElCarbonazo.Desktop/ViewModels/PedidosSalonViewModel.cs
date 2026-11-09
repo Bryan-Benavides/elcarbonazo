@@ -287,9 +287,16 @@ public partial class PedidosSalonViewModel : ViewModelBase, IDisposable
                 catch (Exception ex)
                 {
                     Conectado = false;
-                    EstadoLectura = ex is SessionPausedException
-                        ? "Sesión en pausa. Interactúe para continuar."
-                        : "Sin datos actuales · se conserva la última consulta.";
+                    EstadoLectura = ex switch
+                    {
+                        SessionPausedException => "Sesión en pausa. Interactúe para continuar.",
+                        ApiException api when (int)api.StatusCode == 401 => "Autenticación no válida. Inicie sesión nuevamente.",
+                        ApiException api when (int)api.StatusCode == 403 => "Su rol no permite consultar el catálogo o la cuenta.",
+                        ApiException api when (int)api.StatusCode == 404 => "La API no encontró el recurso o destino. Revise la versión de la API y la mesa o grupo.",
+                        ApiException api when (int)api.StatusCode >= 500 => "La API no pudo consultar los datos. Revise su estado y esquema con el administrador.",
+                        InvalidDataException or System.Text.Json.JsonException => "La API devolvió datos inválidos. Se conserva la última consulta.",
+                        _ => "Sin datos actuales · se conserva la última consulta."
+                    };
                     failures = Math.Min(failures + 1, 4);
                 }
                 await Task.Delay(failures switch { 0 => 2000, 1 => 2000, 2 => 5000, 3 => 10000, _ => 30000 }, cancellationToken);

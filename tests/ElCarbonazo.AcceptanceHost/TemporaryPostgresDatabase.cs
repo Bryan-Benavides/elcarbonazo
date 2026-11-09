@@ -6,6 +6,9 @@ using ElCarbonazo.Api.Entities;
 using ElCarbonazo.Api.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.FileProviders;
 using Npgsql;
 
 internal sealed class TemporaryPostgresDatabase
@@ -51,6 +54,25 @@ internal sealed class TemporaryPostgresDatabase
     }
 
     public AppDbContext CreateContext() => new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(ConnectionString).Options);
+
+    public async Task SeedDemoCatalogAsync()
+    {
+        if (!_created) throw new InvalidOperationException("La base temporal todavía no fue creada.");
+        await using var context = CreateContext();
+        var settings = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["DemoCatalog:Enabled"] = "true"
+        }).Build();
+        await new DemoCatalogSeeder(context, new AcceptanceEnvironment(), settings).SeedAsync(CancellationToken.None);
+    }
+
+    private sealed class AcceptanceEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = Environments.Development;
+        public string ApplicationName { get; set; } = "ElCarbonazo.AcceptanceHost";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+    }
 
     public async Task DisposeAsync()
     {

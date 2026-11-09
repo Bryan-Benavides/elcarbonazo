@@ -11,6 +11,19 @@ public sealed class MesasPollingLifecycleTests
     [Theory]
     [InlineData("Jefa", true)]
     [InlineData("Supervisor", true)]
+    [InlineData("Personal de Cocina", true)]
+    [InlineData("Mesero", false)]
+    [InlineData("Encargado de Caja", false)]
+    public void Kitchen_navigation_is_limited_to_authorized_roles(string role, bool expected)
+    {
+        using var viewModel = new MesasViewModel("Ana", role, new FakeSession(), new ControlledMesas(), DispatchInline);
+        Assert.Equal(expected, viewModel.RolPuedeCocina);
+        if (!expected) Assert.False(viewModel.PuedeAbrirCocina);
+    }
+
+    [Theory]
+    [InlineData("Jefa", true)]
+    [InlineData("Supervisor", true)]
     [InlineData("Mesero", true)]
     [InlineData("Encargado de Caja", true)]
     [InlineData("Personal de Cocina", false)]

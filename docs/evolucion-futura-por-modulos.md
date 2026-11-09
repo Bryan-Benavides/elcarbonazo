@@ -59,7 +59,9 @@ Las referencias autoritativas siguen siendo `docs/constitution.md`, `docs/domain
 
 **Base existente:** el dominio y la API 003 permiten consultar catálogo/cuentas y registrar envíos idempotentes, además de comprobar cuentas pendientes para las reglas de mesas/grupos. Eso **no significa que exista un flujo completo de pedidos en Desktop ni un sistema listo para operación real**.
 
-**Módulo 003 en curso:** [`specs/003-pedidos-kds/`](../specs/003-pedidos-kds/) define cuenta por destino, envíos separados, catálogo de demostración y cocina. D1 y API de D2/D3 están implementados con pruebas automatizadas; la migración no se ha aplicado a una base persistente. D4 incluye pantalla de salón y envío conectados, con pruebas focalizadas; aún faltan validación integral y revisión visual. Hay casos Unicode compartidos de API y Desktop. La pantalla de cocina sigue pendiente; la recuperación probada es controlada, no una aceptación de red física.
+**Módulo 003 en curso:** [`specs/003-pedidos-kds/`](../specs/003-pedidos-kds/) define cuenta por destino, envíos separados, catálogo de demostración y cocina. D1 y API de D2/D3 están implementados con pruebas automatizadas; la migración no se ha aplicado a una base persistente. D4 de salón se aceptó localmente y D5 incluye una pantalla de cocina pendiente de revisión visual e integración. Hay casos Unicode compartidos de API y Desktop; la recuperación probada es controlada, no una aceptación de red física.
+
+La validación de D4 y sus límites se registran en [`docs/validacion-d4.md`](validacion-d4.md). El usuario confirmó la revisión visual y funcional del alcance de salón. La pantalla Desktop Cocina se implementó en D5, pero el aviso visual de una comanda `Lista` en salón aún requiere revisión integrada, aunque la transición ya se probó por API.
 
 **Por definir:**
 
@@ -72,7 +74,7 @@ Las referencias autoritativas siguen siendo `docs/constitution.md`, `docs/domain
 
 **Base existente:** el rol `Personal de Cocina` puede consultar mesas y no modificarlas. El módulo 001 no implementa una pantalla operativa de cocina.
 
-**003 en curso:** la API de cola FIFO y transición de comandas está implementada y probada; Cocina opera estados sin modificar mesas. La matriz incluye Jefa/Supervisor en KDS y permite a Mesero/Caja consultar estados desde la cuenta. La pantalla Desktop de cocina y el polling siguen pendientes.
+**003 en curso:** la API de cola FIFO y transición de comandas está implementada y probada; Cocina opera estados sin modificar mesas. La matriz incluye Jefa/Supervisor en KDS y permite a Mesero/Caja consultar estados desde la cuenta. D5 incorpora pantalla Desktop y polling con pruebas automatizadas; el usuario aceptó su flujo e integración local con salón. Ver `docs/validacion-d5.md`; el ajuste final del acceso Cocina requiere confirmación visual y D6 sigue pendiente.
 
 La especificación 003 define recepción, orden FIFO, estados, notas, roles y comunicación visible en salón. La implementación y validación del polling, volumen, accesibilidad y desconexión siguen pendientes; no se garantizan notificaciones instantáneas.
 

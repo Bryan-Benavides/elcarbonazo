@@ -1,6 +1,6 @@
 # Tareas — 003 Pedidos y monitor KDS
 
-**Estado:** D0, D1 y alcance API de D2/D3 completos; D4 en ejecución con pantalla de salón, cuenta, borrador y envío implementados. Quedan pruebas adicionales y revisión visual/táctil en ejecución; no se declara aceptación por compilar. Las pruebas de recuperación son controladas y no sustituyen pruebas de red física. No aplicar migraciones ni modificar bases persistentes sin autorización expresa y destino confirmado. `002-operaciones-seguras` sigue pospuesto y separado.
+**Estado:** D0, D1, D2/D3 API, D4 salón y D5 KDS aceptadas por el usuario para el perfil universitario local; pruebas automatizadas completadas. La nueva apariencia de navegación Cocina está pendiente de confirmación visual en la compilación actual; D6/operación real y red LAN física siguen pendientes. Pruebas controladas no sustituyen red física. No aplicar migraciones ni modificar bases persistentes sin autorización expresa y destino confirmado. `002-operaciones-seguras` sigue pospuesto y separado.
 
 ## D0 — Acuerdos y diseño
 
@@ -54,15 +54,18 @@
 - [x] Preparar borrador local con líneas independientes, cantidades y notas NFC, y servicio de lectura paginada del catálogo mediante sesión REST; probar límites y respuestas inválidas.
 - [x] Implementar navegación desde mesa/grupo, catálogo demostrativo, borrador local, categorías, cantidad y notas; distinguir borrador y confirmación. Accesibilidad y apariencia requieren validación real.
 - [x] Implementar resumen de cuenta/comandas y aviso de lista según contrato aprobado; consultar únicamente por REST.
-- [ ] Coordinar polling/mutaciones y sesión; tratar desconexión, conflictos, cambios de precio y resultado incierto sin reintentos automáticos ni afirmaciones falsas.
-- [ ] Probar ViewModels/servicios con fakes, flujos de mesa/grupo, lectura obsoleta, expiración y acceso por rol.
+- [x] Coordinar polling/mutaciones y sesión; tratar desconexión, conflictos, cambios de precio y resultado incierto sin reintentos automáticos ni afirmaciones falsas.
+- [x] Probar ViewModels/servicios con fakes, flujos de mesa/grupo, lectura obsoleta, expiración y acceso por rol.
 - [x] Compartir casos Unicode entre pruebas de API y Desktop sin referenciar API desde Desktop: NFC equivalente, emoji y límites de 150/151 escalares; API y validador Desktop usan los mismos casos.
-- [ ] Revisar visualmente la vista de salón y sus plantillas reales con ratón, teclado, foco, escalado y tamaño mínimo; comprobar que la intención incierta continúa bloqueada durante la sesión y documentar las limitaciones antes de aceptar D4.
+- [x] Revisar visualmente la vista de salón y sus plantillas reales con ratón, teclado, foco, escalado y tamaño mínimo; usuario confirma los puntos 1, 2, 3, 5, 6 y 7. El aviso de comanda `Lista` desde Cocina queda para integración D5/D6 porque KDS Desktop está pendiente. Ver `docs/validacion-d4.md`.
+- [x] Preparar `AcceptanceHost --pedidos-smoke` con catálogo ficticio y recorrido REST Desktop/API individual y de grupo en base temporal; no representa render ni sesión real de Desktop. Ver `docs/validacion-d4.md`.
 
 ## D5 — Desktop cocina
 
-- [ ] Implementar KDS táctil y teclado, estados, notas, FIFO y transiciones; el color no es el único indicador.
-- [ ] Probar conectividad, actualización, estados vacíos, concurrencia y restricciones de rol; no declarar tiempos de render no medidos.
+- [x] Preparar cliente REST inicial para cola y transiciones con validación de respuestas y pruebas focalizadas; no equivale a KDS operativo.
+- [x] Verificar el cliente REST con `AcceptanceHost --pedidos-smoke` en PostgreSQL temporal, sin ventana ni sesión Desktop real.
+- [x] Implementar KDS con estados, notas, FIFO y transiciones; el color no es el único indicador. Los controles admiten teclado; su interacción real y táctil requieren revisión visual.
+- [x] Completar revisión visual/funcional de D5 e integración salón↔KDS reportada por el usuario. Falta únicamente confirmar visualmente el ajuste posterior del acceso Cocina en la barra lateral. No declarar tiempos de render no medidos.
 
 ## D6 — Integración y aceptación
 

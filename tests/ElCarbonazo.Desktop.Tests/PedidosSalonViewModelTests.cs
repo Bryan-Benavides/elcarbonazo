@@ -7,6 +7,21 @@ namespace ElCarbonazo.Desktop.Tests;
 
 public sealed class PedidosSalonViewModelTests
 {
+    [Theory]
+    [InlineData(401, "Autenticación")]
+    [InlineData(403, "rol")]
+    [InlineData(404, "versión de la API")]
+    [InlineData(500, "esquema")]
+    public void Api_failures_explain_the_problem_without_enabling_writes(int status, string expected)
+    {
+        using var vm = new PedidosSalonViewModel(1, null, "Mesa 1", new ApiFailureCatalogFake(status),
+            new AccountFake(), () => { }, new SuccessSendFake(), 7);
+        Assert.False(vm.Conectado);
+        Assert.False(vm.PuedeEnviar);
+        Assert.Equal("Cuenta aún no consultada", vm.EstadoCuenta);
+        Assert.Contains(expected, vm.EstadoLectura, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Expired_session_never_enables_salon_writes()
     {
@@ -118,6 +133,40 @@ public sealed class PedidosSalonViewModelTests
     }
 
     [Fact]
+    public async Task Send_is_blocked_when_inflight_read_reveals_legacy_account()
+    {
+        var accounts = new BlockingAccountFake(legacyOnSecondRead: true);
+        var sending = new SuccessSendFake();
+        using var vm = new PedidosSalonViewModel(1, null, "Mesa 1", new CatalogFake(), accounts,
+            () => { }, sending, 7);
+        vm.AgregarCommand.Execute(Assert.Single(vm.Productos));
+        await accounts.SecondStarted.Task.WaitAsync(TimeSpan.FromSeconds(8));
+        vm.SolicitarEnvioCommand.Execute(null);
+        var pending = vm.ConfirmarEnvioCommand.ExecuteAsync(null);
+        accounts.Release.TrySetResult();
+        await pending.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(0, sending.Count);
+        Assert.True(vm.CuentaLegada);
+        Assert.Single(vm.Borrador);
+        Assert.False(vm.ResultadoIncierto);
+    }
+
+    [Fact]
+    public async Task Disposed_view_does_not_apply_a_late_account_read()
+    {
+        var accounts = new LateAccountFake();
+        var vm = new PedidosSalonViewModel(1, null, "Mesa 1", new CatalogFake(), accounts, () => { });
+        await accounts.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        vm.Dispose();
+        accounts.Release.TrySetResult();
+        await accounts.Completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(100);
+        Assert.False(vm.Conectado);
+        Assert.Empty(vm.Productos);
+        Assert.Equal("Cuenta aún no consultada", vm.EstadoCuenta);
+    }
+
+    [Fact]
     public async Task Uncertain_send_keeps_identical_intention_until_human_repeats()
     {
         var sending = new SendFake();
@@ -212,6 +261,12 @@ public sealed class PedidosSalonViewModelTests
             throw new SessionExpiredException();
     }
 
+    private sealed class ApiFailureCatalogFake(int status) : IProductosPedidoApiService
+    {
+        public Task<PaginaProductosDto> ConsultarAsync(string? cursor = null, CancellationToken cancellationToken = default) =>
+            throw new ApiException((System.Net.HttpStatusCode)status, null);
+    }
+
     private sealed class UncertainThenRejectedFake : IEnvioPedidoApiService
     {
         public int Count { get; private set; }
@@ -271,7 +326,7 @@ public sealed class PedidosSalonViewModelTests
         }
     }
 
-    private sealed class BlockingAccountFake : ICuentaPedidoApiService
+    private sealed class BlockingAccountFake(bool legacyOnSecondRead = false) : ICuentaPedidoApiService
     {
         private int _count;
         public TaskCompletionSource SecondStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -282,7 +337,25 @@ public sealed class PedidosSalonViewModelTests
             {
                 SecondStarted.TrySetResult();
                 await Release.Task.WaitAsync(cancellationToken);
+                if (legacyOnSecondRead)
+                    return new CuentaActivaPedidoDto(new CuentaPedidoDto(1, 1, null, 1, DateTimeOffset.UtcNow,
+                        5, 0, 5, "Listo", true, "Legada", []));
             }
+            return new CuentaActivaPedidoDto(null);
+        }
+    }
+
+    private sealed class LateAccountFake : ICuentaPedidoApiService
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Completed { get; } = new();
+
+        public async Task<CuentaActivaPedidoDto> ConsultarAsync(int? mesaId, int? grupoId, CancellationToken cancellationToken = default)
+        {
+            Started.TrySetResult();
+            await Release.Task;
+            Completed.TrySetResult();
             return new CuentaActivaPedidoDto(null);
         }
     }

@@ -24,6 +24,39 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     private PedidosSalonViewModel? _pedidosActual;
 
     public bool MostrandoPedidos => PedidosActual is not null;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MostrandoCocina))]
+    [NotifyPropertyChangedFor(nameof(MostrandoModulo))]
+    private CocinaViewModel? _cocinaActual;
+    public bool MostrandoCocina => CocinaActual is not null;
+    public bool MostrandoModulo => MostrandoPedidos || MostrandoCocina;
+    public bool RolPuedeCocina => Rol is "Jefa" or "Supervisor" or "Personal de Cocina";
+    public bool PuedeAbrirCocina => RolPuedeCocina && !_disposed && !MostrandoModulo && !Mutando && !ResultadoIncierto && !SeleccionandoGrupo && _coordinator.CanMutate;
+
+    [RelayCommand]
+    private async Task AbrirCocinaAsync()
+    {
+        if (!PuedeAbrirCocina) return;
+        Mutando = true;
+        bool reserved;
+        try { reserved = await _coordinator.TryBeginMutationAsync(_lifetime.Token); }
+        catch (OperationCanceledException) { Mutando = false; return; }
+        if (!reserved) { Mutando = false; MensajeAccion = "No se abrió Cocina; revise la conexión."; return; }
+        CocinaActual = new CocinaViewModel(_session, new CocinaApiService(_session), CerrarCocina);
+        ActualizarAcciones();
+    }
+
+    private void CerrarCocina()
+    {
+        CocinaActual?.Dispose();
+        CocinaActual = null;
+        _coordinator.CompleteMutation(requiresReconciliation: true);
+        Mutando = false;
+        SolicitarConsulta();
+        ActualizarAcciones();
+    }
+
+    partial void OnPedidosActualChanged(PedidosSalonViewModel? value) => OnPropertyChanged(nameof(MostrandoModulo));
     public bool PuedeAbrirCuenta => !_disposed && PedidosActual is null && !SeleccionandoGrupo && !Mutando &&
         !ResultadoIncierto && _coordinator.CanMutate && Rol is "Jefa" or "Supervisor" or "Mesero" or "Encargado de Caja" &&
         MesaSeleccionada is not null;
@@ -108,6 +141,7 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(PuedeReconocer));
         OnPropertyChanged(nameof(AyudaAcciones));
         OnPropertyChanged(nameof(PuedeAbrirCuenta));
+        OnPropertyChanged(nameof(PuedeAbrirCocina));
         ActualizarAccionesGrupo();
     }
 
@@ -425,6 +459,7 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
         if (_disposed) return;
         _disposed = true;
         PedidosActual?.Dispose();
+        CocinaActual?.Dispose();
         _session.SessionStateChanged -= OnSessionStateChanged;
         Mesas.CollectionChanged -= AlCambiarMesas;
         _coordinator.Stop();

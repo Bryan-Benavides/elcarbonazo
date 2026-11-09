@@ -1,12 +1,12 @@
 # Especificación 003 — Pedidos y monitor de cocina (KDS)
 
-**Estado: D0, D1 y API de D2/D3 completos; D4 en ejecución.** Persistencia y API de pedidos/cocina están implementadas y probadas. Desktop incorpora la vista de salón con catálogo, cuenta, borrador y envío; su validación integral y visual sigue pendiente. Hay pruebas Unicode compartidas de Desktop y API. La pantalla KDS corresponde a D5. La migración no se ha aplicado a una base persistente. Esto no convierte el MVP universitario en un sistema apto para operación real.
+**Estado: D0, D1 y API de D2/D3 completos; D4 de salón aceptada para su alcance local.** D5 incorpora pantalla KDS y pruebas automatizadas, pendientes de revisión visual y de integración con salón. Hay pruebas Unicode compartidas de Desktop y API. La migración no se ha aplicado a una base persistente. Esto no convierte el MVP universitario en un sistema apto para operación real.
 
 ## 1. Objetivo y contexto
 
 Digitalizar la toma de consumos para una mesa individual o una cuenta compartida de grupo y comunicar envíos a cocina mediante una cola local. Desktop usa Avalonia/MVVM y exclusivamente REST; la API ASP.NET Core contiene reglas, persistencia EF Core/PostgreSQL, permisos y auditoría. Operación en LAN, sin dependencia de Internet y sin desactivar TLS de producción.
 
-`001-auth-mesas-mvp` contiene sesiones, roles, mesas, grupos y una entidad `pedido` parcial. D2 implementa la toma mediante API; D3 incorpora la API de cocina, todavía sin pantalla Desktop. `002-operaciones-seguras` permanece pospuesto y trata operaciones de mesas/grupos, no resuelve automáticamente pedidos. No renumerar ni sobrescribirlo.
+`001-auth-mesas-mvp` contiene sesiones, roles, mesas, grupos y una entidad `pedido` parcial. D2 implementa la toma mediante API; D3 incorpora la API de cocina y D5 la pantalla Desktop, pendiente de validación visual. `002-operaciones-seguras` permanece pospuesto y trata operaciones de mesas/grupos, no resuelve automáticamente pedidos. No renumerar ni sobrescribirlo.
 
 ## 2. Alcance acordado
 

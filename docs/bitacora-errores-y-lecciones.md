@@ -82,6 +82,29 @@ Copiar este formato y completar solo lo que se haya verificado:
 - **Prevención:** inyectar errores de transporte y lectura de cuerpo, no solo códigos HTTP o timeouts, y verificar ausencia de reintentos automáticos y conservación de la intención.
 - **Evidencia:** `PedidosSalonViewModel.cs` y `Unexpected_response_io_failure_is_uncertain_and_cannot_create_new_intention` en pruebas Desktop.
 
+### ERR-017 — Pantalla de pedidos sin datos actuales y botón deshabilitado poco distinguible
+- **Estado:** diagnóstico mejorado y estilo ajustado; pendientes comprobación visual y causa concreta del fallo de consulta de la captura.
+- **Contexto:** la captura de D4 muestra «Sin datos actuales», cuenta aún no consultada y un botón de envío aparentemente deshabilitado con fondo naranja y texto tenue. La captura no indica si falló la red, la autorización, la versión de API, el esquema o el contenido de la respuesta.
+- **Causa confirmada del diagnóstico genérico:** el ViewModel agrupaba distintos errores HTTP bajo el mismo mensaje; la causa exacta en el equipo del usuario no está confirmada. **Hipótesis visual:** la prioridad del estilo primario podía conservar el fondo naranja sobre el estado deshabilitado.
+- **Corrección:** diferenciar 401, 403, 404, 5xx y datos inválidos sin mostrar detalles internos; añadir estilo explícito para `Button.primario:disabled`.
+- **Prevención:** probar estados de plantilla en ejecución y no diagnosticar esquema o conectividad solo por una captura; ofrecer una base temporal con catálogo ficticio para reproducir el flujo.
+- **Evidencia:** captura aportada por el usuario; `PedidosSalonViewModelTests.Api_failures_explain_the_problem_without_enabling_writes`; `PedidosSalonView.axaml`. El ajuste visual todavía no ha sido confirmado en una nueva captura.
+
+### ERR-018 — Aviso de EF Core por consultas con varias colecciones
+- **Estado:** pendiente de análisis de rendimiento; no se ha confirmado un fallo funcional.
+- **Contexto:** `AcceptanceHost --pedidos-smoke` completó el recorrido local, pero la API emitió dos `MultipleCollectionIncludeWarning` de EF Core.
+- **Causa:** EF advierte que una consulta única que incluye varias colecciones puede generar más filas de las necesarias. La consulta concreta y el impacto no se han medido.
+- **Prevención:** identificar la consulta y medir con datos representativos antes de optimizar; si se usan consultas divididas, preservar explícitamente la consistencia de la lectura bajo concurrencia.
+- **Evidencia:** ejecución `--pedidos-smoke` del 9 de noviembre de 2026; el resultado no mide latencia ni rendimiento de producción.
+
+### ERR-019 — Se indicó comprobar una transición de Cocina desde una vista aún no implementada
+- **Estado:** aclarado y documentado; prevención aplicable a verificaciones futuras.
+- **Contexto:** al revisar D4 se indicó al usuario que comprobara que una comanda alcanzara `Lista` desde Cocina. La especificación y `tasks.md` muestran que la pantalla Desktop de Cocina corresponde a D5 y todavía no está implementada. El usuario no tenía, por tanto, una vista disponible para realizar ese paso.
+- **Causa confirmada:** se confundió la API de Cocina D3, que sí permite y prueba las transiciones, con la interfaz Desktop KDS planificada en D5. La prueba automatizada REST de API no equivale a una pantalla disponible ni a validación visual.
+- **Corrección:** se aclaró que la captura de salón verifica cuenta/comandas abiertas, pero no la transición visual a `Lista`; se dejó dicha observación para la integración posterior con D5.
+- **Prevención:** antes de pedir pruebas manuales, contrastar cada paso con `specs/003-pedidos-kds/tasks.md` y comprobar que exista una ruta/UI implementada para el rol y acción. Distinguir estado implementado en API, estado disponible en Desktop y escenario de integración futuro. No presentar una vista planificada como disponible.
+- **Evidencia:** confirmación del usuario de que los puntos 1, 2, 3, 5, 6 y 7 de la lista D4 funcionan; captura de mesa 04 con dos comandas `Abierta`; `tasks.md` D5 deja KDS Desktop pendiente. La transición `Lista` está cubierta por smoke de API/REST, no observada en UI.
+
 ### ERR-004 — Carrera cuando refresh termina inmediatamente
 - **Estado:** corregido y cubierto por regresión automatizada.
 - **Contexto y síntoma:** una prueba de refresh rechazado produjo `NullReferenceException` en vez de informar sesión expirada.

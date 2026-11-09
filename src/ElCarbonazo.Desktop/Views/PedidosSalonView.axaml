@@ -37,6 +37,7 @@
     <UserControl.Styles>
         <Style Selector="Button"><Setter Property="Theme" Value="{StaticResource BotonPedidoTheme}" /></Style>
         <Style Selector="Button.primario"><Setter Property="Background" Value="#9F3517" /><Setter Property="BorderBrush" Value="#D75630" /></Style>
+        <Style Selector="Button.primario:disabled"><Setter Property="Background" Value="#303034" /><Setter Property="Foreground" Value="#A1A1AA" /><Setter Property="BorderBrush" Value="#52525B" /></Style>
         <Style Selector="Button.activa"><Setter Property="BorderBrush" Value="#FF784E" /><Setter Property="Background" Value="#71331F" /></Style>
         <Style Selector="Border.panelPedido">
             <Setter Property="Background" Value="{StaticResource FondoPanelBrush}" />

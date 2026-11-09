@@ -25,6 +25,8 @@ Console.CancelKeyPress += (_, e) => { e.Cancel = true; stopping.Cancel(); };
 try
 {
     await database.InitializeAsync();
+    var pedidosMode = args.Contains("--pedidos", StringComparer.Ordinal) || args.Contains("--pedidos-smoke", StringComparer.Ordinal);
+    if (pedidosMode) await database.SeedDemoCatalogAsync();
     var start = new ProcessStartInfo("dotnet") { WorkingDirectory = apiDirectory, UseShellExecute = false };
     start.ArgumentList.Add(apiDll);
     start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
@@ -40,12 +42,15 @@ try
     Console.WriteLine("Jefa: jefa central / correct horse battery staple");
     Console.WriteLine("Cocina: cocina / kitchen password");
     Console.WriteLine("Mesa 1 ocupada con cuenta pendiente; mesas 2 y 3 agrupadas con cuenta pendiente.");
+    if (pedidosMode) Console.WriteLine("Catálogo ficticio 003 cargado; para pedidos nuevos use la mesa 04 libre. Las cuentas 1 y 2/3 son heredadas de solo lectura.");
     Console.WriteLine("En otra terminal PowerShell, para cada Desktop:");
     Console.WriteLine("$env:ELCARBONAZO_ENVIRONMENT='Development'");
     Console.WriteLine($"$env:ELCARBONAZO_API_BASE_URL='{baseUrl}'");
     Console.WriteLine("dotnet run --project src/ElCarbonazo.Desktop");
     Console.WriteLine("Pulse Ctrl+C aquí para cerrar la API temporal y eliminar su base de prueba.");
-    if (args.Contains("--cadencia", StringComparer.Ordinal))
+    if (args.Contains("--pedidos-smoke", StringComparer.Ordinal))
+        await PedidosSmoke.RunAsync(client, stopping.Token);
+    else if (args.Contains("--cadencia", StringComparer.Ordinal))
         await CadenciaLocal.RunAsync(client, stopping.Token);
     else if (args.Contains("--medir", StringComparer.Ordinal))
         await MedirAsync(client, stopping.Token);

@@ -47,6 +47,9 @@
     </UserControl.Resources>
     <UserControl.Styles>
         <Style Selector="Button"><Setter Property="Theme" Value="{StaticResource AccionMesaTheme}" /></Style>
+        <Style Selector="Button.navegacion-cocina"><Setter Property="Background" Value="{StaticResource FondoPrincipalBrush}" /><Setter Property="BorderBrush" Value="{StaticResource AcentoFuegoBrush}" /><Setter Property="BorderThickness" Value="3,0,0,0" /><Setter Property="HorizontalContentAlignment" Value="Left" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
+        <Style Selector="Button.navegacion-cocina:pointerover"><Setter Property="Background" Value="#3A3030" /><Setter Property="BorderBrush" Value="#FF784E" /></Style>
+        <Style Selector="Button.navegacion-cocina:focus-visible"><Setter Property="BorderBrush" Value="{StaticResource TextoPrincipalBrush}" /><Setter Property="BorderThickness" Value="3,0,0,0" /></Style>
         <Style Selector="Button.primario"><Setter Property="Background" Value="#9F3517" /><Setter Property="BorderBrush" Value="#D75630" /></Style>
         <Style Selector="ToggleButton.mesa">
             <Setter Property="Background" Value="Transparent" />
@@ -77,12 +80,12 @@
         </Style>
     </UserControl.Styles>
     <Grid ColumnDefinitions="58,Auto,*">
-        <Border Grid.Column="0" IsVisible="{Binding !MostrandoPedidos}" Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="0,0,1,0">
+        <Border Grid.Column="0" IsVisible="{Binding !MostrandoModulo}" Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="0,0,1,0">
             <Button Content="☰" FontSize="21" Margin="6,14,6,0" Padding="5,7" VerticalAlignment="Top"
                     Command="{Binding AlternarNavegacionCommand}" AutomationProperties.Name="{Binding TextoNavegacion}"
                     ToolTip.Tip="{Binding TextoNavegacion}" />
         </Border>
-        <Border Grid.Column="1" IsVisible="{Binding !MostrandoPedidos}" HorizontalAlignment="Left" VerticalAlignment="Stretch"
+        <Border Grid.Column="1" IsVisible="{Binding !MostrandoModulo}" HorizontalAlignment="Left" VerticalAlignment="Stretch"
                 Width="{Binding AnchoNavegacion}" ClipToBounds="True"
                 Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="0,0,1,0">
             <Border.Transitions><Transitions><DoubleTransition Property="Width" Duration="0:0:0.2" /></Transitions></Border.Transitions>
@@ -92,9 +95,12 @@
                     <TextBlock Text="EL CARBONAZO" FontSize="17" FontWeight="Bold" Foreground="{StaticResource AcentoFuegoBrush}" />
                     <TextBlock Text="Gestión de salón" FontSize="12" Foreground="{StaticResource TextoSecundarioBrush}" />
                 </StackPanel>
-                <Border Grid.Row="1" Margin="0,32,0,0" Padding="12,10" VerticalAlignment="Top" CornerRadius="6" Background="{StaticResource FondoPrincipalBrush}" BorderBrush="{StaticResource AcentoFuegoBrush}" BorderThickness="3,0,0,0">
-                    <TextBlock Text="Mesas" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" />
-                </Border>
+                <StackPanel Grid.Row="1" Margin="0,32,0,0" Spacing="8" VerticalAlignment="Top">
+                    <Border Padding="12,10" CornerRadius="6" Background="{StaticResource FondoPrincipalBrush}" BorderBrush="{StaticResource AcentoFuegoBrush}" BorderThickness="3,0,0,0">
+                        <TextBlock Text="Mesas" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    </Border>
+                    <Button Classes="navegacion-cocina" Content="Cocina" Padding="12,10" IsVisible="{Binding RolPuedeCocina}" IsEnabled="{Binding PuedeAbrirCocina}" Command="{Binding AbrirCocinaCommand}" HorizontalAlignment="Stretch" />
+                </StackPanel>
                 <StackPanel Grid.Row="2" Spacing="6">
                     <TextBlock Text="{Binding Nombre}" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="{Binding Rol}" FontSize="12" Foreground="{StaticResource TextoSecundarioBrush}" TextWrapping="Wrap" />
@@ -103,7 +109,7 @@
             </Grid>
             </Panel>
         </Border>
-        <Grid Grid.Column="2" IsVisible="{Binding !MostrandoPedidos}" RowDefinitions="Auto,Auto,*" Margin="20,16">
+        <Grid Grid.Column="2" IsVisible="{Binding !MostrandoModulo}" RowDefinitions="Auto,Auto,*" Margin="20,16">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
             <StackPanel Spacing="4">
                 <TextBlock Text="Mapa de mesas" FontSize="27" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
@@ -210,6 +216,11 @@
         <ContentControl Grid.ColumnSpan="3" IsVisible="{Binding MostrandoPedidos}" Content="{Binding PedidosActual}" ZIndex="90">
             <ContentControl.DataTemplates>
                 <DataTemplate DataType="vm:PedidosSalonViewModel"><views:PedidosSalonView /></DataTemplate>
+            </ContentControl.DataTemplates>
+        </ContentControl>
+        <ContentControl Grid.ColumnSpan="3" IsVisible="{Binding MostrandoCocina}" Content="{Binding CocinaActual}" ZIndex="90">
+            <ContentControl.DataTemplates>
+                <DataTemplate DataType="vm:CocinaViewModel"><views:CocinaView /></DataTemplate>
             </ContentControl.DataTemplates>
         </ContentControl>
         <Border Grid.ColumnSpan="3" Background="#B0000000" IsVisible="{Binding ConfirmarCierreGrupo}" ZIndex="110">
