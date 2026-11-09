@@ -21,6 +21,21 @@ public sealed class ProductosController(IProductosService productosService) : Co
         [FromQuery] int limite = 25,
         CancellationToken cancellationToken = default)
     {
+        if (!disponibles)
+        {
+            var problem = ApiProblemDetails.Create(
+                HttpContext,
+                StatusCodes.Status400BadRequest,
+                "VALIDATION_ERROR",
+                "Filtro inválido",
+                "El catálogo de selección solo permite consultar productos disponibles.");
+            problem.Extensions["errors"] = new Dictionary<string, string[]>
+            {
+                ["disponibles"] = ["Solo se admiten productos disponibles."]
+            };
+            return new ObjectResult(problem) { StatusCode = 400, ContentTypes = { "application/problem+json" } };
+        }
+
         if (limite is < 1 or > 100)
         {
             var problem = ApiProblemDetails.Create(

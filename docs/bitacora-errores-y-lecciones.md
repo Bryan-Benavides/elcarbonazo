@@ -49,6 +49,39 @@ Copiar este formato y completar solo lo que se haya verificado:
 
 ## Sesión, transporte y concurrencia
 
+### ERR-012 — Comprobación de cuenta pendiente fuera del bloqueo de mesa
+- **Estado:** corregido y probado con ambas intercalaciones usando conexiones independientes y espera observada en PostgreSQL.
+- **Contexto:** liberar una mesa consultaba pedidos pendientes antes de iniciar la transacción, por lo que otro flujo podía abrir una cuenta después de esa lectura.
+- **Corrección:** la mutación de estado inicia una transacción y bloquea la fila de mesa antes de comprobar cuentas pendientes; el envío D2 adquiere el mismo bloqueo antes de crear una cuenta individual.
+- **Prevención:** comprobar invariantes bajo los mismos locks y probar ambas intercalaciones con conexiones independientes; un test secuencial no demuestra ausencia de carreras. Evidencia: `EnviosConcurrencyTests`.
+
+### ERR-013 — Token retenía autorización tras cambiar el rol
+- **Estado:** corregido y cubierto por regresión automatizada.
+- **Contexto:** un token válido podía conservar el rol anterior aunque el usuario cambiara de rol o quedara inactivo, permitiendo reproducir una intención con autorización obsoleta.
+- **Corrección:** cada solicitud autenticada comprueba que el usuario sigue activo y que su rol coincide con el claim; ante discrepancia se rechaza el token.
+- **Prevención:** probar revocación antes de reproducir una clave idempotente; la clave no sustituye autorización vigente.
+
+### ERR-014 — Catálogo demostrativo duplicado aceptado como idéntico
+- **Estado:** corregido; prueba de regresión añadida.
+- **Contexto y causa confirmada:** la comprobación comparaba número de filas y valores permitidos, pero no exigía que todos los nombres fueran distintos. Dos filas idénticas podían sustituir a una fila faltante y pasar como catálogo exacto.
+- **Corrección:** consultar el catálogo sin reutilizar entidades rastreadas y exigir tantos nombres distintos como productos esperados antes de aceptar una segunda ejecución sin cambios; un catálogo distinto se rechaza sin modificaciones.
+- **Prevención:** probar duplicados y ausencias simultáneas al verificar conjuntos, además de los valores individuales y el conteo.
+- **Evidencia:** `DemoCatalogSeeder.cs` y `Duplicate_demo_name_with_missing_product_is_rejected_without_changes` en `PedidosPersistenceTests.cs`; prueba con base PostgreSQL temporal.
+
+### ERR-015 — Respuesta sin campo de cuenta confundida con cuenta vacía
+- **Estado:** corregido y cubierto por prueba Desktop.
+- **Contexto y causa confirmada:** al deserializar `{}`, el valor predeterminado `null` podía confundirse con `{"pedido":null}`, aunque solo este último confirma que no hay cuenta activa.
+- **Corrección:** comprobar que la respuesta JSON contiene explícitamente `pedido` antes de aceptarla; ante ausencia se rechaza como respuesta inválida y se mantienen los datos anteriores sin habilitar escritura.
+- **Prevención:** distinguir campo ausente, valor nulo y respuesta válida en contratos donde el vacío tiene significado de negocio.
+- **Evidencia:** `CuentaPedidoApiService.cs` y `Empty_account_is_a_valid_result` en `ProductosPedidoApiServiceTests.cs`.
+
+### ERR-016 — Fallo inesperado de lectura podía dejar el envío sin bloqueo de incertidumbre
+- **Estado:** corregido y cubierto por prueba con fallo inyectado; no se observó como incidente de usuario.
+- **Contexto y causa confirmada por revisión:** el manejo inicial enumeraba solo ciertos tipos de excepción; una `IOException` al recibir la respuesta podía salir sin marcar la intención como incierta, aun cuando el servidor pudiera haber confirmado.
+- **Corrección:** cualquier excepción no tratada tras iniciar el flujo de envío conserva la intención y bloquea acciones conflictivas; los rechazos HTTP conocidos de la primera solicitud se distinguen. La lectura de datos falla en modo conservador si recibe un error inesperado.
+- **Prevención:** inyectar errores de transporte y lectura de cuerpo, no solo códigos HTTP o timeouts, y verificar ausencia de reintentos automáticos y conservación de la intención.
+- **Evidencia:** `PedidosSalonViewModel.cs` y `Unexpected_response_io_failure_is_uncertain_and_cannot_create_new_intention` en pruebas Desktop.
+
 ### ERR-004 — Carrera cuando refresh termina inmediatamente
 - **Estado:** corregido y cubierto por regresión automatizada.
 - **Contexto y síntoma:** una prueba de refresh rechazado produjo `NullReferenceException` en vez de informar sesión expirada.

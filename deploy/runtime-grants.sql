@@ -9,8 +9,10 @@ GRANT UPDATE (contrasena_hash, intentos_fallidos, bloqueo_hasta)
 GRANT SELECT, UPDATE (estado, id_grupo) ON public.mesa TO elcarbonazo_runtime;
 GRANT SELECT, INSERT, UPDATE ON public.grupo_mesa TO elcarbonazo_runtime;
 GRANT SELECT, INSERT ON public.grupo_mesa_miembro TO elcarbonazo_runtime;
-GRANT SELECT, UPDATE (subtotal, impuestos, total, estado) ON public.pedido TO elcarbonazo_runtime;
-GRANT SELECT ON public.producto TO elcarbonazo_runtime;
+GRANT SELECT, INSERT, UPDATE (subtotal, impuestos, total, estado) ON public.pedido TO elcarbonazo_runtime;
+-- PostgreSQL row locks require UPDATE on at least one column. The version trigger
+-- prevents direct version changes and runtime cannot update product data columns.
+GRANT SELECT, UPDATE (version) ON public.producto TO elcarbonazo_runtime;
 GRANT SELECT, INSERT ON public.comanda TO elcarbonazo_runtime;
 GRANT UPDATE (estado) ON public.comanda TO elcarbonazo_runtime;
 GRANT SELECT, INSERT ON public.detalle_pedido TO elcarbonazo_runtime;
@@ -20,6 +22,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.token_refresh_sesion TO elcarbona
 GRANT SELECT, INSERT ON public.evento_auditoria TO elcarbonazo_runtime;
 
 GRANT USAGE, SELECT ON SEQUENCE public.grupo_mesa_id_grupo_seq TO elcarbonazo_runtime;
+GRANT USAGE, SELECT ON SEQUENCE public.pedido_id_pedido_seq TO elcarbonazo_runtime;
 GRANT USAGE, SELECT ON SEQUENCE public.producto_id_producto_seq TO elcarbonazo_runtime;
 GRANT USAGE, SELECT ON SEQUENCE public.comanda_id_comanda_seq TO elcarbonazo_runtime;
 GRANT USAGE, SELECT ON SEQUENCE public.detalle_pedido_id_detalle_seq TO elcarbonazo_runtime;

@@ -192,6 +192,9 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IMesasService, MesasService>();
 builder.Services.AddScoped<IGruposMesaService, GruposMesaService>();
 builder.Services.AddScoped<IProductosService, ProductosService>();
+builder.Services.AddScoped<ICuentasService, CuentasService>();
+builder.Services.AddScoped<EnviosService>();
+builder.Services.AddScoped<CocinaService>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -276,6 +279,15 @@ builder.Services
                     session.FechaRevocacion is not null ||
                     now >= session.ExpiracionAbsoluta ||
                     now >= session.UltimaActividad.Add(SessionSecurityPolicy.InactivityLifetime))
+                {
+                    context.Fail(new SessionExpiredException());
+                    return;
+                }
+
+                var role = context.Principal?.FindFirst("rol")?.Value;
+                if (role is null || !await db.Usuarios.AsNoTracking().AnyAsync(
+                        user => user.IdUsuario == userId && user.Activo && user.Rol == role,
+                        context.HttpContext.RequestAborted))
                 {
                     context.Fail(new SessionExpiredException());
                 }

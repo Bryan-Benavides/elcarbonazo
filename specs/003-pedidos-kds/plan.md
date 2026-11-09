@@ -1,6 +1,6 @@
 # Plan técnico — 003 Pedidos y KDS
 
-**Estado: D0 y D1 cerrados; D2 en ejecución.** Modelo EF, migración, pruebas de compatibilidad, privilegios runtime, comando aislado del catálogo y endpoint paginado `GET /api/productos` están implementados. No se ha aplicado la migración a una base persistente. Consulta de cuenta/envío y módulos posteriores siguen pendientes. DTOs podrán detallarse sin cambiar reglas aprobadas; cualquier cambio funcional/comercial se refleja primero en la especificación.
+**Estado: D0, D1 y API de D2/D3 completos; D4 en ejecución.** Cola FIFO y transición KDS están implementadas, con pruebas de concurrencia, permisos y rollback. D4 incluye pantalla de salón, cuenta, borrador y envío, con pruebas focalizadas; faltan comprobaciones de integración y revisión visual real. Hay casos Unicode compartidos de API y Desktop. No se ha aplicado la migración a una base persistente.
 
 ## 1. Arquitectura y límites
 
@@ -68,7 +68,7 @@ Controlar cambios concurrentes de precio/disponibilidad con versión monotónica
 
 ## 4. Contratos HTTP — línea base aprobada
 
-JSON camelCase y JWT vigente, `ProblemDetails` con código estable, sin datos internos. Las siguientes rutas son el contrato de referencia aprobado para implementar (todavía no existen):
+JSON camelCase y JWT vigente, `ProblemDetails` con código estable, sin datos internos. Rutas de productos, pedidos y cocina implementadas:
 
 | Método y ruta aprobada | Finalidad | Permisos |
 |---|---|---|
@@ -83,6 +83,8 @@ La ruta explícita evita presentar un único `POST /api/pedidos` ambiguo. Body p
 Errores de dominio usan `application/problem+json` y extensión `code` estable, sin stack, SQL ni detalles sensibles. Para validación de request, conservar el contrato 001: `400 ValidationProblemDetails`, `code=VALIDATION_ERROR` y `errors` por campo camelCase. Códigos de 003: 403 `AUTH_PROHIBIDO` (actual), 404 genérico por recurso inexistente/no accesible, 409 `MESA_CONFLICTO_CONCURRENCIA` (reutilizar el existente cuando aplique), `DESTINO_STATE_CONFLICT`, `CATALOGO_CAMBIADO`, `VERSION_CONFLICT`, `ENVIO_ID_REUTILIZADO`, `CUENTA_LEGADA_SIN_COMANDAS`, 413 `REQUEST_TOO_LARGE`, y 500 genérico. Para 401 se conservan los códigos actuales de sesión, no crear códigos paralelos. Incluir `traceId`; errores 409 pueden incluir versión/estado actual solo cuando el rol esté autorizado. No responder 200/201 si el commit no está confirmado. Timeout/5xx observado por Desktop tras iniciar la escritura se trata como incierto, no como error de negocio ni autorización para crear un ID nuevo automáticamente.
 
 La consulta de cuenta devuelve 200 con `pedido:null` cuando no existe cuenta activa; cuenta legada sin comandas incluye indicador explícito `soloLectura=true` y motivo, y no devuelve líneas inventadas. Destino inexistente/no accesible devuelve 404 genérico. KDS y catálogo usan cursores opacos ligados al orden/filtro; página por defecto 25, máximo 100 y sin garantía de snapshot entre páginas. El endpoint de envío mide límite de body de 64 KiB y devuelve 413 `REQUEST_TOO_LARGE` con ProblemDetails.
+
+En D3, la cola incluye `idComanda`, `idPedido`, destino (`idMesa`/`numeroMesa` o `idGrupo`), emisor, hora UTC, estado, versión opaca y líneas históricas de nombre/cantidad/notas. Devuelve `items` y `cursorSiguiente`; el cursor FIFO usa fecha e ID, sin snapshot entre páginas. Transición rechaza versión anterior con `VERSION_CONFLICT`, salto/retroceso con `DESTINO_STATE_CONFLICT` y no expone endpoints de pago o modificación de líneas. El resultado actualizado se devuelve solo tras commit; auditoría y recálculo son transaccionales.
 
 **Matriz aprobada para especificar e implementar:**
 
@@ -108,9 +110,11 @@ La comanda conserva a su emisor. Las consultas autorizadas de salón no se restr
 
 Crear migración posterior a las existentes; nunca editar migraciones aplicadas. Primero inventario de solo lectura de esquema, restricciones, índices y conteos/estados de `pedido`, sin imprimir datos personales. Añadir tablas/índices nuevos y cambios aditivos mínimos; no recrear `pedido`, borrar/reescribir filas ni fabricar detalles. Las cuentas activas previas sin comanda se consultan en modo solo lectura y bloquean envío en API. Validar que los índices parciales existentes sigan incluyendo `Listo` y no debilitar XOR/FK/checks. Si falta una precondición o una incompatibilidad impide preservar invariantes, cancelar migración completa con diagnóstico seguro. Revisar SQL generado, FKs, tipos, precisión, índices, versiones y permisos runtime. Probar base vacía y esquema 001 representativo —sin pedido, activos con/sin comanda, pagado/cancelado, mesa y grupo—, rollback y preservación de filas/IDs/índices, solo en PostgreSQL temporal. No tocar base persistente sin autorización expresa y destino confirmado. Documentar respaldo y recuperación; no prometer rollback destructivo de datos nuevos.
 
-Actualizar `deploy/runtime-grants.sql` con privilegios mínimos: `producto` SELECT; `comanda` SELECT/INSERT y UPDATE solo de `estado`; `detalle_pedido` y `envio_pedido` SELECT/INSERT; `pedido` UPDATE solo de importes/estado además de SELECT; secuencias nuevas con USAGE/SELECT. Probar estos permisos con un rol runtime temporal; nunca ampliar DDL ni UPDATE/DELETE de las tablas históricas.
+Actualizar `deploy/runtime-grants.sql` con privilegios mínimos: `producto` SELECT y UPDATE solo de `version` para habilitar bloqueos de fila PostgreSQL; el trigger impide alterar esa versión directamente y runtime no puede cambiar datos de producto; `comanda` SELECT/INSERT y UPDATE solo de `estado`; `detalle_pedido` y `envio_pedido` SELECT/INSERT; `pedido` SELECT/INSERT y UPDATE solo de importes/estado, con USAGE/SELECT en su secuencia; secuencias nuevas con USAGE/SELECT. Probar estos permisos con un rol runtime temporal; nunca ampliar DDL ni UPDATE/DELETE de las tablas históricas. Para serializar liberación de mesa y primer envío, la ruta de cambio de estado de 001 adquiere `FOR UPDATE` sobre la mesa antes de consultar cuentas pendientes y conserva el lock hasta commit.
 
 El catálogo de demostración usa nombres y precios explícitamente ficticios; los nombres llevan sufijo `DEMO` y el cliente deberá mostrar marca «DEMOSTRACIÓN». Los precios son datos de recorrido, no precios reales. El seeding es `dotnet run --project src/ElCarbonazo.Api -- --seed-demo-catalog`, solo con `ASPNETCORE_ENVIRONMENT=Development`, `DemoCatalog:Enabled=true` (por ejemplo `DemoCatalog__Enabled=true`) y base actual cuyo nombre comience `elcarbonazo_demo_` o `elcarbonazo_test_`. La ausencia de opt-in falla cerrada. El comando inserta solo si el catálogo está vacío; si ya coincide exactamente, no hace cambios; ante cualquier otro contenido aborta sin sobrescribir. No se ejecuta durante el arranque normal, no usa `HasData` ni endpoint público. Base aislada para aceptación, preparación y limpieza documentadas; las pruebas destructivas solo crean/eliminan bases `elcarbonazo_test_<uuid>` de su propia ejecución con permisos existentes. No ejecutar limpieza de base ajena.
+
+La lista congelada de diez productos ficticios y sus precios se encuentra en `DemoCatalogSeeder.cs` y su regresión `Explicit_seed_is_repeatable_and_does_not_overwrite_a_non_demo_catalog`; no representa precios comerciales. `PedidosPersistenceTests` cubre aritmética, límites, histórico, rechazo completo y auditoría; `EnviosConcurrencyTests` verifica cambios de precio concurrentes.
 
 ## 7. Auditoría y pruebas
 

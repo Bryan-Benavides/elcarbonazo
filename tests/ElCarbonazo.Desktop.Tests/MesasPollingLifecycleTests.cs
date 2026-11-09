@@ -8,6 +8,29 @@ namespace ElCarbonazo.Desktop.Tests;
 
 public sealed class MesasPollingLifecycleTests
 {
+    [Theory]
+    [InlineData("Jefa", true)]
+    [InlineData("Supervisor", true)]
+    [InlineData("Mesero", true)]
+    [InlineData("Encargado de Caja", true)]
+    [InlineData("Personal de Cocina", false)]
+    public async Task Account_navigation_respects_salon_roles(string role, bool expected)
+    {
+        var service = new ControlledMesas();
+        using var viewModel = new MesasViewModel("Ana", role, new FakeSession(), service, DispatchInline);
+        var loaded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MesasViewModel.EstadoConexion) && viewModel.EstadoConexion == "Conectado")
+                loaded.TrySetResult();
+        };
+        var first = await service.NextAsync();
+        first.SetResult([new MesaDto(1, null, 1, 4, "Libre", 1)]);
+        await loaded.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        viewModel.SeleccionarMesaCommand.Execute(viewModel.Mesas[0]);
+        Assert.Equal(expected, viewModel.PuedeAbrirCuenta);
+    }
+
     [Fact]
     public async Task StateCountsFollowVisibleCollectionChanges()
     {

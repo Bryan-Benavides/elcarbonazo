@@ -7,6 +7,7 @@ using ElCarbonazo.Api.Data;
 using ElCarbonazo.Api.Domain;
 using ElCarbonazo.Api.Entities;
 using ElCarbonazo.Api.Security;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -420,6 +421,588 @@ public sealed class ApiFlowTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Forbidden, kitchenResponse.StatusCode);
     }
 
+    [Fact]
+    public async Task Active_account_returns_empty_legacy_and_enforces_permissions()
+    {
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _client.GetAsync("/api/pedidos/activo?mesaId=1")).StatusCode);
+        var token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var empty = await _client.GetFromJsonAsync<JsonElement>("/api/pedidos/activo?mesaId=1");
+        Assert.Equal(JsonValueKind.Null, empty.GetProperty("pedido").ValueKind);
+        Assert.Equal(HttpStatusCode.BadRequest, (await _client.GetAsync("/api/pedidos/activo?mesaId=1&grupoId=1")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await _client.GetAsync("/api/pedidos/activo?mesaId=99")).StatusCode);
+
+        await using (var context = _database.CreateContext())
+        {
+            context.Pedidos.Add(new Pedido
+            {
+                IdMesa = 1,
+                IdUsuario = 1,
+                FechaHora = DateTimeOffset.UtcNow,
+                Subtotal = 42m,
+                Impuestos = 0m,
+                Total = 42m,
+                Estado = PedidoStates.Listo
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var legacy = await _client.GetFromJsonAsync<JsonElement>("/api/pedidos/activo?mesaId=1");
+        var pedido = legacy.GetProperty("pedido");
+        Assert.True(pedido.GetProperty("soloLectura").GetBoolean());
+        Assert.Empty(pedido.GetProperty("comandas").EnumerateArray());
+        Assert.Equal(42m, pedido.GetProperty("total").GetDecimal());
+
+        _client.DefaultRequestHeaders.Authorization = null;
+        var kitchen = await LoginAsync("cocina", "kitchen password");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", kitchen);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync("/api/pedidos/activo?mesaId=1")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Order_send_is_atomic_idempotent_and_preserves_lines()
+    {
+        int productId;
+        await using (var context = _database.CreateContext())
+        {
+            var product = new Producto { Nombre = "Prueba", Categoria = "Comida", Precio = 10.10m, Disponible = true };
+            context.Productos.Add(product);
+            await context.SaveChangesAsync();
+            productId = product.IdProducto;
+        }
+
+        var token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var mesa = (await _client.GetFromJsonAsync<JsonElement[]>("/api/mesas"))!.Single(item => item.GetProperty("idMesa").GetInt32() == 1);
+        var envioId = Guid.NewGuid();
+        var body = new
+        {
+            envioId,
+            mesaId = 1,
+            versionMesa = mesa.GetProperty("version").GetUInt32(),
+            lineas = new[]
+            {
+                new { idProducto = productId, versionProducto = 1, cantidad = 2, notas = "Cafe\u0301" },
+                new { idProducto = productId, versionProducto = 1, cantidad = 1, notas = "" }
+            }
+        };
+        var first = await _client.PostAsJsonAsync("/api/pedidos/envios", body);
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        var firstJson = await first.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(30.30m, firstJson.GetProperty("pedido").GetProperty("total").GetDecimal());
+        var replay = await _client.PostAsJsonAsync("/api/pedidos/envios", body);
+        Assert.Equal(HttpStatusCode.Created, replay.StatusCode);
+        Assert.Equal(firstJson.GetProperty("idComanda").GetInt32(),
+            (await replay.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("idComanda").GetInt32());
+        Assert.Equal(first.Headers.Location, replay.Headers.Location);
+
+        var normalizedReplay = await _client.PostAsJsonAsync("/api/pedidos/envios", new
+        {
+            envioId,
+            mesaId = 1,
+            versionMesa = mesa.GetProperty("version").GetUInt32(),
+            lineas = new[]
+            {
+                new { idProducto = productId, versionProducto = 1, cantidad = 2, notas = "Café" },
+                new { idProducto = productId, versionProducto = 1, cantidad = 1, notas = "" }
+            }
+        });
+        Assert.Equal(HttpStatusCode.Created, normalizedReplay.StatusCode);
+
+        var conflict = await _client.PostAsJsonAsync("/api/pedidos/envios", new
+        {
+            envioId,
+            mesaId = 1,
+            versionMesa = mesa.GetProperty("version").GetUInt32(),
+            lineas = new[] { new { idProducto = productId, versionProducto = 1, cantidad = 1, notas = "" } }
+        });
+        Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
+        Assert.Equal("ENVIO_ID_REUTILIZADO", (await conflict.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+        await using var verify = _database.CreateContext();
+        Assert.Equal(1, await verify.Pedidos.CountAsync());
+        Assert.Equal(1, await verify.Comandas.CountAsync());
+        Assert.Equal(2, await verify.DetallesPedido.CountAsync());
+        Assert.Contains(await verify.DetallesPedido.Select(item => item.Notas).ToListAsync(), note => note == "Café");
+        Assert.Equal(1, await verify.EventosAuditoria.CountAsync(item => item.TipoEvento == "ComandaEnviada"));
+        Assert.Equal("Ocupada", await verify.Mesas.Where(item => item.IdMesa == 1).Select(item => item.Estado).SingleAsync());
+    }
+
+    [Fact]
+    public async Task Concurrent_identical_sends_produce_one_command_and_catalog_conflict_rolls_back()
+    {
+        int productId;
+        await using (var context = _database.CreateContext())
+        {
+            var product = new Producto { Nombre = "Prueba", Categoria = "Bebida", Precio = 5m, Disponible = true };
+            context.Productos.Add(product);
+            await context.SaveChangesAsync();
+            productId = product.IdProducto;
+        }
+        var token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var mesas = (await _client.GetFromJsonAsync<JsonElement[]>("/api/mesas"))!;
+        var version = mesas.Single(item => item.GetProperty("idMesa").GetInt32() == 1).GetProperty("version").GetUInt32();
+        var body = new
+        {
+            envioId = Guid.NewGuid(),
+            mesaId = 1,
+            versionMesa = version,
+            lineas = new[] { new { idProducto = productId, versionProducto = 1, cantidad = 1 } }
+        };
+        var responses = await Task.WhenAll(
+            _client.PostAsJsonAsync("/api/pedidos/envios", body),
+            _client.PostAsJsonAsync("/api/pedidos/envios", body));
+        Assert.All(responses, response => Assert.Equal(HttpStatusCode.Created, response.StatusCode));
+        var left = await responses[0].Content.ReadFromJsonAsync<JsonElement>();
+        var right = await responses[1].Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(left.GetProperty("idComanda").GetInt32(), right.GetProperty("idComanda").GetInt32());
+
+        var secondVersion = mesas.Single(item => item.GetProperty("idMesa").GetInt32() == 2).GetProperty("version").GetUInt32();
+        var invalid = await _client.PostAsJsonAsync("/api/pedidos/envios", new
+        {
+            envioId = Guid.NewGuid(),
+            mesaId = 2,
+            versionMesa = secondVersion,
+            lineas = new[] { new { idProducto = productId, versionProducto = 999, cantidad = 1 } }
+        });
+        Assert.Equal(HttpStatusCode.Conflict, invalid.StatusCode);
+        Assert.Equal("CATALOGO_CAMBIADO", (await invalid.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+        await using var verify = _database.CreateContext();
+        Assert.Equal(1, await verify.Comandas.CountAsync());
+        Assert.Equal(1, await verify.EnviosPedido.CountAsync());
+        Assert.Equal("Libre", await verify.Mesas.Where(item => item.IdMesa == 2).Select(item => item.Estado).SingleAsync());
+    }
+
+    [Fact]
+    public async Task Group_sends_share_account_and_block_closing_group()
+    {
+        int productId;
+        await using (var context = _database.CreateContext())
+        {
+            var product = new Producto { Nombre = "Prueba", Categoria = "Comida", Precio = 8m, Disponible = true };
+            context.Productos.Add(product);
+            await context.SaveChangesAsync();
+            productId = product.IdProducto;
+        }
+        var token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var tables = (await _client.GetFromJsonAsync<JsonElement[]>("/api/mesas"))!;
+        var members = tables.Where(item => item.GetProperty("idMesa").GetInt32() is 2 or 3)
+            .Select(item => new { idMesa = item.GetProperty("idMesa").GetInt32(), version = item.GetProperty("version").GetUInt32() }).ToArray();
+        var groupResponse = await _client.PostAsJsonAsync("/api/grupos-mesa", new { mesas = members });
+        Assert.Equal(HttpStatusCode.Created, groupResponse.StatusCode);
+        var group = (await groupResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("idGrupo").GetInt32();
+        for (var i = 0; i < 2; i++)
+        {
+            var response = await _client.PostAsJsonAsync("/api/pedidos/envios", new
+            {
+                envioId = Guid.NewGuid(),
+                grupoId = group,
+                lineas = new[] { new { idProducto = productId, versionProducto = 1, cantidad = 1 } }
+            });
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        }
+        var account = await _client.GetFromJsonAsync<JsonElement>($"/api/pedidos/activo?grupoId={group}");
+        Assert.Equal(2, account.GetProperty("pedido").GetProperty("comandas").GetArrayLength());
+        Assert.Equal(16m, account.GetProperty("pedido").GetProperty("total").GetDecimal());
+        Assert.Equal(HttpStatusCode.Conflict, (await _client.DeleteAsync($"/api/grupos-mesa/{group}")).StatusCode);
+        await using var verify = _database.CreateContext();
+        Assert.Equal(1, await verify.Pedidos.CountAsync());
+        Assert.Equal(2, await verify.Mesas.CountAsync(item => item.IdGrupo == group && item.Estado == "Agrupada"));
+    }
+
+    [Fact]
+    public async Task Order_send_rejects_invalid_bodies_limits_legacy_and_unauthorized_role()
+    {
+        var token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var oversized = await _client.PostAsync("/api/pedidos/envios",
+            new StringContent(new string('x', 65537), System.Text.Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, oversized.StatusCode);
+        Assert.Equal("REQUEST_TOO_LARGE", (await oversized.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+        var badCount = await _client.PostAsJsonAsync("/api/pedidos/envios", new
+        {
+            envioId = Guid.NewGuid(),
+            mesaId = 1,
+            versionMesa = 1,
+            lineas = Enumerable.Range(0, 51).Select(_ => new { idProducto = 1, versionProducto = 1, cantidad = 1 }).ToArray()
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, badCount.StatusCode);
+        await using (var context = _database.CreateContext())
+        {
+            context.Pedidos.Add(new Pedido
+            {
+                IdMesa = 1,
+                IdUsuario = 1,
+                FechaHora = DateTimeOffset.UtcNow,
+                Subtotal = 10m,
+                Impuestos = 0m,
+                Total = 10m,
+                Estado = PedidoStates.Listo
+            });
+            await context.SaveChangesAsync();
+        }
+        var mesas = (await _client.GetFromJsonAsync<JsonElement[]>("/api/mesas"))!;
+        var version = mesas.Single(item => item.GetProperty("idMesa").GetInt32() == 1).GetProperty("version").GetUInt32();
+        var body = new
+        {
+            envioId = Guid.NewGuid(),
+            mesaId = 1,
+            versionMesa = version,
+            lineas = new[] { new { idProducto = 1, versionProducto = 1, cantidad = 1 } }
+        };
+        var legacy = await _client.PostAsJsonAsync("/api/pedidos/envios", body);
+        Assert.Equal(HttpStatusCode.Conflict, legacy.StatusCode);
+        Assert.Equal("CUENTA_LEGADA_SIN_COMANDAS", (await legacy.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+        _client.DefaultRequestHeaders.Authorization = null;
+        var kitchen = await LoginAsync("cocina", "kitchen password");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", kitchen);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.PostAsJsonAsync("/api/pedidos/envios", body)).StatusCode);
+        await using var verify = _database.CreateContext();
+        Assert.Empty(await verify.Comandas.ToListAsync());
+        Assert.Empty(await verify.EnviosPedido.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Lost_response_can_be_replayed_after_api_restart_with_same_intention()
+    {
+        int productId;
+        await using (var context = _database.CreateContext())
+        {
+            var product = new Producto { Nombre = "Prueba", Categoria = "Bebida", Precio = 3m, Disponible = true };
+            context.Productos.Add(product);
+            await context.SaveChangesAsync();
+            productId = product.IdProducto;
+        }
+        var token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var tables = (await _client.GetFromJsonAsync<JsonElement[]>("/api/mesas"))!;
+        var version = tables.Single(x => x.GetProperty("idMesa").GetInt32() == 1).GetProperty("version").GetUInt32();
+        var body = new
+        {
+            envioId = Guid.NewGuid(),
+            mesaId = 1,
+            versionMesa = version,
+            lineas = new[] { new { idProducto = productId, versionProducto = 1, cantidad = 1, notas = "Café" } }
+        };
+        var first = await _client.PostAsJsonAsync("/api/pedidos/envios", body);
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        var expected = await first.Content.ReadFromJsonAsync<JsonElement>();
+        var location = first.Headers.Location;
+        _client.Dispose();
+        await _factory.DisposeAsync();
+        _factory = new TestApiFactory(_database.ConnectionString, _database.LogDirectory);
+        _client = _factory.CreateClient();
+        var newToken = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", newToken);
+        var replay = await _client.PostAsJsonAsync("/api/pedidos/envios", body);
+        Assert.Equal(HttpStatusCode.Created, replay.StatusCode);
+        Assert.Equal(location, replay.Headers.Location);
+        Assert.True(JsonElement.DeepEquals(expected, await replay.Content.ReadFromJsonAsync<JsonElement>()));
+        await using (var updateUser = _database.CreateContext())
+        {
+            await updateUser.Database.ExecuteSqlRawAsync("UPDATE usuario SET rol = 'Mesero' WHERE id_usuario = 2");
+        }
+        _client.DefaultRequestHeaders.Authorization = null;
+        var otherToken = await LoginAsync("cocina", "kitchen password");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", otherToken);
+        var differentActor = await _client.PostAsJsonAsync("/api/pedidos/envios", body);
+        Assert.Equal(HttpStatusCode.Conflict, differentActor.StatusCode);
+        Assert.Equal("ENVIO_ID_REUTILIZADO", (await differentActor.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+        await using var verify = _database.CreateContext();
+        Assert.Equal(1, await verify.Comandas.CountAsync());
+        Assert.Equal(1, await verify.EnviosPedido.CountAsync());
+    }
+
+    [Fact]
+    public async Task Replay_rechecks_current_role_and_rejects_revoked_authorization()
+    {
+        int productId;
+        await using (var context = _database.CreateContext())
+        {
+            var product = new Producto { Nombre = "Prueba", Categoria = "Bebida", Precio = 3m, Disponible = true };
+            context.Productos.Add(product);
+            await context.SaveChangesAsync();
+            productId = product.IdProducto;
+        }
+        var token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var tables = (await _client.GetFromJsonAsync<JsonElement[]>("/api/mesas"))!;
+        var body = new
+        {
+            envioId = Guid.NewGuid(),
+            mesaId = 1,
+            versionMesa = tables.Single(x => x.GetProperty("idMesa").GetInt32() == 1).GetProperty("version").GetUInt32(),
+            lineas = new[] { new { idProducto = productId, versionProducto = 1, cantidad = 1 } }
+        };
+        Assert.Equal(HttpStatusCode.Created, (await _client.PostAsJsonAsync("/api/pedidos/envios", body)).StatusCode);
+        await using (var context = _database.CreateContext())
+        {
+            await context.Database.ExecuteSqlRawAsync("UPDATE usuario SET rol = 'Personal de Cocina' WHERE id_usuario = 1");
+        }
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _client.PostAsJsonAsync("/api/pedidos/envios", body)).StatusCode);
+        await using var verify = _database.CreateContext();
+        Assert.Equal(1, await verify.Comandas.CountAsync());
+    }
+
+    [Fact]
+    public async Task Timeout_after_commit_can_be_replayed_without_duplicate_command()
+    {
+        int productId;
+        await using (var context = _database.CreateContext())
+        {
+            var product = new Producto { Nombre = "Prueba", Categoria = "Comida", Precio = 10m, Disponible = true };
+            context.Productos.Add(product);
+            await context.SaveChangesAsync();
+            productId = product.IdProducto;
+        }
+        var gate = new PostCommitGate();
+        await using var factory = new TestApiFactory(_database.ConnectionString, _database.LogDirectory, gate);
+        using var client = factory.CreateClient();
+        var login = await client.PostAsJsonAsync("/api/auth/login", new { nombre = "jefa central", contrasena = "correct horse battery staple" });
+        login.EnsureSuccessStatusCode();
+        var token = (await login.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("accessToken").GetString();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var tables = (await client.GetFromJsonAsync<JsonElement[]>("/api/mesas"))!;
+        var version = tables.Single(x => x.GetProperty("idMesa").GetInt32() == 1).GetProperty("version").GetUInt32();
+        var body = new
+        {
+            envioId = Guid.NewGuid(),
+            mesaId = 1,
+            versionMesa = version,
+            lineas = new[] { new { idProducto = productId, versionProducto = 1, cantidad = 1 } }
+        };
+        using var timeout = new CancellationTokenSource();
+        var first = client.PostAsJsonAsync("/api/pedidos/envios", body, timeout.Token);
+        await gate.Committed.Task.WaitAsync(TimeSpan.FromSeconds(20));
+        timeout.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
+        var retry = await client.PostAsJsonAsync("/api/pedidos/envios", body);
+        Assert.Equal(HttpStatusCode.Created, retry.StatusCode);
+        await using var verify = _database.CreateContext();
+        Assert.Equal(1, await verify.Comandas.CountAsync());
+        Assert.Equal(1, await verify.EnviosPedido.CountAsync());
+    }
+
+    [Fact]
+    public async Task Send_body_64k_boundary_chunked_limit_and_decimal_quantity_are_validated()
+    {
+        int productId;
+        await using (var context = _database.CreateContext())
+        {
+            var product = new Producto { Nombre = "Prueba", Categoria = "Bebida", Precio = 1m, Disponible = true };
+            context.Productos.Add(product);
+            await context.SaveChangesAsync();
+            productId = product.IdProducto;
+        }
+        var token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var tables = (await _client.GetFromJsonAsync<JsonElement[]>("/api/mesas"))!;
+        var version = tables.Single(x => x.GetProperty("idMesa").GetInt32() == 1).GetProperty("version").GetUInt32();
+        var json = JsonSerializer.Serialize(new
+        {
+            envioId = Guid.NewGuid(),
+            mesaId = 1,
+            versionMesa = version,
+            lineas = new[] { new { idProducto = productId, versionProducto = 1, cantidad = 1 } }
+        });
+        var exact = json.PadRight(65536, ' ');
+        using var exactRequest = new HttpRequestMessage(HttpMethod.Post, "/api/pedidos/envios")
+        {
+            Content = new StringContent(exact, System.Text.Encoding.UTF8, "application/json")
+        };
+        exactRequest.Headers.TransferEncodingChunked = true;
+        Assert.Equal(HttpStatusCode.Created, (await _client.SendAsync(exactRequest)).StatusCode);
+        using var oversized = new HttpRequestMessage(HttpMethod.Post, "/api/pedidos/envios")
+        {
+            Content = new UnknownLengthContent(exact + " ")
+        };
+        oversized.Headers.TransferEncodingChunked = true;
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, (await _client.SendAsync(oversized)).StatusCode);
+        var decimalQuantity = await _client.PostAsJsonAsync("/api/pedidos/envios", new
+        {
+            envioId = Guid.NewGuid(),
+            mesaId = 2,
+            versionMesa = tables.Single(x => x.GetProperty("idMesa").GetInt32() == 2).GetProperty("version").GetUInt32(),
+            lineas = new[] { new { idProducto = productId, versionProducto = 1, cantidad = 1.5m } }
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, decimalQuantity.StatusCode);
+        await using var verify = _database.CreateContext();
+        Assert.Equal(1, await verify.Comandas.CountAsync());
+    }
+
+    [Fact]
+    public async Task Kitchen_queue_and_transitions_preserve_account_and_enforce_roles()
+    {
+        int productId;
+        await using (var context = _database.CreateContext())
+        {
+            var product = new Producto { Nombre = "Prueba cocina", Categoria = "Comida", Precio = 5m, Disponible = true };
+            context.Productos.Add(product);
+            await context.SaveChangesAsync();
+            productId = product.IdProducto;
+        }
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _client.GetAsync("/api/cocina/cola")).StatusCode);
+        var owner = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", owner);
+        var tables = (await _client.GetFromJsonAsync<JsonElement[]>("/api/mesas"))!;
+        var mesaVersion = tables.Single(item => item.GetProperty("idMesa").GetInt32() == 1).GetProperty("version").GetUInt32();
+        var first = await _client.PostAsJsonAsync("/api/pedidos/envios", new
+        {
+            envioId = Guid.NewGuid(),
+            mesaId = 1,
+            versionMesa = mesaVersion,
+            lineas = new[] { new { idProducto = productId, versionProducto = 1, cantidad = 2, notas = "Sin sal" } }
+        });
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        var payload = await first.Content.ReadFromJsonAsync<JsonElement>();
+        var id = payload.GetProperty("idComanda").GetInt32();
+        mesaVersion = payload.GetProperty("versionMesa").GetUInt32();
+        Assert.Equal(HttpStatusCode.Created, (await _client.PostAsJsonAsync("/api/pedidos/envios", new
+        {
+            envioId = Guid.NewGuid(),
+            mesaId = 1,
+            versionMesa = mesaVersion,
+            lineas = new[] { new { idProducto = productId, versionProducto = 1, cantidad = 1, notas = "" } }
+        })).StatusCode);
+
+        _client.DefaultRequestHeaders.Authorization = null;
+        var kitchen = await LoginAsync("cocina", "kitchen password");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", kitchen);
+        var queue = await _client.GetFromJsonAsync<JsonElement>("/api/cocina/cola?limite=1");
+        var item = queue.GetProperty("items")[0];
+        Assert.Equal(id, item.GetProperty("idComanda").GetInt32());
+        Assert.Equal("Sin sal", item.GetProperty("lineas")[0].GetProperty("notas").GetString());
+        var cursor = queue.GetProperty("cursorSiguiente").GetString();
+        Assert.NotNull(cursor);
+        var page2 = await _client.GetFromJsonAsync<JsonElement>($"/api/cocina/cola?limite=1&cursor={Uri.EscapeDataString(cursor)}");
+        Assert.NotEqual(id, page2.GetProperty("items")[0].GetProperty("idComanda").GetInt32());
+        Assert.Equal(HttpStatusCode.BadRequest, (await _client.GetAsync("/api/cocina/cola?cursor=invalid!")).StatusCode);
+        var version = item.GetProperty("version").GetUInt32();
+        var skip = await _client.PutAsJsonAsync($"/api/cocina/comandas/{id}/estado", new { estado = "Lista", versionComanda = version });
+        Assert.Equal(HttpStatusCode.Conflict, skip.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await _client.PutAsJsonAsync($"/api/cocina/comandas/{id}/estado",
+            new { estado = "Cancelada", versionComanda = version })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await _client.PutAsJsonAsync($"/api/cocina/comandas/{id}/estado",
+            new { estado = "En Preparación" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await _client.PutAsJsonAsync("/api/cocina/comandas/2147483647/estado",
+            new { estado = "En Preparación", versionComanda = version })).StatusCode);
+        var prepare = await _client.PutAsJsonAsync($"/api/cocina/comandas/{id}/estado", new { estado = "En Preparación", versionComanda = version });
+        Assert.Equal(HttpStatusCode.OK, prepare.StatusCode);
+        var prepared = await prepare.Content.ReadFromJsonAsync<JsonElement>();
+        var stale = await _client.PutAsJsonAsync($"/api/cocina/comandas/{id}/estado", new { estado = "Lista", versionComanda = version });
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Equal("VERSION_CONFLICT", (await stale.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+        var ready = await _client.PutAsJsonAsync($"/api/cocina/comandas/{id}/estado", new
+        {
+            estado = "Lista",
+            versionComanda = prepared.GetProperty("version").GetUInt32()
+        });
+        Assert.Equal(HttpStatusCode.OK, ready.StatusCode);
+        var remaining = await _client.GetFromJsonAsync<JsonElement>("/api/cocina/cola");
+        Assert.Single(remaining.GetProperty("items").EnumerateArray());
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync("/api/pedidos/activo?mesaId=1")).StatusCode);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", owner);
+        var account = (await _client.GetFromJsonAsync<JsonElement>("/api/pedidos/activo?mesaId=1")).GetProperty("pedido");
+        Assert.Equal("Abierto", account.GetProperty("estado").GetString());
+        Assert.Contains(account.GetProperty("comandas").EnumerateArray(), command => command.GetProperty("estado").GetString() == "Lista");
+        var second = remaining.GetProperty("items")[0];
+        var secondId = second.GetProperty("idComanda").GetInt32();
+        var secondPrepare = await _client.PutAsJsonAsync($"/api/cocina/comandas/{secondId}/estado", new
+        {
+            estado = "En Preparación",
+            versionComanda = second.GetProperty("version").GetUInt32()
+        });
+        Assert.Equal(HttpStatusCode.OK, secondPrepare.StatusCode);
+        var secondPrepared = await secondPrepare.Content.ReadFromJsonAsync<JsonElement>();
+        var secondReady = await _client.PutAsJsonAsync($"/api/cocina/comandas/{secondId}/estado", new
+        {
+            estado = "Lista",
+            versionComanda = secondPrepared.GetProperty("version").GetUInt32()
+        });
+        Assert.Equal(HttpStatusCode.OK, secondReady.StatusCode);
+        Assert.Empty((await _client.GetFromJsonAsync<JsonElement>("/api/cocina/cola")).GetProperty("items").EnumerateArray());
+        var readyAccount = (await _client.GetFromJsonAsync<JsonElement>("/api/pedidos/activo?mesaId=1")).GetProperty("pedido");
+        Assert.Equal("Listo", readyAccount.GetProperty("estado").GetString());
+        Assert.Equal(HttpStatusCode.Created, (await _client.PostAsJsonAsync("/api/pedidos/envios", new
+        {
+            envioId = Guid.NewGuid(),
+            mesaId = 1,
+            versionMesa = mesaVersion,
+            lineas = new[] { new { idProducto = productId, versionProducto = 1, cantidad = 1, notas = "" } }
+        })).StatusCode);
+        var reopened = (await _client.GetFromJsonAsync<JsonElement>("/api/pedidos/activo?mesaId=1")).GetProperty("pedido");
+        Assert.Equal("Abierto", reopened.GetProperty("estado").GetString());
+        Assert.Equal(2, reopened.GetProperty("comandas").EnumerateArray().Count(command => command.GetProperty("estado").GetString() == "Lista"));
+        await using var verify = _database.CreateContext();
+        Assert.Equal(4, await verify.EventosAuditoria.CountAsync(evento => evento.TipoEvento == "ComandaEstadoCambiado"));
+        var auditDetails = await verify.EventosAuditoria.Where(evento => evento.TipoEvento == "ComandaEstadoCambiado")
+            .Select(evento => evento.Detalles).ToListAsync();
+        Assert.DoesNotContain(auditDetails, item => item.Contains("Sin sal", StringComparison.Ordinal));
+        Assert.DoesNotContain(auditDetails, item => item.Contains("Prueba cocina", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("Mesero")]
+    [InlineData("Encargado de Caja")]
+    public async Task Salon_roles_cannot_access_kitchen_queue_or_transition(string role)
+    {
+        await using (var context = _database.CreateContext())
+        {
+            await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE usuario SET rol = {role} WHERE id_usuario = 2");
+        }
+        var token = await LoginAsync("cocina", "kitchen password");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync("/api/cocina/cola")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.PutAsJsonAsync("/api/cocina/comandas/1/estado",
+            new { estado = "Lista", versionComanda = 1 })).StatusCode);
+    }
+
+    [Fact]
+    public async Task Supervisor_can_read_kitchen_and_legacy_account_creates_no_ticket()
+    {
+        int commandId;
+        await using (var context = _database.CreateContext())
+        {
+            await context.Database.ExecuteSqlRawAsync("UPDATE usuario SET rol = 'Supervisor' WHERE id_usuario = 2");
+            context.Pedidos.Add(new Pedido
+            {
+                IdMesa = 1,
+                IdUsuario = 1,
+                FechaHora = DateTimeOffset.UtcNow,
+                Subtotal = 10m,
+                Impuestos = 0m,
+                Total = 10m,
+                Estado = PedidoStates.Listo
+            });
+            await context.SaveChangesAsync();
+            var product = new Producto { Nombre = "Prueba", Categoria = "Comida", Precio = 1m, Disponible = true };
+            context.Productos.Add(product);
+            await context.SaveChangesAsync();
+            var version = await context.Mesas.Where(x => x.IdMesa == 2).Select(x => x.Version).SingleAsync();
+            var audit = new AuditRecorder(context, new TestHttpContextAccessor(), TimeProvider.System);
+            var sent = await new ElCarbonazo.Api.Services.EnviosService(context, audit, TimeProvider.System).EnviarAsync(
+                new ElCarbonazo.Api.DTOs.EnvioRequest(Guid.NewGuid(), 2, null, version,
+                    [new ElCarbonazo.Api.DTOs.EnvioLineaRequest(product.IdProducto, product.Version, 1, "")]),
+                1, CancellationToken.None);
+            Assert.Equal(201, sent.Status);
+            commandId = await context.Comandas.Select(x => x.IdComanda).SingleAsync();
+        }
+        var token = await LoginAsync("cocina", "kitchen password");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var queue = await _client.GetFromJsonAsync<JsonElement>("/api/cocina/cola");
+        var ticket = Assert.Single(queue.GetProperty("items").EnumerateArray());
+        Assert.Equal(commandId, ticket.GetProperty("idComanda").GetInt32());
+        Assert.Equal(HttpStatusCode.OK, (await _client.PutAsJsonAsync($"/api/cocina/comandas/{commandId}/estado",
+            new { estado = "En Preparación", versionComanda = ticket.GetProperty("version").GetUInt32() })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await _client.PutAsJsonAsync("/api/cocina/comandas/2147483647/estado",
+            new { estado = "En Preparación", versionComanda = 1 })).StatusCode);
+        await using var verify = _database.CreateContext();
+        Assert.Equal("Listo", await verify.Pedidos.Where(x => x.IdMesa == 1).Select(x => x.Estado).SingleAsync());
+        Assert.Equal(1, await verify.Comandas.CountAsync());
+        Assert.Equal(1, await verify.EventosAuditoria.CountAsync(x => x.TipoEvento == "ComandaEstadoCambiado"));
+    }
+
     private async Task<string> LoginAsync(string name, string password)
     {
         var response = await _client.PostAsJsonAsync("/api/auth/login", new { nombre = name, contrasena = password });
@@ -518,6 +1101,18 @@ public sealed class ApiFlowTests : IAsyncLifetime
     }
 }
 
+internal sealed class UnknownLengthContent(string text) : HttpContent
+{
+    protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) =>
+        stream.WriteAsync(System.Text.Encoding.UTF8.GetBytes(text)).AsTask();
+
+    protected override bool TryComputeLength(out long length)
+    {
+        length = 0;
+        return false;
+    }
+}
+
 public sealed class MesaTransitionUnitTests
 {
     [Theory]
@@ -532,12 +1127,16 @@ public sealed class MesaTransitionUnitTests
         Assert.Equal(expected, MesaStateTransitions.IsAllowed(current, requested));
 }
 
-internal sealed class TestApiFactory(string connectionString, string logDirectory) : WebApplicationFactory<Program>
+internal sealed class TestApiFactory(string connectionString, string logDirectory, PostCommitGate? postCommitGate = null) : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         var jwtKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         builder.UseEnvironment(Environments.Development);
+        if (postCommitGate is not null)
+        {
+            builder.ConfigureServices(services => services.AddSingleton<IStartupFilter>(new PostCommitFilter(postCommitGate)));
+        }
         builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(
             new Dictionary<string, string?>
             {
@@ -550,6 +1149,30 @@ internal sealed class TestApiFactory(string connectionString, string logDirector
                 ["Logging:FileDirectory"] = logDirectory
             }));
     }
+}
+
+internal sealed class PostCommitGate
+{
+    public TaskCompletionSource Committed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public int Triggered;
+}
+
+internal sealed class PostCommitFilter(PostCommitGate gate) : IStartupFilter
+{
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+    {
+        app.Use(async (context, continuation) =>
+        {
+            await continuation();
+            if (context.Request.Path == "/api/pedidos/envios" && context.Response.StatusCode == 201 &&
+                Interlocked.Exchange(ref gate.Triggered, 1) == 0)
+            {
+                gate.Committed.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, context.RequestAborted);
+            }
+        });
+        next(app);
+    };
 }
 
 internal sealed class TemporaryPostgresDatabase : IAsyncLifetime

@@ -1,6 +1,6 @@
 # Tareas — 003 Pedidos y monitor KDS
 
-**Estado:** D0 y D1 completos; D2 en ejecución. El catálogo paginado está implementado; consulta de cuenta y envío siguen pendientes. Implementar conforme a `spec.md`/`plan.md`; cualquier cambio de alcance requiere actualizar y aprobar la especificación antes de codificarlo. No aplicar migraciones ni modificar bases persistentes sin autorización expresa y destino confirmado. `002-operaciones-seguras` sigue pospuesto y separado.
+**Estado:** D0, D1 y alcance API de D2/D3 completos; D4 en ejecución con pantalla de salón, cuenta, borrador y envío implementados. Quedan pruebas adicionales y revisión visual/táctil en ejecución; no se declara aceptación por compilar. Las pruebas de recuperación son controladas y no sustituyen pruebas de red física. No aplicar migraciones ni modificar bases persistentes sin autorización expresa y destino confirmado. `002-operaciones-seguras` sigue pospuesto y separado.
 
 ## D0 — Acuerdos y diseño
 
@@ -28,24 +28,36 @@
 ## D2 — API de catálogo y cuentas
 
 - [x] Implementar `GET /api/productos` con autorización de salón, filtro de disponibilidad, cursor opaco ligado al filtro y páginas de 1–100 (25 por defecto).
-- [ ] Implementar contratos validados de consulta de cuenta y envío; validar autorización, destino XOR y reglas de grupo/mesa.
-- [ ] Congelar nombres/precios de demostración y calcular importes en API; pruebas de límites, cambio de precio/disponibilidad, aritmética exacta (sin impuesto), rechazo completo y auditoría.
-- [ ] Confirmar primer envío y ocupación en transacción; envíos posteriores crean comanda adicional en la misma cuenta. Comprobar unicidad y respuesta/versiones.
-- [ ] Probar idempotencia en repetición secuencial/concurrente, mismo ID con contenido distinto, timeout tras commit, rollback/fallo de auditoría y reinicio de API; comprobar resultado original y ausencia de duplicados.
-- [ ] Probar carreras independientes abrir/abrir, enviar/liberar y enviar/cerrar grupo; verificar auditoría atómica y que 001 conserva comportamiento.
+- [x] Implementar consulta de cuenta activa con autorización de salón, XOR de destino y visualización de cuentas heredadas de solo lectura.
+- [x] Implementar envío validado; validar autorización, destino XOR y reglas de grupo/mesa.
+- [x] Congelar nombres/precios ficticios en `DemoCatalogSeeder` y prueba de regresión; calcular importes en API y probar límites, cambio de precio/disponibilidad, aritmética exacta sin impuesto, rechazo completo y auditoría en PostgreSQL temporal.
+- [x] Confirmar primer envío y ocupación en transacción; envíos posteriores crean comanda adicional en la misma cuenta. Comprobar unicidad y respuesta/versiones.
+- [x] Probar idempotencia en repetición secuencial/concurrente, mismo ID con contenido distinto u otro actor autorizado, cancelación del cliente después de commit mediante barrera del TestServer, rollback/fallo de auditoría y reinicio del host; comprobar resultado original y ausencia de duplicados. La cancelación controlada no representa una prueba física de red.
+- [x] Probar carreras abrir/abrir, enviar/liberar y enviar/cerrar grupo con conexiones independientes, barrera transaccional y espera observada en PostgreSQL; en liberar/cerrar probar ambos órdenes.
+- [x] Probar envío con rol runtime temporal, repetición concurrente de la misma clave, conflicto de catálogo, cuenta de grupo y rollback por fallo de auditoría.
+- [x] Probar límites de 50 líneas, 99 unidades, nota 150 escalares, desbordamiento del total, precio histórico, cero impuestos y rechazo de versión de catálogo anterior.
+- [x] Probar repetición de la misma intención después de reiniciar el host API, rechazo cuando el rol del token ya no coincide con el usuario activo y otro actor autorizado con la misma clave.
+- [x] Probar cambio concurrente de precio con transacción que bloquea producto; verificar conflicto y rollback completo.
+- [x] Probar rechazo de producto no disponible, cantidades cero/negativas/fuera de rango, notas con controles y notas de más de 150 escalares sin persistencia parcial.
+- [x] Probar frontera HTTP de 64 KiB, body mayor sin longitud conocida, cantidad decimal rechazada y repetición con notas Unicode canónicamente equivalentes.
+- [x] Aplazar la prueba Unicode entre API y Desktop a D4, por acuerdo del usuario: no existe todavía el flujo real de pedidos de Desktop. La API conserva su propia prueba NFC. No equiparar la cancelación controlada del TestServer a una interrupción física de red.
 
 ## D3 — API de cocina
 
-- [ ] Implementar cola FIFO con desempate y transición autorizada con versión, revalidación y recálculo de cuenta.
-- [ ] Probar dos cocinas y concurrencia con envíos; validar que una comanda lista sale de cola pero sigue visible en cuenta y otra nueva no altera líneas históricas.
-- [ ] Probar permisos, errores, datos heredados, auditoría y rollback. No habilitar anulación, edición de enviados ni pago.
+- [x] Implementar cola FIFO con desempate y transición autorizada con versión, revalidación y recálculo de cuenta.
+- [x] Probar dos cocinas y concurrencia con envíos; validar que una comanda lista sale de cola pero sigue visible en cuenta y otra nueva no altera líneas históricas.
+- [x] Probar legados sin comandas y permisos de todos los roles: Jefa, Supervisor y Cocina autorizados; Mesero/Caja denegados. Anulación, edición de enviados y pago no están habilitados.
+- [x] Probar autorización de Cocina/Jefa y denegación de Mesero/Caja, errores de estado/versión, auditoría sin texto libre y rollback; transición también probada con rol runtime temporal.
 
 ## D4 — Desktop salón
 
-- [ ] Implementar navegación real, catálogo demostrativo, borrador local, categorías, cantidad y notas accesibles; distinguir visualmente borrador y confirmación.
-- [ ] Implementar resumen de cuenta/comandas y aviso de lista según contrato aprobado; consultar únicamente por REST.
+- [x] Preparar borrador local con líneas independientes, cantidades y notas NFC, y servicio de lectura paginada del catálogo mediante sesión REST; probar límites y respuestas inválidas.
+- [x] Implementar navegación desde mesa/grupo, catálogo demostrativo, borrador local, categorías, cantidad y notas; distinguir borrador y confirmación. Accesibilidad y apariencia requieren validación real.
+- [x] Implementar resumen de cuenta/comandas y aviso de lista según contrato aprobado; consultar únicamente por REST.
 - [ ] Coordinar polling/mutaciones y sesión; tratar desconexión, conflictos, cambios de precio y resultado incierto sin reintentos automáticos ni afirmaciones falsas.
 - [ ] Probar ViewModels/servicios con fakes, flujos de mesa/grupo, lectura obsoleta, expiración y acceso por rol.
+- [x] Compartir casos Unicode entre pruebas de API y Desktop sin referenciar API desde Desktop: NFC equivalente, emoji y límites de 150/151 escalares; API y validador Desktop usan los mismos casos.
+- [ ] Revisar visualmente la vista de salón y sus plantillas reales con ratón, teclado, foco, escalado y tamaño mínimo; comprobar que la intención incierta continúa bloqueada durante la sesión y documentar las limitaciones antes de aceptar D4.
 
 ## D5 — Desktop cocina
 

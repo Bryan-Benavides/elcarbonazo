@@ -1,12 +1,12 @@
 # Especificación 003 — Pedidos y monitor de cocina (KDS)
 
-**Estado: D0 y D1 completos; D2 en ejecución.** El usuario aprobó alcance, roles, estados, política fiscal, límites iniciales, líneas repetidas separadas, protocolo idempotente y línea base HTTP/sincronización descritos aquí y en `plan.md`. Persistencia y catálogo demostrativo están implementados; `GET /api/productos` ya está disponible con autorización y paginación, mientras cuenta/envíos, Desktop y KDS siguen pendientes. La migración no se ha aplicado a una base persistente. Las decisiones fuera de alcance requieren especificaciones posteriores. No altera las garantías vigentes de 001 ni convierte el MVP universitario en un sistema apto para operación real.
+**Estado: D0, D1 y API de D2/D3 completos; D4 en ejecución.** Persistencia y API de pedidos/cocina están implementadas y probadas. Desktop incorpora la vista de salón con catálogo, cuenta, borrador y envío; su validación integral y visual sigue pendiente. Hay pruebas Unicode compartidas de Desktop y API. La pantalla KDS corresponde a D5. La migración no se ha aplicado a una base persistente. Esto no convierte el MVP universitario en un sistema apto para operación real.
 
 ## 1. Objetivo y contexto
 
 Digitalizar la toma de consumos para una mesa individual o una cuenta compartida de grupo y comunicar envíos a cocina mediante una cola local. Desktop usa Avalonia/MVVM y exclusivamente REST; la API ASP.NET Core contiene reglas, persistencia EF Core/PostgreSQL, permisos y auditoría. Operación en LAN, sin dependencia de Internet y sin desactivar TLS de producción.
 
-`001-auth-mesas-mvp` ya contiene sesiones, roles, mesas, grupos y una entidad `pedido` parcial. Dispone de XOR de destino, claves restrictivas, importes y unicidad parcial de cuenta activa; **no existe todavía una toma funcional de pedidos ni KDS**. `002-operaciones-seguras` permanece pospuesto y trata operaciones de mesas/grupos, no resuelve automáticamente pedidos. No renumerar ni sobrescribirlo.
+`001-auth-mesas-mvp` contiene sesiones, roles, mesas, grupos y una entidad `pedido` parcial. D2 implementa la toma mediante API; D3 incorpora la API de cocina, todavía sin pantalla Desktop. `002-operaciones-seguras` permanece pospuesto y trata operaciones de mesas/grupos, no resuelve automáticamente pedidos. No renumerar ni sobrescribirlo.
 
 ## 2. Alcance acordado
 
@@ -113,8 +113,8 @@ Inventario/recetas, autorización administrativa y anulación enviada, caja/pago
 - Protocolo HTTP/sincronización de `plan.md`: **aprobado** como línea base, incluidas las rutas documentadas, errores compatibles con 001, polling 2 s con backoff y páginas de 25 (máximo 100). Indicador de lista persistente en cuenta abierta, sin push/sonido, acuse ni promesa de entrega instantánea.
 - Riesgo universitario aceptado de escrituras inciertas, bloqueo y revisión humana, con la limitación de reinicio explícita. La clave persistida propuesta puede reproducir una respuesta si el cliente conserva la misma intención; recuperar la intención tras perder el estado local, resolverla entre terminales y operar con garantías reales requieren diseño aparte.
 
-### Línea base técnica aprobada para D1 (no implementada)
+### Línea base técnica aprobada y estado
 
-El usuario revisó y aprobó en esta conversación la recomendación de `plan.md` para idempotencia persistida (`envioId`), límites, contratos HTTP/ProblemDetails, concurrencia/locks, sondeo y paginación. Se conserva como línea base del módulo, no como código ya existente. La política de no reintentar automáticamente y de no inferir éxito desde un GET permanece obligatoria. Las tareas de implementación y sus pruebas siguen pendientes.
+El usuario revisó y aprobó en esta conversación la recomendación de `plan.md` para idempotencia persistida (`envioId`), límites, contratos HTTP/ProblemDetails, concurrencia/locks, sondeo y paginación. La API de catálogo, cuenta y envío está implementada y parcialmente verificada; las tareas pendientes constan en `tasks.md`. La política de no reintentar automáticamente y de no inferir éxito desde un GET permanece obligatoria.
 
 La aprobación de contratos no autoriza aplicar migraciones a bases persistentes ni implementar elementos fuera de alcance. La preparación documental no equivale a aceptación visual, pruebas de migración ni validación para operación real.

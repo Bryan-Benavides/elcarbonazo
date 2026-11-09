@@ -36,7 +36,12 @@ public sealed class MesasService(AppDbContext context, IAuditRecorder auditRecor
                 Message: "Estado inválido. Use Libre, Ocupada, Reservada o Agrupada.");
         }
 
-        var mesa = await context.Mesas.FindAsync([id], cancellationToken);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var mesa = await context.Mesas
+            .FromSqlInterpolated($"""
+                SELECT xmin, * FROM mesa WHERE id_mesa = {id} FOR UPDATE
+                """)
+            .SingleOrDefaultAsync(cancellationToken);
         if (mesa is null)
         {
             return new UpdateMesaEstadoResult(UpdateMesaEstadoOutcome.NotFound);
@@ -83,8 +88,6 @@ public sealed class MesasService(AppDbContext context, IAuditRecorder auditRecor
 
         var previousState = mesa.Estado;
         mesa.Estado = request.Estado;
-        // Keep the write and its audit record in a single database transaction.
-        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
             await context.SaveChangesAsync(cancellationToken);

@@ -4,6 +4,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ElCarbonazo.Desktop.ViewModels"
              xmlns:models="using:ElCarbonazo.Desktop.Models"
+             xmlns:views="using:ElCarbonazo.Desktop.Views"
              xmlns:converters="using:ElCarbonazo.Desktop.Converters"
              x:DataType="vm:MesasViewModel"
              Background="{StaticResource FondoPrincipalBrush}">
@@ -76,12 +77,12 @@
         </Style>
     </UserControl.Styles>
     <Grid ColumnDefinitions="58,Auto,*">
-        <Border Grid.Column="0" Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="0,0,1,0">
+        <Border Grid.Column="0" IsVisible="{Binding !MostrandoPedidos}" Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="0,0,1,0">
             <Button Content="☰" FontSize="21" Margin="6,14,6,0" Padding="5,7" VerticalAlignment="Top"
                     Command="{Binding AlternarNavegacionCommand}" AutomationProperties.Name="{Binding TextoNavegacion}"
                     ToolTip.Tip="{Binding TextoNavegacion}" />
         </Border>
-        <Border Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Stretch"
+        <Border Grid.Column="1" IsVisible="{Binding !MostrandoPedidos}" HorizontalAlignment="Left" VerticalAlignment="Stretch"
                 Width="{Binding AnchoNavegacion}" ClipToBounds="True"
                 Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="0,0,1,0">
             <Border.Transitions><Transitions><DoubleTransition Property="Width" Duration="0:0:0.2" /></Transitions></Border.Transitions>
@@ -102,7 +103,7 @@
             </Grid>
             </Panel>
         </Border>
-        <Grid Grid.Column="2" RowDefinitions="Auto,Auto,*" Margin="20,16">
+        <Grid Grid.Column="2" IsVisible="{Binding !MostrandoPedidos}" RowDefinitions="Auto,Auto,*" Margin="20,16">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
             <StackPanel Spacing="4">
                 <TextBlock Text="Mapa de mesas" FontSize="27" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
@@ -195,6 +196,7 @@
                     <TextBlock Text="{Binding DetalleEstado}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
                       <TextBlock Text="{Binding DetalleGrupo}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
                       <TextBlock Text="{Binding AyudaAcciones}" Foreground="{StaticResource TextoSecundarioBrush}" TextWrapping="Wrap" FontSize="12" />
+                     <Button Classes="primario" Content="Ver cuenta y borrador" IsEnabled="{Binding PuedeAbrirCuenta}" Command="{Binding AbrirCuentaCommand}" HorizontalAlignment="Stretch" />
                      <Button Content="Reservar" IsEnabled="{Binding PuedeReservar}" Command="{Binding ReservarCommand}" HorizontalAlignment="Stretch" />
                      <Button Content="Ocupar" IsEnabled="{Binding PuedeOcupar}" Command="{Binding OcuparCommand}" HorizontalAlignment="Stretch" />
                       <Button Content="Liberar" IsEnabled="{Binding PuedeLiberar}" Command="{Binding SolicitarLiberacionCommand}" HorizontalAlignment="Stretch" />
@@ -205,6 +207,11 @@
             </ScrollViewer>
             </Grid>
         </Grid>
+        <ContentControl Grid.ColumnSpan="3" IsVisible="{Binding MostrandoPedidos}" Content="{Binding PedidosActual}" ZIndex="90">
+            <ContentControl.DataTemplates>
+                <DataTemplate DataType="vm:PedidosSalonViewModel"><views:PedidosSalonView /></DataTemplate>
+            </ContentControl.DataTemplates>
+        </ContentControl>
         <Border Grid.ColumnSpan="3" Background="#B0000000" IsVisible="{Binding ConfirmarCierreGrupo}" ZIndex="110">
             <Border Width="380" Padding="24" CornerRadius="10" Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <StackPanel Spacing="16" KeyboardNavigation.TabNavigation="Cycle">

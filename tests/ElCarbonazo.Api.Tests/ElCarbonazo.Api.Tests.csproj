@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ElCarbonazo.Api\ElCarbonazo.Api.csproj" />
+    <None Include="..\Shared\pedido-notas.json" Link="pedido-notas.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

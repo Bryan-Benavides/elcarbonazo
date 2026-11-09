@@ -52,7 +52,7 @@ public sealed class DemoCatalogSeeder(
             "LOCK TABLE producto IN EXCLUSIVE MODE",
             cancellationToken);
 
-        var existing = await context.Productos
+        var existing = await context.Productos.AsNoTracking()
             .OrderBy(product => product.IdProducto)
             .ToListAsync(cancellationToken);
         if (existing.Count == 0)
@@ -70,7 +70,9 @@ public sealed class DemoCatalogSeeder(
         }
 
         var expected = Products.ToDictionary(product => product.Name, StringComparer.Ordinal);
-        if (existing.Count != expected.Count || existing.Any(product =>
+        if (existing.Count != expected.Count ||
+            existing.Select(product => product.Nombre).Distinct(StringComparer.Ordinal).Count() != expected.Count ||
+            existing.Any(product =>
                 !expected.TryGetValue(product.Nombre, out var seed) ||
                 product.Categoria != seed.Category ||
                 product.Precio != seed.Price ||

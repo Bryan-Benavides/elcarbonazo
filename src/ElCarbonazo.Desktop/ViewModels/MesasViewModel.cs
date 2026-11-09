@@ -19,6 +19,47 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     private readonly MesasRequestCoordinator _coordinator = new();
     private bool _disposed;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MostrandoPedidos))]
+    private PedidosSalonViewModel? _pedidosActual;
+
+    public bool MostrandoPedidos => PedidosActual is not null;
+    public bool PuedeAbrirCuenta => !_disposed && PedidosActual is null && !SeleccionandoGrupo && !Mutando &&
+        !ResultadoIncierto && _coordinator.CanMutate && Rol is "Jefa" or "Supervisor" or "Mesero" or "Encargado de Caja" &&
+        MesaSeleccionada is not null;
+
+    [RelayCommand]
+    private async Task AbrirCuentaAsync()
+    {
+        if (!PuedeAbrirCuenta || MesaSeleccionada is not { } mesa) return;
+        Mutando = true;
+        bool reserved;
+        try { reserved = await _coordinator.TryBeginMutationAsync(_lifetime.Token); }
+        catch (OperationCanceledException) { Mutando = false; return; }
+        if (!reserved)
+        {
+            Mutando = false;
+            MensajeAccion = "No se abrió la cuenta; revise la conexión y vuelva a intentarlo.";
+            return;
+        }
+        var grupo = mesa.IdGrupo;
+        PedidosActual = new PedidosSalonViewModel(grupo is null ? mesa.IdMesa : null, grupo,
+            grupo is null ? $"Mesa {mesa.Numero:00}" : $"Grupo {grupo}",
+            new ProductosPedidoApiService(_session), new CuentaPedidoApiService(_session), CerrarPedidos,
+            new EnvioPedidoApiService(_session), grupo is null ? mesa.Version : null);
+        ActualizarAcciones();
+    }
+
+    private void CerrarPedidos()
+    {
+        PedidosActual?.Dispose();
+        PedidosActual = null;
+        _coordinator.CompleteMutation(requiresReconciliation: true);
+        Mutando = false;
+        SolicitarConsulta();
+        ActualizarAcciones();
+    }
+
     [ObservableProperty] private string _mensajeAccion = "";
     [ObservableProperty] private bool _confirmarLiberacion;
     [ObservableProperty] private bool _resultadoIncierto;
@@ -66,6 +107,7 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(PuedeLiberar));
         OnPropertyChanged(nameof(PuedeReconocer));
         OnPropertyChanged(nameof(AyudaAcciones));
+        OnPropertyChanged(nameof(PuedeAbrirCuenta));
         ActualizarAccionesGrupo();
     }
 
@@ -382,6 +424,7 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        PedidosActual?.Dispose();
         _session.SessionStateChanged -= OnSessionStateChanged;
         Mesas.CollectionChanged -= AlCambiarMesas;
         _coordinator.Stop();

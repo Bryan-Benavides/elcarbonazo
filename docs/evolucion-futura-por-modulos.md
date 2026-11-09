@@ -57,22 +57,22 @@ Las referencias autoritativas siguen siendo `docs/constitution.md`, `docs/domain
 
 ## 5. Pedidos y atención de salón
 
-**Base existente:** el dominio y parte de la persistencia permiten representar pedidos y comprobar cuentas pendientes para las reglas de mesas/grupos. Eso **no significa que exista un flujo completo de pedidos en Desktop o una API funcional de toma de pedidos**.
+**Base existente:** el dominio y la API 003 permiten consultar catálogo/cuentas y registrar envíos idempotentes, además de comprobar cuentas pendientes para las reglas de mesas/grupos. Eso **no significa que exista un flujo completo de pedidos en Desktop ni un sistema listo para operación real**.
 
-**Módulo 003 en curso:** [`specs/003-pedidos-kds/`](../specs/003-pedidos-kds/) define cuenta por destino, envíos separados, catálogo de demostración y cocina. El usuario aprobó roles, estados/agregación, cuentas activas heredadas sin comandas, regla fiscal, límites, líneas repetidas independientes, idempotencia y contrato HTTP/sincronización. D1 (persistencia aditiva, privilegios mínimos y comando de catálogo ficticio aislado) está implementado y probado; la migración no se ha aplicado a una base persistente. D2 está en progreso: catálogo paginado implementado; cuentas/envío, Desktop y KDS siguen pendientes.
+**Módulo 003 en curso:** [`specs/003-pedidos-kds/`](../specs/003-pedidos-kds/) define cuenta por destino, envíos separados, catálogo de demostración y cocina. D1 y API de D2/D3 están implementados con pruebas automatizadas; la migración no se ha aplicado a una base persistente. D4 incluye pantalla de salón y envío conectados, con pruebas focalizadas; aún faltan validación integral y revisión visual. Hay casos Unicode compartidos de API y Desktop. La pantalla de cocina sigue pendiente; la recuperación probada es controlada, no una aceptación de red física.
 
 **Por definir:**
 
-- Los flujos específicos de apertura, borrador local, envío idempotente y estados están aprobados en `specs/003-pedidos-kds/`; su implementación y pruebas siguen pendientes.
+- El envío idempotente y la apertura transaccional están implementados en API; Desktop incorpora borrador local, presentación de estados y envío, pendientes de validación integral y visual.
 - Cancelación, edición de envíos, pagos y cierre permanecen fuera de 003 y requieren especificación posterior.
-- La implementación deberá respetar transacciones y locks del módulo 001; las propuestas de orden y las carreras se revisan antes de codificar y prueban en PostgreSQL temporal.
+- La API respeta el orden de locks documentado y se probó frente a carreras principales en PostgreSQL temporal; las nuevas rutas deberán conservarlo.
 - Ante resultado incierto no se reintenta automáticamente ni se usa un GET como prueba de terminación; el alcance y límite tras reinicio están documentados en 003.
 
 ## 6. Cocina
 
 **Base existente:** el rol `Personal de Cocina` puede consultar mesas y no modificarlas. El módulo 001 no implementa una pantalla operativa de cocina.
 
-**Preparación 003:** se propone una cola de comandas; Cocina puede operar estados sin modificar mesas. La matriz acordada incluye Jefa/Supervisor en KDS y permite a Mesero/Caja consultar estados desde la cuenta. La línea base HTTP, errores, cursores y polling está aprobada y documentada en `specs/003-pedidos-kds/plan.md`; aún no está implementada.
+**003 en curso:** la API de cola FIFO y transición de comandas está implementada y probada; Cocina opera estados sin modificar mesas. La matriz incluye Jefa/Supervisor en KDS y permite a Mesero/Caja consultar estados desde la cuenta. La pantalla Desktop de cocina y el polling siguen pendientes.
 
 La especificación 003 define recepción, orden FIFO, estados, notas, roles y comunicación visible en salón. La implementación y validación del polling, volumen, accesibilidad y desconexión siguen pendientes; no se garantizan notificaciones instantáneas.
 
@@ -80,7 +80,7 @@ La especificación 003 define recepción, orden FIFO, estados, notas, roles y co
 
 **Base de dominio:** `docs/domain.md` describe productos y precios; una entidad descrita en el diccionario no implica pantallas o gestión implementadas.
 
-003 propone catálogo demostrativo, categorías, disponibilidad, precios históricos y revalidación de versión; no incluye administración de menú ni cambio de precios por usuarios. La gestión real del menú, permisos, correcciones e historial de cambios requieren especificación posterior.
+003 implementa en API catálogo demostrativo, categorías, disponibilidad, precios históricos y revalidación de versión; no incluye administración de menú ni cambio de precios por usuarios. La gestión real del menú, permisos, correcciones e historial de cambios requieren especificación posterior.
 
 ## 8. Inventario, ingredientes y recetas
 
