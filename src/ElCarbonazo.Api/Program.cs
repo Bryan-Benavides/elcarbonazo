@@ -195,6 +195,8 @@ builder.Services.AddScoped<IProductosService, ProductosService>();
 builder.Services.AddScoped<ICuentasService, CuentasService>();
 builder.Services.AddScoped<EnviosService>();
 builder.Services.AddScoped<CocinaService>();
+builder.Services.AddScoped<CajaOperacionesService>();
+builder.Services.AddScoped<CajaCancelacionService>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

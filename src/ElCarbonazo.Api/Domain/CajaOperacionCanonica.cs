@@ -6,7 +6,16 @@ using System.Text.Json;
 namespace ElCarbonazo.Api.Domain;
 
 // Internal representation only: HTTP contracts and execution belong to later C2/C3 work.
-public sealed record CajaIntencionCanonica(string Tipo, short Version, string ArgumentosJson, string HashArgumentos);
+public sealed record CajaIntencionCanonica
+{
+    internal CajaIntencionCanonica(string tipo, short version, string argumentosJson, string hashArgumentos) =>
+        (Tipo, Version, ArgumentosJson, HashArgumentos) = (tipo, version, argumentosJson, hashArgumentos);
+
+    public string Tipo { get; }
+    public short Version { get; }
+    public string ArgumentosJson { get; }
+    public string HashArgumentos { get; }
+}
 
 public static class CajaOperacionCanonica
 {

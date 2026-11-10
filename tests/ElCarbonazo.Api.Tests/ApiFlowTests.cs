@@ -42,6 +42,47 @@ public sealed class ApiFlowTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Caja_http_rejects_unauthorized_roles_and_invalid_or_oversized_payloads()
+    {
+        var url = $"/api/caja/operaciones/{Guid.NewGuid()}";
+        var kitchen = await LoginAsync("cocina", "kitchen password");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", kitchen);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync(url)).StatusCode);
+        var owner = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", owner);
+        using var duplicate = new StringContent("{\"tipo\":\"AbrirTurno\",\"tipo\":\"AbrirTurno\",\"version\":1,\"argumentos\":{\"fondoInicial\":0,\"confirmado\":true}}", System.Text.Encoding.UTF8, "application/json");
+        Assert.Equal(HttpStatusCode.BadRequest, (await _client.PutAsync(url, duplicate)).StatusCode);
+        using var oversize = new StringContent(new string('x', 32769), System.Text.Encoding.UTF8, "application/json");
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, (await _client.PutAsync(url, oversize)).StatusCode);
+        await using var context = _database.CreateContext();
+        Assert.Empty(await context.OperacionesCaja.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Caja_operation_http_requires_session_replays_and_cancels_without_business_execution()
+    {
+        var id = Guid.NewGuid();
+        var url = $"/api/caja/operaciones/{id}";
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _client.GetAsync(url)).StatusCode);
+        var token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var body = new { tipo = "AbrirTurno", version = 1, argumentos = new { fondoInicial = 0m, confirmado = true } };
+        Assert.Equal(HttpStatusCode.OK, (await _client.PutAsJsonAsync(url, body)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _client.PutAsJsonAsync(url, body)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await _client.PutAsJsonAsync(url,
+            new { tipo = "AbrirTurno", version = 1, argumentos = new { fondoInicial = 1m, confirmado = true } })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _client.GetAsync(url)).StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await _client.PostAsJsonAsync(url + "/ejecucion", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _client.PostAsJsonAsync(url + "/cancelacion", new { confirmaIntervencion = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _client.PostAsJsonAsync(url + "/ejecucion", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await _client.PostAsync("/api/auth/logout", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _client.GetAsync(url)).StatusCode);
+        await using var context = _database.CreateContext();
+        Assert.Empty(await context.TurnosCaja.ToListAsync());
+        Assert.Equal(CajaStates.OperacionCancelada, await context.OperacionesCaja.Where(x => x.IdOperacion == id).Select(x => x.Estado).SingleAsync());
+    }
+
+    [Fact]
     public async Task Auth_mesas_groups_and_audit_follow_the_http_contract()
     {
         var anonymousResponse = await _client.GetAsync("/api/mesas");

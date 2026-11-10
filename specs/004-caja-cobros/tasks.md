@@ -1,6 +1,6 @@
 # Tareas — 004 Caja, cobros y comprobante interno
 
-**Estado:** D0 funcional y técnico aprobado; C1 completado para desarrollo en `feature/004-caja-cobros`, con pruebas de migración y concurrencia en PostgreSQL temporal. C2 iniciado: normalización/hash internos en desarrollo; protocolo, autorización y diario aún no implementados. No aplicar migraciones ni tocar bases persistentes. Aceptación prevista únicamente para demostración universitaria local aislada; no equivale a aptitud para operar un restaurante con dinero real.
+**Estado:** D0 funcional y técnico aprobado; C1 completado para desarrollo en `feature/004-caja-cobros`, con pruebas de migración y concurrencia en PostgreSQL temporal. C2 en curso: rutas y núcleo durable implementados parcialmente; ejecución real, almacenamiento protegido y pruebas de recuperación completas pendientes. No aplicar migraciones ni tocar bases persistentes. Aceptación prevista únicamente para demostración universitaria local aislada; no equivale a aptitud para operar un restaurante con dinero real.
 
 **Revisión de concurrencia:** una prueba PostgreSQL demostró que la lectura MVCC por sí sola no impide preparar un cobro después del control de pendientes. El usuario autorizó revisar el plan; §5 ahora exige barrera global compartida para preparar y cerrar. Ambos órdenes se prueban mediante transacciones de modelo; las implementaciones C2/C3 aún inexistentes requieren sus propias pruebas de integración.
 
@@ -33,6 +33,10 @@
 - [x] Cerrar la puerta C1 para desarrollo tras probar migración representativa con mesa, grupo activo, pedidos en cinco estados, comandas en tres estados y cuenta legada sin comanda. Los locks de alcance C1 se probaron; la estructura incompatible confirmó rollback sin cambios parciales en PostgreSQL temporal, y la barrera preparación/cierre está probada como modelo, no como servicio. Migración fuera de test requiere destino confirmado y autorización expresa por separado.
 
 ## C2 — Protocolo durable de operaciones de caja
+
+Avance parcial: normalización/hash y servicios internos de preparación, consulta, cancelación y reproducción terminal comparten lock UUID; prepare de cobro también toma barrera global y revalida turno. Las cuatro rutas REST usan autenticación y rol, revalidan sesión al obtener el lock y limitan/validan cuerpos; ejecución preparada devuelve 503 sin ejecutor C3. El núcleo usa savepoint y transacción compartida con ejecutor inyectado. Pruebas con ejecutor ficticio cubren éxito, rechazo, excepción y repetición; no prueban cobros reales. También se probaron prepare/cancel, fallo de auditoría, sesión revocada y autorización básica. Faltan handlers C3, diario protegido y pruebas completas de recuperación y carreras.
+
+El validador aislado de formato del diario rechaza instalación discordante, campos desconocidos/duplicados, contenido inválido y datos adicionales; todavía no lee ni escribe archivos y no verifica ACL. No constituye almacenamiento protegido ni habilita mutaciones.
 
 - [ ] Implementar prepare/execute/query/cancel con UUID, contrato versionado, canonicalización/hash y autorización vigente.
 - [ ] Resolver concurrentemente preparación/cancelación/ejecución, incluidas barreras antes de preparación, solicitudes tardías y mismo UUID con payload/actor divergente.
