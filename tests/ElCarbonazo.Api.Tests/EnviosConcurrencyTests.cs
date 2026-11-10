@@ -17,6 +17,195 @@ public sealed class EnviosConcurrencyTests : IAsyncLifetime
     public Task InitializeAsync() => database.InitializeAsync();
     public Task DisposeAsync() => database.DisposeAsync();
 
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, true)]
+    public async Task Existing_send_or_kitchen_and_cash_locks_serialize(bool group, bool sendFirst, bool kitchen)
+    {
+        var (product, version) = await SetupAsync();
+        int? groupId = null;
+        if (group)
+        {
+            await using var context = database.CreateContext();
+            var tables = await context.Mesas.Where(x => x.IdMesa == 2 || x.IdMesa == 3).ToListAsync();
+            var result = await new GruposMesaService(context, TimeProvider.System, Audit(context)).CreateAsync(
+                new CreateGrupoMesaRequest(tables.Select(x => new MesaVersionRequest(x.IdMesa, x.Version)).ToList()),
+                1, CancellationToken.None);
+            Assert.Equal(GrupoMesaOutcome.Success, result.Outcome);
+            groupId = result.Grupo!.IdGrupo;
+        }
+
+        EnvioRequest RequestForDestination(uint tableVersion) => group
+            ? new EnvioRequest(Guid.NewGuid(), null, groupId, null, [new EnvioLineaRequest(product, 1, 1, "")])
+            : Request(product, tableVersion);
+
+        Assert.Equal(201, (await StartSend(RequestForDestination(version))).Status);
+        int commandId;
+        uint commandVersion;
+        await using (var current = database.CreateContext())
+        {
+            var item = await current.Comandas.SingleAsync();
+            commandId = item.IdComanda;
+            commandVersion = item.Version;
+        }
+        if (!group)
+        {
+            await using var current = database.CreateContext();
+            version = await current.Mesas.Where(x => x.IdMesa == 1).Select(x => x.Version).SingleAsync();
+        }
+
+        async Task<int> StartExistingAsync(AuditBarrier? barrier = null, string? applicationName = null) => kitchen
+            ? (await StartKitchen(commandId, commandVersion, "En Preparación", barrier, applicationName)).Status
+            : (await StartSend(RequestForDestination(version), barrier, applicationName)).Status;
+
+        var name = $"c1_cash_{Guid.NewGuid():N}";
+        var connectionString = new NpgsqlConnectionStringBuilder(database.ConnectionString) { ApplicationName = name }.ConnectionString;
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+
+        async Task LockCashResourcesAsync()
+        {
+            var sql = group
+                ? """
+                  SELECT id_grupo FROM grupo_mesa WHERE id_grupo = @id FOR UPDATE;
+                  SELECT id_mesa FROM mesa WHERE id_grupo = @id ORDER BY id_mesa FOR UPDATE;
+                  SELECT id_pedido FROM pedido WHERE id_grupo = @id ORDER BY id_pedido FOR UPDATE;
+                  SELECT c.id_comanda FROM comanda c JOIN pedido p ON p.id_pedido = c.id_pedido
+                  WHERE p.id_grupo = @id ORDER BY c.id_comanda FOR UPDATE OF c;
+                  """
+                : """
+                  SELECT id_mesa FROM mesa WHERE id_mesa = @id FOR UPDATE;
+                  SELECT id_pedido FROM pedido WHERE id_mesa = @id ORDER BY id_pedido FOR UPDATE;
+                  SELECT c.id_comanda FROM comanda c JOIN pedido p ON p.id_pedido = c.id_pedido
+                  WHERE p.id_mesa = @id ORDER BY c.id_comanda FOR UPDATE OF c;
+                  """;
+            await using var command = new NpgsqlCommand(sql, connection, transaction);
+            command.Parameters.AddWithValue("id", groupId ?? 1);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        if (sendFirst)
+        {
+            using var barrier = new AuditBarrier();
+            var send = StartExistingAsync(barrier);
+            try
+            {
+                await barrier.Entered.Task.WaitAsync(TimeSpan.FromSeconds(20));
+                var cash = LockCashResourcesAsync();
+                await WaitForDatabaseBlockAsync(name);
+                barrier.Release.Set();
+                Assert.Equal(kitchen ? 200 : 201, await send.WaitAsync(TimeSpan.FromSeconds(20)));
+                await cash.WaitAsync(TimeSpan.FromSeconds(20));
+            }
+            finally
+            {
+                barrier.Release.Set();
+                await send.WaitAsync(TimeSpan.FromSeconds(20));
+            }
+        }
+        else
+        {
+            await LockCashResourcesAsync();
+            var sendName = $"c1_send_{Guid.NewGuid():N}";
+            var send = StartExistingAsync(null, sendName);
+            await WaitForDatabaseBlockAsync(sendName);
+            await transaction.CommitAsync();
+            Assert.Equal(kitchen ? 200 : 201, await send.WaitAsync(TimeSpan.FromSeconds(20)));
+        }
+        await using var verify = database.CreateContext();
+        Assert.Equal(kitchen ? 1 : 2, await verify.Comandas.CountAsync());
+        Assert.Equal(kitchen ? 10m : 20m, await verify.Pedidos.Select(x => x.Total).SingleAsync());
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Cash_destination_lock_and_release_or_group_close_serialize(bool group, bool closeFirst)
+    {
+        var (_, version) = await SetupAsync();
+        int? groupId = null;
+        await using (var setup = database.CreateContext())
+        {
+            if (group)
+            {
+                var tables = await setup.Mesas.Where(x => x.IdMesa == 2 || x.IdMesa == 3).ToListAsync();
+                var result = await new GruposMesaService(setup, TimeProvider.System, Audit(setup)).CreateAsync(
+                    new CreateGrupoMesaRequest(tables.Select(x => new MesaVersionRequest(x.IdMesa, x.Version)).ToList()),
+                    1, CancellationToken.None);
+                groupId = result.Grupo!.IdGrupo;
+            }
+            else
+            {
+                var table = await setup.Mesas.SingleAsync(x => x.IdMesa == 1);
+                table.Estado = MesaStates.Ocupada;
+                await setup.SaveChangesAsync();
+                version = table.Version;
+            }
+        }
+        var name = $"c1_destination_{Guid.NewGuid():N}";
+        await using var connection = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(database.ConnectionString)
+        {
+            ApplicationName = name
+        }.ConnectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        async Task LockDestinationAsync()
+        {
+            var sql = group
+                ? "SELECT id_grupo FROM grupo_mesa WHERE id_grupo = @id FOR UPDATE; SELECT id_mesa FROM mesa WHERE id_grupo = @id ORDER BY id_mesa FOR UPDATE"
+                : "SELECT id_mesa FROM mesa WHERE id_mesa = @id FOR UPDATE";
+            await using var command = new NpgsqlCommand(sql, connection, transaction);
+            command.Parameters.AddWithValue("id", groupId ?? 1);
+            await command.ExecuteNonQueryAsync();
+        }
+        async Task<bool> CloseDestinationAsync(AuditBarrier? barrier, string? appName)
+        {
+            await using var context = CreateContext(appName);
+            IAuditRecorder audit = Audit(context);
+            if (barrier is not null) audit = new BlockingAudit(audit, barrier);
+            return group
+                ? (await new GruposMesaService(context, TimeProvider.System, audit).CloseAsync(groupId!.Value, 1, CancellationToken.None)).Outcome == GrupoMesaOutcome.Success
+                : (await new MesasService(context, audit).UpdateEstadoAsync(1, new UpdateMesaEstadoRequest(MesaStates.Libre, version), CancellationToken.None)).Outcome == UpdateMesaEstadoOutcome.Success;
+        }
+        if (closeFirst)
+        {
+            using var barrier = new AuditBarrier();
+            var close = CloseDestinationAsync(barrier, null);
+            try
+            {
+                await barrier.Entered.Task.WaitAsync(TimeSpan.FromSeconds(20));
+                var cash = LockDestinationAsync();
+                await WaitForDatabaseBlockAsync(name);
+                barrier.Release.Set();
+                Assert.True(await close.WaitAsync(TimeSpan.FromSeconds(20)));
+                await cash.WaitAsync(TimeSpan.FromSeconds(20));
+            }
+            finally
+            {
+                barrier.Release.Set();
+                await close.WaitAsync(TimeSpan.FromSeconds(20));
+            }
+        }
+        else
+        {
+            await LockDestinationAsync();
+            var closeName = $"c1_close_{Guid.NewGuid():N}";
+            var close = CloseDestinationAsync(null, closeName);
+            await WaitForDatabaseBlockAsync(closeName);
+            await transaction.CommitAsync();
+            Assert.True(await close.WaitAsync(TimeSpan.FromSeconds(20)));
+        }
+    }
+
     [Fact]
     public async Task Group_command_transitions_without_mutating_member_tables()
     {

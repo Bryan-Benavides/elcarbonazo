@@ -1,5 +1,11 @@
 # Bitácora de errores y lecciones — El Carbonazo
 
+### 004: lecturas MVCC y CHECK con valores nulos
+
+- **Hechos comprobados:** en PostgreSQL temporal, una lectura de pendientes realizada por cierre mientras mantiene bloqueado el turno no impide que otra conexión inserte y confirme una operación preparada después de esa lectura. La prueba reproduce la intercalación de persistencia, no un cierre de negocio implementado. Asimismo, un CHECK de payload aceptaba una versión nula.
+- **Causas:** una lectura MVCC no bloquea inserciones futuras; en PostgreSQL un CHECK acepta el resultado `UNKNOWN` producido por comparaciones con NULL.
+- **Control:** el usuario autorizó revisar el plan: prepare de cobro y cierre comparten una barrera transaccional y revalidan bajo ella; probar ambos órdenes y repetir la prueba en los servicios C2/C3 reales. El CHECK de payload exige explícitamente tipo y versión no nulos para operaciones preparadas; las pruebas incluyen valores nulos y estructura incompatible. No usar una consulta sin coordinación como prueba de ausencia estable de nuevas operaciones.
+
 ## Para qué sirve
 
 Esta bitácora conserva errores observados durante el desarrollo, su impacto y controles concretos para reducir la probabilidad de repetirlos. Es una **ayuda de trabajo y revisión**, no garantiza ausencia de errores ni reemplaza las especificaciones, el código, las pruebas o la validación del usuario.

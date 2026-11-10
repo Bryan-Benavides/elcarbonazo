@@ -20,6 +20,10 @@ public class AppDbContext : DbContext
     public DbSet<SesionUsuario> SesionesUsuario => Set<SesionUsuario>();
     public DbSet<TokenRefreshSesion> TokensRefreshSesion => Set<TokenRefreshSesion>();
     public DbSet<EventoAuditoria> EventosAuditoria => Set<EventoAuditoria>();
+    public DbSet<TurnoCaja> TurnosCaja => Set<TurnoCaja>();
+    public DbSet<Cobro> Cobros => Set<Cobro>();
+    public DbSet<ComprobanteCobroLinea> ComprobantesCobroLineas => Set<ComprobanteCobroLinea>();
+    public DbSet<OperacionCaja> OperacionesCaja => Set<OperacionCaja>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -475,6 +479,201 @@ public class AppDbContext : DbContext
             entity.HasOne(envio => envio.Comanda)
                 .WithOne(comanda => comanda.Envio)
                 .HasForeignKey<EnvioPedido>(envio => envio.IdComanda)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<OperacionCaja>(entity =>
+        {
+            entity.ToTable("operacion_caja", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_operacion_caja_estado",
+                    "estado IN ('Preparada', 'Completada', 'Rechazada', 'Cancelada')");
+                table.HasCheckConstraint(
+                    "CK_operacion_caja_payload",
+                    "((tipo IS NULL AND version_contrato IS NULL AND argumentos IS NULL AND hash_argumentos IS NULL AND estado = 'Cancelada') OR " +
+                    "(tipo IS NOT NULL AND tipo IN ('AbrirTurno', 'CobrarCuenta', 'CerrarTurno') AND version_contrato IS NOT NULL AND version_contrato = 1 AND " +
+                    "argumentos IS NOT NULL AND jsonb_typeof(argumentos) = 'object' AND " +
+                    "hash_argumentos IS NOT NULL AND hash_argumentos ~ '^[0-9a-f]{64}$'))");
+                table.HasCheckConstraint(
+                    "CK_operacion_caja_resultado",
+                    "((estado = 'Preparada' AND fecha_terminal IS NULL AND status_resultado IS NULL AND codigo_resultado IS NULL AND resultado_json IS NULL) OR " +
+                    "(estado <> 'Preparada' AND fecha_terminal IS NOT NULL AND status_resultado IS NOT NULL AND status_resultado BETWEEN 200 AND 499 AND " +
+                    "codigo_resultado IS NOT NULL AND resultado_json IS NOT NULL AND jsonb_typeof(resultado_json) = 'object'))");
+                table.HasCheckConstraint(
+                    "CK_operacion_caja_cancelacion",
+                    "((estado = 'Cancelada' AND id_usuario_cancelacion IS NOT NULL AND fecha_cancelacion IS NOT NULL) OR " +
+                    "(estado <> 'Cancelada' AND id_usuario_cancelacion IS NULL AND fecha_cancelacion IS NULL))");
+            });
+            entity.HasKey(operation => operation.IdOperacion);
+            entity.Property(operation => operation.IdOperacion).HasColumnName("id_operacion").ValueGeneratedNever();
+            entity.Property(operation => operation.IdUsuarioPropietario).HasColumnName("id_usuario_propietario").IsRequired();
+            entity.Property(operation => operation.Tipo).HasColumnName("tipo").HasMaxLength(30).IsRequired(false);
+            entity.Property(operation => operation.VersionContrato).HasColumnName("version_contrato").IsRequired(false);
+            entity.Property(operation => operation.Argumentos).HasColumnName("argumentos").HasColumnType("jsonb").IsRequired(false);
+            entity.Property(operation => operation.HashArgumentos).HasColumnName("hash_argumentos").HasColumnType("character(64)").HasMaxLength(64).IsRequired(false);
+            entity.Property(operation => operation.Estado).HasColumnName("estado").HasMaxLength(20).IsRequired();
+            entity.Property(operation => operation.FechaCreacion).HasColumnName("fecha_creacion").IsRequired();
+            entity.Property(operation => operation.FechaTerminal).HasColumnName("fecha_terminal").IsRequired(false);
+            entity.Property(operation => operation.StatusResultado).HasColumnName("status_resultado").IsRequired(false);
+            entity.Property(operation => operation.CodigoResultado).HasColumnName("codigo_resultado").HasMaxLength(80).IsRequired(false);
+            entity.Property(operation => operation.ResultadoJson).HasColumnName("resultado_json").HasColumnType("jsonb").IsRequired(false);
+            entity.Property(operation => operation.IdUsuarioCancelacion).HasColumnName("id_usuario_cancelacion").IsRequired(false);
+            entity.Property(operation => operation.FechaCancelacion).HasColumnName("fecha_cancelacion").IsRequired(false);
+            entity.HasIndex(operation => new { operation.IdUsuarioPropietario, operation.Estado, operation.FechaCreacion })
+                .HasDatabaseName("IX_operacion_caja_propietario_estado_fecha");
+            entity.HasOne(operation => operation.UsuarioPropietario).WithMany()
+                .HasForeignKey(operation => operation.IdUsuarioPropietario).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(operation => operation.UsuarioCancelacion).WithMany()
+                .HasForeignKey(operation => operation.IdUsuarioCancelacion)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TurnoCaja>(entity =>
+        {
+            entity.ToTable("turno_caja", table =>
+            {
+                table.HasCheckConstraint("CK_turno_caja_estado", "estado IN ('Abierto', 'Cerrado')");
+                table.HasCheckConstraint("CK_turno_caja_fondo", "fondo_inicial >= 0");
+                table.HasCheckConstraint(
+                    "CK_turno_caja_cierre",
+                    "((estado = 'Abierto' AND fecha_cierre IS NULL AND id_usuario_cierre IS NULL AND id_operacion_cierre IS NULL AND " +
+                    "efectivo_esperado IS NULL AND efectivo_contado IS NULL AND diferencia IS NULL AND total_efectivo IS NULL AND " +
+                    "total_tarjeta IS NULL AND total_transferencia IS NULL AND cantidad_cuentas_pendientes IS NULL AND motivo_diferencia IS NULL) OR " +
+                    "(estado = 'Cerrado' AND fecha_cierre IS NOT NULL AND id_usuario_cierre IS NOT NULL AND id_operacion_cierre IS NOT NULL AND " +
+                    "efectivo_esperado IS NOT NULL AND efectivo_esperado >= 0 AND efectivo_contado IS NOT NULL AND efectivo_contado >= 0 AND " +
+                    "diferencia IS NOT NULL AND diferencia = efectivo_contado - efectivo_esperado AND " +
+                    "total_efectivo IS NOT NULL AND total_efectivo >= 0 AND total_tarjeta IS NOT NULL AND total_tarjeta >= 0 AND " +
+                    "fecha_cierre >= fecha_apertura AND total_transferencia IS NOT NULL AND total_transferencia >= 0 AND cantidad_cuentas_pendientes IS NOT NULL AND " +
+                    "cantidad_cuentas_pendientes >= 0 AND " +
+                    "((diferencia = 0 AND motivo_diferencia IS NULL) OR (diferencia <> 0 AND motivo_diferencia IS NOT NULL AND length(btrim(motivo_diferencia)) > 0))))");
+                table.HasCheckConstraint(
+                    "CK_turno_caja_motivo_diferencia",
+                    "motivo_diferencia IS NULL OR (char_length(motivo_diferencia) <= 500 AND motivo_diferencia = normalize(motivo_diferencia, NFC) AND motivo_diferencia !~ '[[:cntrl:]]')");
+            });
+            entity.HasKey(shift => shift.IdTurnoCaja);
+            entity.Property(shift => shift.IdTurnoCaja).HasColumnName("id_turno_caja").ValueGeneratedOnAdd();
+            entity.Property(shift => shift.Estado).HasColumnName("estado").HasMaxLength(20).IsRequired();
+            entity.Property(shift => shift.FechaApertura).HasColumnName("fecha_apertura").IsRequired();
+            entity.Property(shift => shift.IdUsuarioApertura).HasColumnName("id_usuario_apertura").IsRequired();
+            entity.Property(shift => shift.FondoInicial).HasColumnName("fondo_inicial").HasPrecision(12, 2).IsRequired();
+            entity.Property(shift => shift.IdOperacionApertura).HasColumnName("id_operacion_apertura").IsRequired();
+            entity.Property(shift => shift.FechaCierre).HasColumnName("fecha_cierre").IsRequired(false);
+            entity.Property(shift => shift.IdUsuarioCierre).HasColumnName("id_usuario_cierre").IsRequired(false);
+            entity.Property(shift => shift.IdOperacionCierre).HasColumnName("id_operacion_cierre").IsRequired(false);
+            entity.Property(shift => shift.EfectivoEsperado).HasColumnName("efectivo_esperado").HasPrecision(12, 2).IsRequired(false);
+            entity.Property(shift => shift.EfectivoContado).HasColumnName("efectivo_contado").HasPrecision(12, 2).IsRequired(false);
+            entity.Property(shift => shift.Diferencia).HasColumnName("diferencia").HasPrecision(12, 2).IsRequired(false);
+            entity.Property(shift => shift.TotalEfectivo).HasColumnName("total_efectivo").HasPrecision(12, 2).IsRequired(false);
+            entity.Property(shift => shift.TotalTarjeta).HasColumnName("total_tarjeta").HasPrecision(12, 2).IsRequired(false);
+            entity.Property(shift => shift.TotalTransferencia).HasColumnName("total_transferencia").HasPrecision(12, 2).IsRequired(false);
+            entity.Property(shift => shift.CantidadCuentasPendientes).HasColumnName("cantidad_cuentas_pendientes").IsRequired(false);
+            entity.Property(shift => shift.MotivoDiferencia).HasColumnName("motivo_diferencia").HasMaxLength(500).IsRequired(false);
+            entity.HasIndex(shift => shift.Estado).IsUnique().HasFilter("estado = 'Abierto'")
+                .HasDatabaseName("IX_turno_caja_unico_abierto");
+            entity.HasIndex(shift => shift.FechaApertura).HasDatabaseName("IX_turno_caja_fecha_apertura");
+            entity.HasIndex(shift => shift.IdOperacionApertura).IsUnique()
+                .HasDatabaseName("IX_turno_caja_operacion_apertura");
+            entity.HasIndex(shift => shift.IdOperacionCierre).IsUnique()
+                .HasDatabaseName("IX_turno_caja_operacion_cierre");
+            entity.HasOne(shift => shift.UsuarioApertura).WithMany()
+                .HasForeignKey(shift => shift.IdUsuarioApertura)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(shift => shift.UsuarioCierre).WithMany()
+                .HasForeignKey(shift => shift.IdUsuarioCierre)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(shift => shift.OperacionApertura).WithMany(operation => operation.TurnosApertura)
+                .HasForeignKey(shift => shift.IdOperacionApertura).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(shift => shift.OperacionCierre).WithMany(operation => operation.TurnosCierre)
+                .HasForeignKey(shift => shift.IdOperacionCierre).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Cobro>(entity =>
+        {
+            entity.ToTable("cobro", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_cobro_montos",
+                    "subtotal > 0 AND impuestos = 0 AND total = subtotal AND total > 0");
+                table.HasCheckConstraint(
+                    "CK_cobro_metodo",
+                    "((metodo_pago = 'Efectivo' AND efectivo_recibido IS NOT NULL AND vuelto IS NOT NULL AND " +
+                    "efectivo_recibido >= total AND vuelto = efectivo_recibido - total AND " +
+                    "referencia_externa IS NULL AND NOT verificacion_externa_confirmada AND NOT referencia_repetida_confirmada) OR " +
+                    "(metodo_pago IN ('Tarjeta', 'Transferencia') AND efectivo_recibido IS NULL AND vuelto IS NULL AND " +
+                    "referencia_externa IS NOT NULL AND length(btrim(referencia_externa)) > 0 AND verificacion_externa_confirmada))");
+                table.HasCheckConstraint(
+                    "CK_cobro_referencia",
+                    "referencia_externa IS NULL OR (char_length(referencia_externa) BETWEEN 1 AND 100 AND " +
+                    "referencia_externa = normalize(referencia_externa, NFC) AND referencia_externa = btrim(referencia_externa) AND " +
+                    "referencia_externa !~ '[[:cntrl:]]')");
+                table.HasCheckConstraint("CK_cobro_numero_comprobante", "numero_comprobante > 0");
+            });
+            entity.HasKey(payment => payment.IdCobro);
+            entity.Property(payment => payment.IdCobro).HasColumnName("id_cobro").ValueGeneratedOnAdd();
+            entity.Property(payment => payment.NumeroComprobante).HasColumnName("numero_comprobante").ValueGeneratedOnAdd();
+            entity.Property(payment => payment.IdPedido).HasColumnName("id_pedido").IsRequired();
+            entity.Property(payment => payment.IdTurnoCaja).HasColumnName("id_turno_caja").IsRequired();
+            entity.Property(payment => payment.IdUsuario).HasColumnName("id_usuario").IsRequired();
+            entity.Property(payment => payment.IdOperacion).HasColumnName("id_operacion").IsRequired();
+            entity.Property(payment => payment.MetodoPago).HasColumnName("metodo_pago").HasMaxLength(20).IsRequired();
+            entity.Property(payment => payment.Subtotal).HasColumnName("subtotal").HasPrecision(12, 2).IsRequired();
+            entity.Property(payment => payment.Impuestos).HasColumnName("impuestos").HasPrecision(12, 2).IsRequired();
+            entity.Property(payment => payment.Total).HasColumnName("total").HasPrecision(12, 2).IsRequired();
+            entity.Property(payment => payment.EfectivoRecibido).HasColumnName("efectivo_recibido").HasPrecision(12, 2).IsRequired(false);
+            entity.Property(payment => payment.Vuelto).HasColumnName("vuelto").HasPrecision(12, 2).IsRequired(false);
+            entity.Property(payment => payment.ReferenciaExterna).HasColumnName("referencia_externa").HasMaxLength(100).IsRequired(false);
+            entity.Property(payment => payment.VerificacionExternaConfirmada).HasColumnName("verificacion_externa_confirmada").IsRequired();
+            entity.Property(payment => payment.ReferenciaRepetidaConfirmada).HasColumnName("referencia_repetida_confirmada").IsRequired();
+            entity.Property(payment => payment.FechaHora).HasColumnName("fecha_hora").IsRequired();
+            entity.HasIndex(payment => payment.NumeroComprobante).IsUnique()
+                .HasDatabaseName("IX_cobro_numero_comprobante");
+            entity.HasIndex(payment => payment.IdPedido).IsUnique()
+                .HasDatabaseName("IX_cobro_id_pedido");
+            entity.HasIndex(payment => new { payment.IdTurnoCaja, payment.FechaHora, payment.IdCobro })
+                .HasDatabaseName("IX_cobro_turno_fecha_id");
+            entity.HasIndex(payment => new { payment.MetodoPago, payment.ReferenciaExterna })
+                .HasDatabaseName("IX_cobro_metodo_referencia");
+            entity.HasIndex(payment => payment.IdOperacion).IsUnique()
+                .HasDatabaseName("IX_cobro_id_operacion");
+            entity.HasOne(payment => payment.Pedido).WithMany().HasForeignKey(payment => payment.IdPedido)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(payment => payment.TurnoCaja).WithMany(shift => shift.Cobros)
+                .HasForeignKey(payment => payment.IdTurnoCaja).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(payment => payment.Usuario).WithMany().HasForeignKey(payment => payment.IdUsuario)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(payment => payment.Operacion).WithOne(operation => operation.Cobro)
+                .HasForeignKey<Cobro>(payment => payment.IdOperacion).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ComprobanteCobroLinea>(entity =>
+        {
+            entity.ToTable("comprobante_cobro_linea", table =>
+            {
+                table.HasCheckConstraint("CK_comprobante_cobro_linea_orden", "orden > 0");
+                table.HasCheckConstraint("CK_comprobante_cobro_linea_detalle", "id_detalle_origen > 0");
+                table.HasCheckConstraint(
+                    "CK_comprobante_cobro_linea_nombre",
+                    "char_length(nombre_producto) BETWEEN 1 AND 120 AND nombre_producto = normalize(nombre_producto, NFC)");
+                table.HasCheckConstraint("CK_comprobante_cobro_linea_cantidad", "cantidad BETWEEN 1 AND 99");
+                table.HasCheckConstraint(
+                    "CK_comprobante_cobro_linea_importes",
+                    "precio_unitario BETWEEN 0.01 AND 999999.99 AND subtotal = cantidad * precio_unitario");
+            });
+            entity.HasKey(line => line.IdComprobanteCobroLinea);
+            entity.Property(line => line.IdComprobanteCobroLinea).HasColumnName("id_comprobante_cobro_linea").ValueGeneratedOnAdd();
+            entity.Property(line => line.IdCobro).HasColumnName("id_cobro").IsRequired();
+            entity.Property(line => line.Orden).HasColumnName("orden").IsRequired();
+            entity.Property(line => line.IdDetalleOrigen).HasColumnName("id_detalle_origen").IsRequired();
+            entity.Property(line => line.NombreProducto).HasColumnName("nombre_producto").HasMaxLength(120).IsRequired();
+            entity.Property(line => line.Cantidad).HasColumnName("cantidad").IsRequired();
+            entity.Property(line => line.PrecioUnitario).HasColumnName("precio_unitario").HasPrecision(8, 2).IsRequired();
+            entity.Property(line => line.Subtotal).HasColumnName("subtotal").HasPrecision(12, 2).IsRequired();
+            entity.HasIndex(line => new { line.IdCobro, line.Orden }).IsUnique()
+                .HasDatabaseName("IX_comprobante_cobro_linea_cobro_orden");
+            entity.HasIndex(line => new { line.IdCobro, line.IdDetalleOrigen }).IsUnique()
+                .HasDatabaseName("IX_comprobante_cobro_linea_cobro_detalle");
+            entity.HasOne(line => line.Cobro).WithMany(payment => payment.Lineas).HasForeignKey(line => line.IdCobro)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

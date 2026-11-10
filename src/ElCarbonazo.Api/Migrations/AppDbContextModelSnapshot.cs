@@ -23,6 +23,120 @@ namespace ElCarbonazo.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("ElCarbonazo.Api.Entities.Cobro", b =>
+                {
+                    b.Property<long>("IdCobro")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id_cobro");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("IdCobro"));
+
+                    b.Property<decimal?>("EfectivoRecibido")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("efectivo_recibido");
+
+                    b.Property<DateTimeOffset>("FechaHora")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_hora");
+
+                    b.Property<Guid>("IdOperacion")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id_operacion");
+
+                    b.Property<int>("IdPedido")
+                        .HasColumnType("integer")
+                        .HasColumnName("id_pedido");
+
+                    b.Property<int>("IdTurnoCaja")
+                        .HasColumnType("integer")
+                        .HasColumnName("id_turno_caja");
+
+                    b.Property<int>("IdUsuario")
+                        .HasColumnType("integer")
+                        .HasColumnName("id_usuario");
+
+                    b.Property<decimal>("Impuestos")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("impuestos");
+
+                    b.Property<string>("MetodoPago")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("metodo_pago");
+
+                    b.Property<long>("NumeroComprobante")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("numero_comprobante");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("NumeroComprobante"));
+
+                    b.Property<string>("ReferenciaExterna")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("referencia_externa");
+
+                    b.Property<bool>("ReferenciaRepetidaConfirmada")
+                        .HasColumnType("boolean")
+                        .HasColumnName("referencia_repetida_confirmada");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("subtotal");
+
+                    b.Property<decimal>("Total")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("total");
+
+                    b.Property<bool>("VerificacionExternaConfirmada")
+                        .HasColumnType("boolean")
+                        .HasColumnName("verificacion_externa_confirmada");
+
+                    b.Property<decimal?>("Vuelto")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("vuelto");
+
+                    b.HasKey("IdCobro");
+
+                    b.HasIndex("IdOperacion")
+                        .IsUnique()
+                        .HasDatabaseName("IX_cobro_id_operacion");
+
+                    b.HasIndex("IdPedido")
+                        .IsUnique()
+                        .HasDatabaseName("IX_cobro_id_pedido");
+
+                    b.HasIndex("IdUsuario");
+
+                    b.HasIndex("NumeroComprobante")
+                        .IsUnique()
+                        .HasDatabaseName("IX_cobro_numero_comprobante");
+
+                    b.HasIndex("MetodoPago", "ReferenciaExterna")
+                        .HasDatabaseName("IX_cobro_metodo_referencia");
+
+                    b.HasIndex("IdTurnoCaja", "FechaHora", "IdCobro")
+                        .HasDatabaseName("IX_cobro_turno_fecha_id");
+
+                    b.ToTable("cobro", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_cobro_metodo", "((metodo_pago = 'Efectivo' AND efectivo_recibido IS NOT NULL AND vuelto IS NOT NULL AND efectivo_recibido >= total AND vuelto = efectivo_recibido - total AND referencia_externa IS NULL AND NOT verificacion_externa_confirmada AND NOT referencia_repetida_confirmada) OR (metodo_pago IN ('Tarjeta', 'Transferencia') AND efectivo_recibido IS NULL AND vuelto IS NULL AND referencia_externa IS NOT NULL AND length(btrim(referencia_externa)) > 0 AND verificacion_externa_confirmada))");
+
+                            t.HasCheckConstraint("CK_cobro_montos", "subtotal > 0 AND impuestos = 0 AND total = subtotal AND total > 0");
+
+                            t.HasCheckConstraint("CK_cobro_numero_comprobante", "numero_comprobante > 0");
+
+                            t.HasCheckConstraint("CK_cobro_referencia", "referencia_externa IS NULL OR (char_length(referencia_externa) BETWEEN 1 AND 100 AND referencia_externa = normalize(referencia_externa, NFC) AND referencia_externa = btrim(referencia_externa) AND referencia_externa !~ '[[:cntrl:]]')");
+                        });
+                });
+
             modelBuilder.Entity("ElCarbonazo.Api.Entities.Comanda", b =>
                 {
                     b.Property<int>("IdComanda")
@@ -69,6 +183,71 @@ namespace ElCarbonazo.Api.Migrations
                     b.ToTable("comanda", null, t =>
                         {
                             t.HasCheckConstraint("CK_comanda_estado", "estado IN ('Abierta', 'En Preparación', 'Lista')");
+                        });
+                });
+
+            modelBuilder.Entity("ElCarbonazo.Api.Entities.ComprobanteCobroLinea", b =>
+                {
+                    b.Property<long>("IdComprobanteCobroLinea")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id_comprobante_cobro_linea");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("IdComprobanteCobroLinea"));
+
+                    b.Property<short>("Cantidad")
+                        .HasColumnType("smallint")
+                        .HasColumnName("cantidad");
+
+                    b.Property<long>("IdCobro")
+                        .HasColumnType("bigint")
+                        .HasColumnName("id_cobro");
+
+                    b.Property<int>("IdDetalleOrigen")
+                        .HasColumnType("integer")
+                        .HasColumnName("id_detalle_origen");
+
+                    b.Property<string>("NombreProducto")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("nombre_producto");
+
+                    b.Property<int>("Orden")
+                        .HasColumnType("integer")
+                        .HasColumnName("orden");
+
+                    b.Property<decimal>("PrecioUnitario")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("numeric(8,2)")
+                        .HasColumnName("precio_unitario");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("subtotal");
+
+                    b.HasKey("IdComprobanteCobroLinea");
+
+                    b.HasIndex("IdCobro", "IdDetalleOrigen")
+                        .IsUnique()
+                        .HasDatabaseName("IX_comprobante_cobro_linea_cobro_detalle");
+
+                    b.HasIndex("IdCobro", "Orden")
+                        .IsUnique()
+                        .HasDatabaseName("IX_comprobante_cobro_linea_cobro_orden");
+
+                    b.ToTable("comprobante_cobro_linea", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_comprobante_cobro_linea_cantidad", "cantidad BETWEEN 1 AND 99");
+
+                            t.HasCheckConstraint("CK_comprobante_cobro_linea_detalle", "id_detalle_origen > 0");
+
+                            t.HasCheckConstraint("CK_comprobante_cobro_linea_importes", "precio_unitario BETWEEN 0.01 AND 999999.99 AND subtotal = cantidad * precio_unitario");
+
+                            t.HasCheckConstraint("CK_comprobante_cobro_linea_nombre", "char_length(nombre_producto) BETWEEN 1 AND 120 AND nombre_producto = normalize(nombre_producto, NFC)");
+
+                            t.HasCheckConstraint("CK_comprobante_cobro_linea_orden", "orden > 0");
                         });
                 });
 
@@ -519,6 +698,88 @@ namespace ElCarbonazo.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ElCarbonazo.Api.Entities.OperacionCaja", b =>
+                {
+                    b.Property<Guid>("IdOperacion")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id_operacion");
+
+                    b.Property<string>("Argumentos")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("argumentos");
+
+                    b.Property<string>("CodigoResultado")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("codigo_resultado");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("estado");
+
+                    b.Property<DateTimeOffset?>("FechaCancelacion")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_cancelacion");
+
+                    b.Property<DateTimeOffset>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_creacion");
+
+                    b.Property<DateTimeOffset?>("FechaTerminal")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_terminal");
+
+                    b.Property<string>("HashArgumentos")
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("hash_argumentos");
+
+                    b.Property<int?>("IdUsuarioCancelacion")
+                        .HasColumnType("integer")
+                        .HasColumnName("id_usuario_cancelacion");
+
+                    b.Property<int>("IdUsuarioPropietario")
+                        .HasColumnType("integer")
+                        .HasColumnName("id_usuario_propietario");
+
+                    b.Property<string>("ResultadoJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("resultado_json");
+
+                    b.Property<short?>("StatusResultado")
+                        .HasColumnType("smallint")
+                        .HasColumnName("status_resultado");
+
+                    b.Property<string>("Tipo")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("tipo");
+
+                    b.Property<short?>("VersionContrato")
+                        .HasColumnType("smallint")
+                        .HasColumnName("version_contrato");
+
+                    b.HasKey("IdOperacion");
+
+                    b.HasIndex("IdUsuarioCancelacion");
+
+                    b.HasIndex("IdUsuarioPropietario", "Estado", "FechaCreacion")
+                        .HasDatabaseName("IX_operacion_caja_propietario_estado_fecha");
+
+                    b.ToTable("operacion_caja", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_operacion_caja_cancelacion", "((estado = 'Cancelada' AND id_usuario_cancelacion IS NOT NULL AND fecha_cancelacion IS NOT NULL) OR (estado <> 'Cancelada' AND id_usuario_cancelacion IS NULL AND fecha_cancelacion IS NULL))");
+
+                            t.HasCheckConstraint("CK_operacion_caja_estado", "estado IN ('Preparada', 'Completada', 'Rechazada', 'Cancelada')");
+
+                            t.HasCheckConstraint("CK_operacion_caja_payload", "((tipo IS NULL AND version_contrato IS NULL AND argumentos IS NULL AND hash_argumentos IS NULL AND estado = 'Cancelada') OR (tipo IS NOT NULL AND tipo IN ('AbrirTurno', 'CobrarCuenta', 'CerrarTurno') AND version_contrato IS NOT NULL AND version_contrato = 1 AND argumentos IS NOT NULL AND jsonb_typeof(argumentos) = 'object' AND hash_argumentos IS NOT NULL AND hash_argumentos ~ '^[0-9a-f]{64}$'))");
+
+                            t.HasCheckConstraint("CK_operacion_caja_resultado", "((estado = 'Preparada' AND fecha_terminal IS NULL AND status_resultado IS NULL AND codigo_resultado IS NULL AND resultado_json IS NULL) OR (estado <> 'Preparada' AND fecha_terminal IS NOT NULL AND status_resultado IS NOT NULL AND status_resultado BETWEEN 200 AND 499 AND codigo_resultado IS NOT NULL AND resultado_json IS NOT NULL AND jsonb_typeof(resultado_json) = 'object'))");
+                        });
+                });
+
             modelBuilder.Entity("ElCarbonazo.Api.Entities.Pedido", b =>
                 {
                     b.Property<int>("IdPedido")
@@ -714,6 +975,123 @@ namespace ElCarbonazo.Api.Migrations
                     b.ToTable("token_refresh_sesion", (string)null);
                 });
 
+            modelBuilder.Entity("ElCarbonazo.Api.Entities.TurnoCaja", b =>
+                {
+                    b.Property<int>("IdTurnoCaja")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id_turno_caja");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("IdTurnoCaja"));
+
+                    b.Property<int?>("CantidadCuentasPendientes")
+                        .HasColumnType("integer")
+                        .HasColumnName("cantidad_cuentas_pendientes");
+
+                    b.Property<decimal?>("Diferencia")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("diferencia");
+
+                    b.Property<decimal?>("EfectivoContado")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("efectivo_contado");
+
+                    b.Property<decimal?>("EfectivoEsperado")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("efectivo_esperado");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("estado");
+
+                    b.Property<DateTimeOffset>("FechaApertura")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_apertura");
+
+                    b.Property<DateTimeOffset?>("FechaCierre")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_cierre");
+
+                    b.Property<decimal>("FondoInicial")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("fondo_inicial");
+
+                    b.Property<Guid>("IdOperacionApertura")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id_operacion_apertura");
+
+                    b.Property<Guid?>("IdOperacionCierre")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id_operacion_cierre");
+
+                    b.Property<int>("IdUsuarioApertura")
+                        .HasColumnType("integer")
+                        .HasColumnName("id_usuario_apertura");
+
+                    b.Property<int?>("IdUsuarioCierre")
+                        .HasColumnType("integer")
+                        .HasColumnName("id_usuario_cierre");
+
+                    b.Property<string>("MotivoDiferencia")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("motivo_diferencia");
+
+                    b.Property<decimal?>("TotalEfectivo")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("total_efectivo");
+
+                    b.Property<decimal?>("TotalTarjeta")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("total_tarjeta");
+
+                    b.Property<decimal?>("TotalTransferencia")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("total_transferencia");
+
+                    b.HasKey("IdTurnoCaja");
+
+                    b.HasIndex("Estado")
+                        .IsUnique()
+                        .HasDatabaseName("IX_turno_caja_unico_abierto")
+                        .HasFilter("estado = 'Abierto'");
+
+                    b.HasIndex("FechaApertura")
+                        .HasDatabaseName("IX_turno_caja_fecha_apertura");
+
+                    b.HasIndex("IdOperacionApertura")
+                        .IsUnique()
+                        .HasDatabaseName("IX_turno_caja_operacion_apertura");
+
+                    b.HasIndex("IdOperacionCierre")
+                        .IsUnique()
+                        .HasDatabaseName("IX_turno_caja_operacion_cierre");
+
+                    b.HasIndex("IdUsuarioApertura");
+
+                    b.HasIndex("IdUsuarioCierre");
+
+                    b.ToTable("turno_caja", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_turno_caja_cierre", "((estado = 'Abierto' AND fecha_cierre IS NULL AND id_usuario_cierre IS NULL AND id_operacion_cierre IS NULL AND efectivo_esperado IS NULL AND efectivo_contado IS NULL AND diferencia IS NULL AND total_efectivo IS NULL AND total_tarjeta IS NULL AND total_transferencia IS NULL AND cantidad_cuentas_pendientes IS NULL AND motivo_diferencia IS NULL) OR (estado = 'Cerrado' AND fecha_cierre IS NOT NULL AND id_usuario_cierre IS NOT NULL AND id_operacion_cierre IS NOT NULL AND efectivo_esperado IS NOT NULL AND efectivo_esperado >= 0 AND efectivo_contado IS NOT NULL AND efectivo_contado >= 0 AND diferencia IS NOT NULL AND diferencia = efectivo_contado - efectivo_esperado AND total_efectivo IS NOT NULL AND total_efectivo >= 0 AND total_tarjeta IS NOT NULL AND total_tarjeta >= 0 AND fecha_cierre >= fecha_apertura AND total_transferencia IS NOT NULL AND total_transferencia >= 0 AND cantidad_cuentas_pendientes IS NOT NULL AND cantidad_cuentas_pendientes >= 0 AND ((diferencia = 0 AND motivo_diferencia IS NULL) OR (diferencia <> 0 AND motivo_diferencia IS NOT NULL AND length(btrim(motivo_diferencia)) > 0))))");
+
+                            t.HasCheckConstraint("CK_turno_caja_estado", "estado IN ('Abierto', 'Cerrado')");
+
+                            t.HasCheckConstraint("CK_turno_caja_fondo", "fondo_inicial >= 0");
+
+                            t.HasCheckConstraint("CK_turno_caja_motivo_diferencia", "motivo_diferencia IS NULL OR (char_length(motivo_diferencia) <= 500 AND motivo_diferencia = normalize(motivo_diferencia, NFC) AND motivo_diferencia !~ '[[:cntrl:]]')");
+                        });
+                });
+
             modelBuilder.Entity("ElCarbonazo.Api.Entities.Usuario", b =>
                 {
                     b.Property<int>("IdUsuario")
@@ -787,6 +1165,41 @@ namespace ElCarbonazo.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ElCarbonazo.Api.Entities.Cobro", b =>
+                {
+                    b.HasOne("ElCarbonazo.Api.Entities.OperacionCaja", "Operacion")
+                        .WithOne("Cobro")
+                        .HasForeignKey("ElCarbonazo.Api.Entities.Cobro", "IdOperacion")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ElCarbonazo.Api.Entities.Pedido", "Pedido")
+                        .WithMany()
+                        .HasForeignKey("IdPedido")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ElCarbonazo.Api.Entities.TurnoCaja", "TurnoCaja")
+                        .WithMany("Cobros")
+                        .HasForeignKey("IdTurnoCaja")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ElCarbonazo.Api.Entities.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("IdUsuario")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Operacion");
+
+                    b.Navigation("Pedido");
+
+                    b.Navigation("TurnoCaja");
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("ElCarbonazo.Api.Entities.Comanda", b =>
                 {
                     b.HasOne("ElCarbonazo.Api.Entities.Pedido", "Pedido")
@@ -804,6 +1217,17 @@ namespace ElCarbonazo.Api.Migrations
                     b.Navigation("Pedido");
 
                     b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("ElCarbonazo.Api.Entities.ComprobanteCobroLinea", b =>
+                {
+                    b.HasOne("ElCarbonazo.Api.Entities.Cobro", "Cobro")
+                        .WithMany("Lineas")
+                        .HasForeignKey("IdCobro")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Cobro");
                 });
 
             modelBuilder.Entity("ElCarbonazo.Api.Entities.DetallePedido", b =>
@@ -904,6 +1328,24 @@ namespace ElCarbonazo.Api.Migrations
                     b.Navigation("GrupoActivo");
                 });
 
+            modelBuilder.Entity("ElCarbonazo.Api.Entities.OperacionCaja", b =>
+                {
+                    b.HasOne("ElCarbonazo.Api.Entities.Usuario", "UsuarioCancelacion")
+                        .WithMany()
+                        .HasForeignKey("IdUsuarioCancelacion")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ElCarbonazo.Api.Entities.Usuario", "UsuarioPropietario")
+                        .WithMany()
+                        .HasForeignKey("IdUsuarioPropietario")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("UsuarioCancelacion");
+
+                    b.Navigation("UsuarioPropietario");
+                });
+
             modelBuilder.Entity("ElCarbonazo.Api.Entities.Pedido", b =>
                 {
                     b.HasOne("ElCarbonazo.Api.Entities.GrupoMesa", "Grupo")
@@ -951,6 +1393,44 @@ namespace ElCarbonazo.Api.Migrations
                     b.Navigation("Sesion");
                 });
 
+            modelBuilder.Entity("ElCarbonazo.Api.Entities.TurnoCaja", b =>
+                {
+                    b.HasOne("ElCarbonazo.Api.Entities.OperacionCaja", "OperacionApertura")
+                        .WithMany("TurnosApertura")
+                        .HasForeignKey("IdOperacionApertura")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ElCarbonazo.Api.Entities.OperacionCaja", "OperacionCierre")
+                        .WithMany("TurnosCierre")
+                        .HasForeignKey("IdOperacionCierre")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ElCarbonazo.Api.Entities.Usuario", "UsuarioApertura")
+                        .WithMany()
+                        .HasForeignKey("IdUsuarioApertura")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ElCarbonazo.Api.Entities.Usuario", "UsuarioCierre")
+                        .WithMany()
+                        .HasForeignKey("IdUsuarioCierre")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("OperacionApertura");
+
+                    b.Navigation("OperacionCierre");
+
+                    b.Navigation("UsuarioApertura");
+
+                    b.Navigation("UsuarioCierre");
+                });
+
+            modelBuilder.Entity("ElCarbonazo.Api.Entities.Cobro", b =>
+                {
+                    b.Navigation("Lineas");
+                });
+
             modelBuilder.Entity("ElCarbonazo.Api.Entities.Comanda", b =>
                 {
                     b.Navigation("Detalles");
@@ -974,6 +1454,15 @@ namespace ElCarbonazo.Api.Migrations
                     b.Navigation("Pedidos");
                 });
 
+            modelBuilder.Entity("ElCarbonazo.Api.Entities.OperacionCaja", b =>
+                {
+                    b.Navigation("Cobro");
+
+                    b.Navigation("TurnosApertura");
+
+                    b.Navigation("TurnosCierre");
+                });
+
             modelBuilder.Entity("ElCarbonazo.Api.Entities.Pedido", b =>
                 {
                     b.Navigation("Comandas");
@@ -987,6 +1476,11 @@ namespace ElCarbonazo.Api.Migrations
             modelBuilder.Entity("ElCarbonazo.Api.Entities.SesionUsuario", b =>
                 {
                     b.Navigation("TokensRefresh");
+                });
+
+            modelBuilder.Entity("ElCarbonazo.Api.Entities.TurnoCaja", b =>
+                {
+                    b.Navigation("Cobros");
                 });
 
             modelBuilder.Entity("ElCarbonazo.Api.Entities.Usuario", b =>

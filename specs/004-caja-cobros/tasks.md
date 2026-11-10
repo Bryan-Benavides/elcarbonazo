@@ -1,6 +1,10 @@
 # Tareas — 004 Caja, cobros y comprobante interno
 
-**Estado:** D0 funcional y técnico aprobado por el usuario; paquete documental consistente y listo para iniciar C1. Implementación **no iniciada**. No aplicar migraciones ni tocar bases persistentes. Aceptación prevista únicamente para demostración universitaria local aislada; no equivale a aptitud para operar un restaurante con dinero real.
+**Estado:** D0 funcional y técnico aprobado; C1 completado para desarrollo en `feature/004-caja-cobros`, con pruebas de migración y concurrencia en PostgreSQL temporal. C2 iniciado: normalización/hash internos en desarrollo; protocolo, autorización y diario aún no implementados. No aplicar migraciones ni tocar bases persistentes. Aceptación prevista únicamente para demostración universitaria local aislada; no equivale a aptitud para operar un restaurante con dinero real.
+
+**Revisión de concurrencia:** una prueba PostgreSQL demostró que la lectura MVCC por sí sola no impide preparar un cobro después del control de pendientes. El usuario autorizó revisar el plan; §5 ahora exige barrera global compartida para preparar y cerrar. Ambos órdenes se prueban mediante transacciones de modelo; las implementaciones C2/C3 aún inexistentes requieren sus propias pruebas de integración.
+
+**Avance de matriz:** las pruebas `Existing_send_or_kitchen_and_cash_locks_serialize` y `Cash_destination_lock_and_release_or_group_close_serialize` verifican bloqueos reales de envío, cocina, liberación y cierre de grupo frente al modelo de caja, en ambos órdenes y destinos correspondientes. Las pruebas existentes también cubren carreras entre esos servicios. Quedan para C2/C3/C5 las carreras de los servicios reales de caja y la matriz completa de negocio.
 
 ## D0 — Cierre documental y diseño aprobado
 
@@ -19,14 +23,14 @@
 
 ## C1 — Inventario y persistencia
 
-- [ ] Inspeccionar entidades/migraciones/grants actuales 001/003 en repositorio; comprobar con lectura autorizada el esquema únicamente si se confirma destino. No imprimir secretos.
-- [ ] Implementar el modelo aprobado `turno_caja`, `cobro`, snapshot de líneas y `operacion_caja`, incluyendo precisión, CHECKs, retención y número interno.
-- [ ] Diseñar y demostrar orden de locks en matriz de flujos con recursos 001/003 y transacciones PostgreSQL independientes.
-- [ ] Implementar configuración Fluent API, entidades, FK restrictivas, CHECK, índices únicos/parciales y secuencias con privilegio mínimo.
-- [ ] Crear migración nueva, sin modificar migraciones históricas ni activar auto-migrate.
-- [ ] Revisar SQL generado y permisos; probar migración limpia, desde 001+003 representativo, precondición incompatible/rollback y preservación de filas exclusivamente en PostgreSQL temporal.
-- [ ] Cubrir constraints e índices y grants con rol runtime temporal; verificar que no hay UPDATE/DELETE indebidos.
-- [ ] Cerrar la puerta C1 antes de ejecutar migración fuera de test; base persistente requiere destino confirmado y autorización expresa por separado.
+- [x] Inspeccionar entidades/migraciones/grants actuales 001/003 en repositorio y confirmar el orden existente mesa → pedido → comanda; lectura de esquema persistente no realizada porque no se confirmó destino.
+- [x] Implementar el modelo aprobado `turno_caja`, `cobro`, snapshot de líneas y `operacion_caja`, con precisión, CHECKs, número interno e inmutabilidad de turnos cerrados.
+- [x] Diseñar y probar orden de locks con servicios 001/003 reales y transacciones PostgreSQL independientes que modelan el lado caja; probar preparación/cierre modelados en ambos órdenes. Repetir con servicios reales de caja en C2/C3/C5.
+- [x] Implementar configuración Fluent API, entidades, FK restrictivas, CHECK, índices únicos/parciales y secuencias con privilegio mínimo.
+- [x] Crear migración nueva `20261109224603_AddCajaPersistence`, sin modificar migraciones históricas ni activar auto-migrate; `Down` impide borrar evidencia.
+- [x] Revisar migración generada y probar migración limpia, actualización desde 003 representativo, preservación de fila legada, unicidad de turno, forma inválida de efectivo y trigger de cierre, exclusivamente en PostgreSQL temporal.
+- [x] Cubrir grants con rol runtime temporal; verificar permisos de actualización limitados y ausencia de INSERT/UPDATE/DELETE no concedidos en tablas de evidencia.
+- [x] Cerrar la puerta C1 para desarrollo tras probar migración representativa con mesa, grupo activo, pedidos en cinco estados, comandas en tres estados y cuenta legada sin comanda. Los locks de alcance C1 se probaron; la estructura incompatible confirmó rollback sin cambios parciales en PostgreSQL temporal, y la barrera preparación/cierre está probada como modelo, no como servicio. Migración fuera de test requiere destino confirmado y autorización expresa por separado.
 
 ## C2 — Protocolo durable de operaciones de caja
 

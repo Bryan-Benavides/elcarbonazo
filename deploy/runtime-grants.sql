@@ -21,6 +21,20 @@ GRANT SELECT, INSERT, UPDATE ON public.sesion_usuario TO elcarbonazo_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.token_refresh_sesion TO elcarbonazo_runtime;
 GRANT SELECT, INSERT ON public.evento_auditoria TO elcarbonazo_runtime;
 
+-- Cash persistence: durable operation arguments are immutable after preparation;
+-- runtime may only transition status/result/cancellation metadata.
+GRANT SELECT, INSERT ON public.operacion_caja TO elcarbonazo_runtime;
+GRANT UPDATE (estado, fecha_terminal, status_resultado, codigo_resultado, resultado_json,
+              id_usuario_cancelacion, fecha_cancelacion)
+    ON public.operacion_caja TO elcarbonazo_runtime;
+GRANT SELECT, INSERT ON public.turno_caja TO elcarbonazo_runtime;
+GRANT UPDATE (estado, fecha_cierre, id_usuario_cierre, id_operacion_cierre,
+              efectivo_esperado, efectivo_contado, diferencia, total_efectivo,
+              total_tarjeta, total_transferencia, cantidad_cuentas_pendientes,
+              motivo_diferencia)
+    ON public.turno_caja TO elcarbonazo_runtime;
+GRANT SELECT, INSERT ON public.cobro, public.comprobante_cobro_linea TO elcarbonazo_runtime;
+
 GRANT USAGE, SELECT ON SEQUENCE public.grupo_mesa_id_grupo_seq TO elcarbonazo_runtime;
 GRANT USAGE, SELECT ON SEQUENCE public.pedido_id_pedido_seq TO elcarbonazo_runtime;
 GRANT USAGE, SELECT ON SEQUENCE public.producto_id_producto_seq TO elcarbonazo_runtime;
@@ -28,6 +42,10 @@ GRANT USAGE, SELECT ON SEQUENCE public.comanda_id_comanda_seq TO elcarbonazo_run
 GRANT USAGE, SELECT ON SEQUENCE public.detalle_pedido_id_detalle_seq TO elcarbonazo_runtime;
 GRANT USAGE, SELECT ON SEQUENCE public.token_refresh_sesion_id_token_seq TO elcarbonazo_runtime;
 GRANT USAGE, SELECT ON SEQUENCE public.evento_auditoria_id_evento_seq TO elcarbonazo_runtime;
+GRANT USAGE, SELECT ON SEQUENCE public.turno_caja_id_turno_caja_seq TO elcarbonazo_runtime;
+GRANT USAGE, SELECT ON SEQUENCE public.cobro_id_cobro_seq TO elcarbonazo_runtime;
+GRANT USAGE, SELECT ON SEQUENCE public.cobro_numero_comprobante_seq TO elcarbonazo_runtime;
+GRANT USAGE, SELECT ON SEQUENCE public.comprobante_cobro_linea_id_comprobante_cobro_linea_seq TO elcarbonazo_runtime;
 
 GRANT SELECT, INSERT, UPDATE ON public.usuario TO elcarbonazo_bootstrap;
 GRANT USAGE, SELECT ON SEQUENCE public.usuario_id_usuario_seq TO elcarbonazo_bootstrap;

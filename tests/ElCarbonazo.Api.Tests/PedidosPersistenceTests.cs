@@ -654,7 +654,18 @@ public sealed class RuntimeGrantsTests
                     has_sequence_privilege(@role, 'public.producto_id_producto_seq', 'USAGE'),
                     has_table_privilege(@role, 'public.evento_auditoria', 'DELETE'),
                     has_table_privilege(@role, 'public.pedido', 'INSERT'),
-                    has_sequence_privilege(@role, 'public.pedido_id_pedido_seq', 'USAGE')
+                    has_sequence_privilege(@role, 'public.pedido_id_pedido_seq', 'USAGE'),
+                    has_table_privilege(@role, 'public.operacion_caja', 'SELECT'),
+                    has_column_privilege(@role, 'public.operacion_caja', 'estado', 'UPDATE'),
+                    has_column_privilege(@role, 'public.operacion_caja', 'tipo', 'UPDATE'),
+                    has_table_privilege(@role, 'public.operacion_caja', 'DELETE'),
+                    has_column_privilege(@role, 'public.turno_caja', 'estado', 'UPDATE'),
+                    has_column_privilege(@role, 'public.turno_caja', 'fondo_inicial', 'UPDATE'),
+                    has_table_privilege(@role, 'public.cobro', 'INSERT'),
+                    has_table_privilege(@role, 'public.cobro', 'UPDATE'),
+                    has_table_privilege(@role, 'public.comprobante_cobro_linea', 'INSERT'),
+                    has_sequence_privilege(@role, 'public.cobro_numero_comprobante_seq', 'USAGE'),
+                    has_sequence_privilege(@role, 'public.comprobante_cobro_linea_id_comprobante_cobro_linea_seq', 'USAGE')
                 """, connection);
             verify.Parameters.AddWithValue("role", runtimeRole);
             await using var reader = await verify.ExecuteReaderAsync();
@@ -671,6 +682,17 @@ public sealed class RuntimeGrantsTests
             Assert.False(reader.GetBoolean(9));
             Assert.True(reader.GetBoolean(10));
             Assert.True(reader.GetBoolean(11));
+            Assert.True(reader.GetBoolean(12));
+            Assert.True(reader.GetBoolean(13));
+            Assert.False(reader.GetBoolean(14));
+            Assert.False(reader.GetBoolean(15));
+            Assert.True(reader.GetBoolean(16));
+            Assert.False(reader.GetBoolean(17));
+            Assert.True(reader.GetBoolean(18));
+            Assert.False(reader.GetBoolean(19));
+            Assert.True(reader.GetBoolean(20));
+            Assert.True(reader.GetBoolean(21));
+            Assert.True(reader.GetBoolean(22));
             await reader.CloseAsync();
 
             await using (var seed = new NpgsqlCommand("""
