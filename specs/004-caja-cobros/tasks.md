@@ -36,12 +36,12 @@
 
 Avance parcial: normalización/hash y servicios internos de preparación, consulta, cancelación y reproducción terminal comparten lock UUID; prepare de cobro también toma barrera global y revalida turno. Las cuatro rutas REST usan autenticación y rol, revalidan sesión al obtener el lock y limitan/validan cuerpos; ejecución preparada devuelve 503 sin ejecutor C3. El núcleo usa savepoint y transacción compartida con ejecutor inyectado. Pruebas con ejecutor ficticio cubren éxito, rechazo, excepción y repetición; no prueban cobros reales. También se probaron prepare/cancel, fallo de auditoría, sesión revocada y autorización básica. Faltan handlers C3, diario protegido y pruebas completas de recuperación y carreras.
 
-El validador aislado de formato del diario rechaza instalación discordante, campos desconocidos/duplicados, contenido inválido y datos adicionales; todavía no lee ni escribe archivos y no verifica ACL. No constituye almacenamiento protegido ni habilita mutaciones.
+El diario tiene validador y almacenamiento de desarrollo con reemplazo y bloqueo exclusivo, probado con política de seguridad ficticia y reinicio del objeto. Requiere archivos preexistentes y conserva identidad hasta reconciliación. No existe política de ACL Windows registrada ni instalación verificada; no habilita mutaciones. La recuperación de una cancelación tras reiniciar el host API se probó descartando la respuesta recibida; no es una prueba de timeout de red real.
 
 - [ ] Implementar prepare/execute/query/cancel con UUID, contrato versionado, canonicalización/hash y autorización vigente.
 - [ ] Resolver concurrentemente preparación/cancelación/ejecución, incluidas barreras antes de preparación, solicitudes tardías y mismo UUID con payload/actor divergente.
 - [ ] Guardar mutación de dominio, auditoría y resultado terminal en transacción única; diseñar savepoints para rechazos deterministas y probar rollback.
-- [ ] Definir retención/archivo sin purgar operaciones no terminales ni permitir reejecución de UUID antiguo.
+- [x] Definir retención/archivo sin purgar operaciones no terminales ni permitir reejecución de UUID antiguo: `plan.md §4` conserva resultados completos al menos cinco años, prohíbe purga automática y exige tombstone permanente para compactación administrativa futura. No existe implementación de compactación en esta entrega.
 - [ ] Implementar almacenamiento local protegido de identidad mínima de recuperación, con ACL/atomicidad/fallo cerrado y sin tokens/contraseñas; revisar con instalador Windows antes de aprobar.
 - [ ] Probar timeout antes/después del commit, fallo de cuerpo/respuesta, reinicio de API/Desktop, sesión/rol revocado, actor distinto, intervención Jefa y concurrencia entre terminales.
 - [ ] Verificar que `Preparada`/`No encontrada`/GET de negocio no desbloquean acciones, y que cancelación no revierte cobro ya confirmado.

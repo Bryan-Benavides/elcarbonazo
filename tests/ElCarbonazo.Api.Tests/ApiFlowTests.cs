@@ -42,6 +42,32 @@ public sealed class ApiFlowTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Caja_cancellation_result_survives_restart_without_repeating_mutation()
+    {
+        var id = Guid.NewGuid();
+        var url = $"/api/caja/operaciones/{id}";
+        var token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var request = new { tipo = "AbrirTurno", version = 1, argumentos = new { fondoInicial = 0m, confirmado = true } };
+        Assert.Equal(HttpStatusCode.OK, (await _client.PutAsJsonAsync(url, request)).StatusCode);
+        // Discard the response as if the client could not consume it, then restart the host.
+        using (var response = await _client.PostAsJsonAsync(url + "/cancelacion", new { confirmaIntervencion = false }))
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        _client.Dispose();
+        await _factory.DisposeAsync();
+        _factory = new TestApiFactory(_database.ConnectionString, _database.LogDirectory);
+        _client = _factory.CreateClient();
+        token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var result = await _client.GetFromJsonAsync<JsonElement>(url);
+        Assert.Equal("Cancelada", result.GetProperty("estado").GetString());
+        Assert.Equal(HttpStatusCode.OK, (await _client.PostAsJsonAsync(url + "/ejecucion", new { })).StatusCode);
+        await using var verify = _database.CreateContext();
+        Assert.Equal(1, await verify.EventosAuditoria.CountAsync(x => x.TipoEvento == "OperacionCajaCancelada"));
+        Assert.Empty(await verify.TurnosCaja.ToListAsync());
+    }
+
+    [Fact]
     public async Task Caja_http_rejects_unauthorized_roles_and_invalid_or_oversized_payloads()
     {
         var url = $"/api/caja/operaciones/{Guid.NewGuid()}";

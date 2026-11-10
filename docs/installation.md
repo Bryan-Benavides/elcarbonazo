@@ -44,3 +44,9 @@ Para ejecutar pedidos 003 en una base local, la API también debe tener aplicado
 ## Provisión prevista para operaciones recuperables
 
 **Pendiente de implementación y verificación:** al desplegar el módulo 002, el instalador deberá crear el diario inicial `recovery\journal.json` bajo `%ProgramData%\ElCarbonazo`, con estado `SinPendientes` e identificador de instalación coincidente. En actualización no sobrescribirá un diario existente. Si falta o está corrupto, no se debe crear uno vacío para desbloquear la terminal; se requiere recuperación administrativa segura. Las ACL y el reemplazo atómico se verificarán con las cuentas Windows de operación. El procedimiento detallado y los permisos de las nuevas tablas se publicarán junto con la implementación, no se consideran disponibles todavía.
+
+### Caja 004: preparación pendiente
+
+El almacenamiento de desarrollo requiere `recovery\caja-journal.json` y `recovery\caja-journal.json.lock` preexistentes. El primero debe tener versión 1, UUID de instalación coincidente, estado `SinPendientes` y campos de operación, propietario y tipo explícitamente nulos; el segundo se usa para exclusión entre procesos. En una actualización o recuperación no se debe reemplazar un diario existente ni crear uno vacío para omitir una incertidumbre. No incluir credenciales, importes o referencias externas.
+
+Todavía no existe instalador ni política registrada que verifique propietario, ACL y rutas padre en Windows. Antes de habilitar caja Desktop debe definirse la identidad o grupo operativo autorizado para la instalación, restringir ambos archivos, temporales y directorio, protegerlos contra herencia o accesos no autorizados y probar con cuentas reales autorizadas y no autorizadas que el reemplazo preserva la protección. No considerar el validador de formato ni las pruebas con política ficticia como prueba de ACL. Si no se puede verificar la protección y la persistencia, bloquear mutaciones recuperables.
