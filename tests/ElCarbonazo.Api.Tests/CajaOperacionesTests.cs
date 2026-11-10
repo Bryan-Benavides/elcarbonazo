@@ -12,6 +12,7 @@ public sealed class CajaOperacionesTests
     [Theory]
     [InlineData("success", CajaStates.OperacionCompletada, 1)]
     [InlineData("reject", CajaStates.OperacionRechazada, 0)]
+    [InlineData("sql-reject", CajaStates.OperacionRechazada, 0)]
     [InlineData("exception", CajaStates.OperacionPreparada, 0)]
     public async Task Execute_commits_or_rolls_back_domain_and_terminal_together(string behavior, string state, int auditCount)
     {
@@ -41,6 +42,40 @@ public sealed class CajaOperacionesTests
             await using var verify = db.CreateContext();
             Assert.Equal(state, await verify.OperacionesCaja.Where(x => x.IdOperacion == id).Select(x => x.Estado).SingleAsync());
             Assert.Equal(auditCount, await verify.EventosAuditoria.CountAsync(x => x.TipoEvento == "PruebaCaja"));
+        }
+        finally { await db.DisposeAsync(); }
+    }
+
+    [Fact]
+    public async Task Cancellation_before_commit_leaves_operation_prepared_and_can_be_cancelled()
+    {
+        var db = new TemporaryPostgresDatabase();
+        try
+        {
+            await db.InitializeAsync();
+            var id = Guid.NewGuid();
+            await using (var setup = db.CreateContext())
+            {
+                await setup.Database.ExecuteSqlRawAsync("UPDATE usuario SET rol = 'Jefa', activo = true WHERE id_usuario = 1");
+                await CreateService(setup).PrepararAsync(id, 1, CajaOperacionCanonica.Abrir(10, true), default);
+            }
+            using var timeout = new CancellationTokenSource();
+            var executor = new BlockingExecutor();
+            await using (var context = db.CreateContext())
+            {
+                var running = new CajaOperacionesService(context, Audit(context), TimeProvider.System, executor)
+                    .EjecutarAsync(id, 1, timeout.Token);
+                await executor.Entered.Task.WaitAsync(TimeSpan.FromSeconds(20));
+                timeout.Cancel();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => running);
+            }
+            await using (var verify = db.CreateContext())
+            {
+                Assert.Equal(CajaStates.OperacionPreparada, await verify.OperacionesCaja.Where(x => x.IdOperacion == id).Select(x => x.Estado).SingleAsync());
+                Assert.Empty(await verify.TurnosCaja.ToListAsync());
+                Assert.Equal(CajaStates.OperacionCancelada,
+                    (await new CajaCancelacionService(verify, Audit(verify), TimeProvider.System).CancelarAsync(id, 1, false, default)).Estado);
+            }
         }
         finally { await db.DisposeAsync(); }
     }
@@ -164,6 +199,11 @@ public sealed class CajaOperacionesTests
             Calls++;
             Audit(context).Record("PruebaCaja", "Exitoso", operacion.IdUsuario);
             await context.SaveChangesAsync(cancellationToken);
+            if (behavior == "sql-reject")
+            {
+                try { await context.Database.ExecuteSqlRawAsync("SELECT 1 / 0", cancellationToken); }
+                catch (Npgsql.PostgresException) { return new(false, 409, "CONFLICTO", "{\"ok\":false}"); }
+            }
             if (behavior == "exception") throw new InvalidOperationException("Injected domain failure");
             return behavior == "success"
                 ? new(true, 200, "OK", "{\"ok\":true}")

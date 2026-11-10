@@ -42,6 +42,79 @@ public sealed class ApiFlowTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Caja_session_revoked_while_waiting_for_operation_lock_cannot_prepare()
+    {
+        var token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var id = Guid.NewGuid();
+        var hash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes($"elcarbonazo:caja:operacion:v1:{id:D}"));
+        var key = System.Buffers.Binary.BinaryPrimitives.ReadInt64BigEndian(hash);
+        await using var blocker = new NpgsqlConnection(_database.ConnectionString);
+        await blocker.OpenAsync();
+        await using var tx = await blocker.BeginTransactionAsync();
+        await using (var take = new NpgsqlCommand("SELECT pg_advisory_xact_lock(@key)", blocker, tx))
+        {
+            take.Parameters.AddWithValue("key", key);
+            await take.ExecuteNonQueryAsync();
+        }
+        var request = _client.PutAsJsonAsync($"/api/caja/operaciones/{id}",
+            new { tipo = "AbrirTurno", version = 1, argumentos = new { fondoInicial = 0, confirmado = true } });
+        var committed = false;
+        try
+        {
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            while (true)
+            {
+                await using var observer = new NpgsqlConnection(_database.ConnectionString);
+                await observer.OpenAsync(deadline.Token);
+                await using var blocked = new NpgsqlCommand("""
+                    SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname = current_database()
+                        AND pid <> pg_backend_pid() AND cardinality(pg_blocking_pids(pid)) > 0
+                        AND query LIKE '%pg_advisory_xact_lock%')
+                    """, observer);
+                if ((bool)(await blocked.ExecuteScalarAsync(deadline.Token))!) break;
+                await Task.Delay(25, deadline.Token);
+            }
+            await using (var context = _database.CreateContext())
+                await context.Database.ExecuteSqlRawAsync("UPDATE sesion_usuario SET fecha_revocacion = now() WHERE id_usuario = 1 AND fecha_revocacion IS NULL");
+            await tx.CommitAsync();
+            committed = true;
+            Assert.Equal(HttpStatusCode.Unauthorized, (await request.WaitAsync(TimeSpan.FromSeconds(20))).StatusCode);
+            await using var verify = _database.CreateContext();
+            Assert.False(await verify.OperacionesCaja.AnyAsync(x => x.IdOperacion == id));
+        }
+        finally
+        {
+            if (!committed) await tx.RollbackAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Caja_timeout_after_cancel_commit_is_resolved_by_query_without_repeating_write()
+    {
+        var id = Guid.NewGuid();
+        var url = $"/api/caja/operaciones/{id}";
+        var gate = new PostCommitGate { Path = url + "/cancelacion", Status = 200 };
+        await using var factory = new TestApiFactory(_database.ConnectionString, _database.LogDirectory, gate);
+        using var client = factory.CreateClient();
+        var login = await client.PostAsJsonAsync("/api/auth/login", new { nombre = "jefa central", contrasena = "correct horse battery staple" });
+        login.EnsureSuccessStatusCode();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer",
+            (await login.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("accessToken").GetString());
+        Assert.Equal(HttpStatusCode.OK, (await client.PutAsJsonAsync(url,
+            new { tipo = "AbrirTurno", version = 1, argumentos = new { fondoInicial = 0, confirmado = true } })).StatusCode);
+        using var timeout = new CancellationTokenSource();
+        var cancellation = client.PostAsJsonAsync(url + "/cancelacion", new { confirmaIntervencion = false }, timeout.Token);
+        await gate.Committed.Task.WaitAsync(TimeSpan.FromSeconds(20));
+        timeout.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancellation);
+        Assert.Equal("Cancelada", (await client.GetFromJsonAsync<JsonElement>(url)).GetProperty("estado").GetString());
+        await using var verify = _database.CreateContext();
+        Assert.Equal(1, await verify.EventosAuditoria.CountAsync(x => x.TipoEvento == "OperacionCajaCancelada"));
+        Assert.Empty(await verify.TurnosCaja.ToListAsync());
+    }
+
+    [Fact]
     public async Task Caja_cancellation_result_survives_restart_without_repeating_mutation()
     {
         var id = Guid.NewGuid();
@@ -1220,6 +1293,8 @@ internal sealed class TestApiFactory(string connectionString, string logDirector
 
 internal sealed class PostCommitGate
 {
+    public string Path { get; init; } = "/api/pedidos/envios";
+    public int Status { get; init; } = 201;
     public TaskCompletionSource Committed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public int Triggered;
 }
@@ -1231,7 +1306,7 @@ internal sealed class PostCommitFilter(PostCommitGate gate) : IStartupFilter
         app.Use(async (context, continuation) =>
         {
             await continuation();
-            if (context.Request.Path == "/api/pedidos/envios" && context.Response.StatusCode == 201 &&
+            if (context.Request.Path == gate.Path && context.Response.StatusCode == gate.Status &&
                 Interlocked.Exchange(ref gate.Triggered, 1) == 0)
             {
                 gate.Committed.TrySetResult();

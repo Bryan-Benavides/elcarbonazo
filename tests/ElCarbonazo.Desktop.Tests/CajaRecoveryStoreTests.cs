@@ -7,6 +7,45 @@ namespace ElCarbonazo.Desktop.Tests;
 public sealed class CajaRecoveryStoreTests
 {
     [Fact]
+    public async Task Competing_process_models_cannot_replace_a_pending_operation()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"caja-journal-race-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "journal.json");
+        var installation = Guid.NewGuid();
+        try
+        {
+            File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                version = 1,
+                instalacion = installation,
+                estado = "SinPendientes",
+                operacion = (Guid?)null,
+                propietario = (int?)null,
+                tipo = (string?)null
+            }));
+            File.WriteAllText(path + ".lock", "");
+            var one = Guid.NewGuid();
+            var two = Guid.NewGuid();
+            var first = new CajaRecoveryStore(path, installation, new TestPolicy(true));
+            var second = new CajaRecoveryStore(path, installation, new TestPolicy(true));
+            var outcomes = await Task.WhenAll(Task.Run(() => first.Begin(one, 1, "AbrirTurno")),
+                Task.Run(() => second.Begin(two, 1, "AbrirTurno")));
+            Assert.Single(outcomes, value => value);
+            var persisted = first.Read();
+            Assert.NotNull(persisted);
+            Assert.Contains(persisted.Operacion, new Guid?[] { one, two });
+            Assert.Equal("Pendiente", persisted.Estado);
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(path + ".lock");
+            Directory.Delete(directory);
+        }
+    }
+
+    [Fact]
     public void Journal_persists_identity_across_restarts_and_requires_terminal_reconciliation()
     {
         var directory = Path.Combine(Path.GetTempPath(), $"caja-journal-test-{Guid.NewGuid():N}");
