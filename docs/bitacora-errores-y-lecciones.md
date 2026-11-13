@@ -1,5 +1,22 @@
 # Bitácora de errores y lecciones — El Carbonazo
 
+### 004: autorización después de esperar el lock global
+
+- **Hecho comprobado:** la preparación y ejecución de apertura podían esperar el lock global después de comprobar el rol, sin volver a consultar la autorización antes de persistir.
+- **Corrección:** tras adquirir ese lock se vuelve a verificar sesión y rol; el lock se toma fuera del savepoint de dominio para conservarlo durante la persistencia de un rechazo.
+- **Evidencia:** pruebas con conexiones PostgreSQL independientes cambian el rol mientras la solicitud está bloqueada y verifican que preparación y ejecución no mutan datos. No demuestra autorización concurrente para handlers C3 aún no implementados.
+
+### 004: transporte recuperable y reintento de sesión
+
+- **Hecho comprobado:** `SessionManager.SendHumanAsync` puede reenviar una solicitud después de refrescar un access token expirado. Ese comportamiento no debe conectarse directamente a mutaciones recuperables de caja, que prohíben reintentos automáticos.
+- **Control:** caja usa `SendCajaOnceAsync`, que captura el token de la identidad esperada y no refresca ni reintenta la escritura. Una prueba integra `SessionManager` y el transporte de caja con HTTP ficticio y verifica un solo envío. Falta la prueba extremo a extremo con pantalla y servicios de negocio C3/C4.
+
+### 004: evaluación de ACL heredables en rutas superiores
+
+- **Hecho comprobado:** una carpeta temporal con ACL restringida era rechazada por reglas de directorios superiores de Windows que solo se heredan o permiten crear elementos hermanos. La prueba positiva inicial falló en esta máquina.
+- **Causa:** la política trataba permisos que no permiten modificar el directorio protegido existente como si fueran permisos efectivos para sustituirlo.
+- **Control:** verificar propietarios de cada ancestro, ignorar ACE de solo herencia únicamente al evaluar ese ancestro y rechazar permisos efectivos de borrado de hijos, eliminación, cambio de permisos o toma de propiedad. La carpeta y archivo del diario siguen exigiendo acceso limitado a identidades confiables. Las pruebas positivas y negativas usan archivos temporales con la cuenta actual; por decisión del usuario no se exige otra cuenta real para la demostración. El acceso efectivo desde otra cuenta no fue validado; el aprovisionamiento sigue pendiente.
+
 ### 004: lecturas MVCC y CHECK con valores nulos
 
 - **Hechos comprobados:** en PostgreSQL temporal, una lectura de pendientes realizada por cierre mientras mantiene bloqueado el turno no impide que otra conexión inserte y confirme una operación preparada después de esa lectura. La prueba reproduce la intercalación de persistencia, no un cierre de negocio implementado. Asimismo, un CHECK de payload aceptaba una versión nula.

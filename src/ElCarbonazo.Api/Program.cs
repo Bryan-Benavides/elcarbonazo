@@ -197,6 +197,10 @@ builder.Services.AddScoped<EnviosService>();
 builder.Services.AddScoped<CocinaService>();
 builder.Services.AddScoped<CajaOperacionesService>();
 builder.Services.AddScoped<CajaCancelacionService>();
+builder.Services.AddScoped<CajaCuentasService>();
+builder.Services.AddScoped<CajaAperturaExecutor>();
+builder.Services.AddScoped<CajaCierreExecutor>();
+builder.Services.AddScoped<ICajaEjecutorDominio, CajaEjecutorDominio>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

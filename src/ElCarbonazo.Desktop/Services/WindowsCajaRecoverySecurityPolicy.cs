@@ -10,15 +10,19 @@ public sealed class WindowsCajaRecoverySecurityPolicy : ICajaRecoverySecurityPol
 {
     private readonly string _directory;
     private readonly HashSet<SecurityIdentifier> _trusted;
-    private const FileSystemRights Dangerous = FileSystemRights.WriteData | FileSystemRights.AppendData |
-        FileSystemRights.WriteExtendedAttributes | FileSystemRights.WriteAttributes | FileSystemRights.Delete |
+    // Creating siblings in an ancestor does not grant control of an existing protected child.
+    private const FileSystemRights DangerousAncestor = FileSystemRights.Delete |
         FileSystemRights.DeleteSubdirectoriesAndFiles | FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
 
     public WindowsCajaRecoverySecurityPolicy(string directory, SecurityIdentifier operatorSid)
     {
+        if (WindowsIdentity.GetCurrent().User is not SecurityIdentifier current || !current.Equals(operatorSid))
+            throw new ArgumentException("La identidad operativa debe coincidir con la cuenta Windows actual.", nameof(operatorSid));
         _directory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
         _trusted = [operatorSid, new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null),
             new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null)];
+        try { _trusted.Add((SecurityIdentifier)new NTAccount("NT SERVICE", "TrustedInstaller").Translate(typeof(SecurityIdentifier))); }
+        catch (IdentityNotMappedException) { /* Unresolved owners remain untrusted. */ }
     }
 
     public bool IsProtected(string path)
@@ -47,13 +51,14 @@ public sealed class WindowsCajaRecoverySecurityPolicy : ICajaRecoverySecurityPol
 
     private bool CheckAcl(FileSystemSecurity acl, bool privateObject)
     {
-        if (privateObject && (acl.GetOwner(typeof(SecurityIdentifier)) is not SecurityIdentifier owner || !_trusted.Contains(owner))) return false;
+        if (acl.GetOwner(typeof(SecurityIdentifier)) is not SecurityIdentifier owner || !_trusted.Contains(owner)) return false;
         var rules = acl.GetAccessRules(true, true, typeof(SecurityIdentifier));
         foreach (FileSystemAccessRule rule in rules)
         {
             if (rule.AccessControlType != AccessControlType.Allow) continue;
+            if (!privateObject && (rule.PropagationFlags & PropagationFlags.InheritOnly) != 0) continue;
             if (rule.IdentityReference is not SecurityIdentifier sid) return false;
-            if (!_trusted.Contains(sid) && (privateObject || (rule.FileSystemRights & Dangerous) != 0)) return false;
+            if (!_trusted.Contains(sid) && (privateObject || (rule.FileSystemRights & DangerousAncestor) != 0)) return false;
         }
         return true;
     }

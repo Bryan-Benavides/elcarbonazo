@@ -1,14 +1,245 @@
 using ElCarbonazo.Api.Domain;
+using ElCarbonazo.Api.Entities;
 using ElCarbonazo.Api.Security;
 using ElCarbonazo.Api.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Xunit;
 
 namespace ElCarbonazo.Api.Tests;
 
 public sealed class CajaOperacionesTests
 {
+    [Fact]
+    public async Task Closing_totals_use_confirmed_payments_per_method_and_cash_net_of_change()
+    {
+        var db = new TemporaryPostgresDatabase();
+        try
+        {
+            await db.InitializeAsync();
+            var closing = Guid.NewGuid();
+            int shiftId;
+            await using (var setup = db.CreateContext())
+            {
+                await setup.Database.ExecuteSqlRawAsync("UPDATE usuario SET rol = 'Jefa', activo = true WHERE id_usuario = 1");
+                var audit = Audit(setup);
+                var service = new CajaOperacionesService(setup, audit, TimeProvider.System, new CajaAperturaExecutor(setup, audit, TimeProvider.System));
+                var opening = Guid.NewGuid();
+                await service.PrepararAsync(opening, 1, CajaOperacionCanonica.Abrir(10, true), default);
+                Assert.Equal(201, (await service.EjecutarAsync(opening, 1, default)).Status);
+                shiftId = await setup.TurnosCaja.Select(x => x.IdTurnoCaja).SingleAsync();
+                foreach (var (method, amount) in new[] { (CajaStates.Efectivo, 20m), (CajaStates.Tarjeta, 30m), (CajaStates.Transferencia, 40m) })
+                {
+                    var order = new Pedido
+                    {
+                        IdMesa = 1,
+                        IdUsuario = 1,
+                        FechaHora = DateTimeOffset.UtcNow,
+                        Subtotal = amount,
+                        Total = amount,
+                        Estado = PedidoStates.Pagado
+                    };
+                    var operation = new OperacionCaja
+                    {
+                        IdOperacion = Guid.NewGuid(),
+                        IdUsuarioPropietario = 1,
+                        Tipo = "CobrarCuenta",
+                        VersionContrato = 1,
+                        Argumentos = "{}",
+                        HashArgumentos = new string('a', 64),
+                        Estado = CajaStates.OperacionCompletada,
+                        FechaCreacion = DateTimeOffset.UtcNow,
+                        FechaTerminal = DateTimeOffset.UtcNow,
+                        StatusResultado = 200,
+                        CodigoResultado = "OK",
+                        ResultadoJson = "{}"
+                    };
+                    setup.Pedidos.Add(order);
+                    setup.OperacionesCaja.Add(operation);
+                    await setup.SaveChangesAsync();
+                    setup.Cobros.Add(new Cobro
+                    {
+                        IdPedido = order.IdPedido,
+                        IdTurnoCaja = shiftId,
+                        IdUsuario = 1,
+                        IdOperacion = operation.IdOperacion,
+                        MetodoPago = method,
+                        Subtotal = amount,
+                        Total = amount,
+                        EfectivoRecibido = method == CajaStates.Efectivo ? amount + 5 : null,
+                        Vuelto = method == CajaStates.Efectivo ? 5 : null,
+                        ReferenciaExterna = method == CajaStates.Efectivo ? null : "ref-" + method,
+                        VerificacionExternaConfirmada = method != CajaStates.Efectivo,
+                        FechaHora = DateTimeOffset.UtcNow
+                    });
+                    await setup.SaveChangesAsync();
+                }
+                await service.PrepararAsync(closing, 1, CajaOperacionCanonica.Cerrar(shiftId, 30, null, true), default);
+            }
+            await using (var context = db.CreateContext())
+            {
+                var audit = Audit(context);
+                var result = await new CajaOperacionesService(context, audit, TimeProvider.System, new CajaCierreExecutor(context, audit, TimeProvider.System))
+                    .EjecutarAsync(closing, 1, default);
+                Assert.Equal(200, result.Status);
+            }
+            await using var verify = db.CreateContext();
+            var shift = await verify.TurnosCaja.SingleAsync(x => x.IdTurnoCaja == shiftId);
+            Assert.Equal(30m, shift.EfectivoEsperado);
+            Assert.Equal(20m, shift.TotalEfectivo);
+            Assert.Equal(30m, shift.TotalTarjeta);
+            Assert.Equal(40m, shift.TotalTransferencia);
+            Assert.Equal(0m, shift.Diferencia);
+        }
+        finally { await db.DisposeAsync(); }
+    }
+
+    [Fact]
+    public async Task Closing_audit_failure_rolls_back_shift_and_keeps_operation_prepared()
+    {
+        var db = new TemporaryPostgresDatabase();
+        try
+        {
+            await db.InitializeAsync();
+            var opening = Guid.NewGuid();
+            var closing = Guid.NewGuid();
+            int shiftId;
+            await using (var setup = db.CreateContext())
+            {
+                await setup.Database.ExecuteSqlRawAsync("UPDATE usuario SET rol = 'Jefa', activo = true WHERE id_usuario = 1");
+                var audit = Audit(setup);
+                var service = new CajaOperacionesService(setup, audit, TimeProvider.System, new CajaAperturaExecutor(setup, audit, TimeProvider.System));
+                await service.PrepararAsync(opening, 1, CajaOperacionCanonica.Abrir(10, true), default);
+                Assert.Equal(201, (await service.EjecutarAsync(opening, 1, default)).Status);
+                shiftId = await setup.TurnosCaja.Select(x => x.IdTurnoCaja).SingleAsync();
+                await service.PrepararAsync(closing, 1, CajaOperacionCanonica.Cerrar(shiftId, 10, null, true), default);
+            }
+            await using (var context = db.CreateContext())
+            {
+                var audit = new FailingAudit();
+                var service = new CajaOperacionesService(context, audit, TimeProvider.System, new CajaCierreExecutor(context, audit, TimeProvider.System));
+                await Assert.ThrowsAsync<InvalidOperationException>(() => service.EjecutarAsync(closing, 1, default));
+            }
+            await using var verify = db.CreateContext();
+            Assert.Equal(CajaStates.TurnoAbierto, await verify.TurnosCaja.Where(x => x.IdTurnoCaja == shiftId).Select(x => x.Estado).SingleAsync());
+            Assert.Equal(CajaStates.OperacionPreparada, await verify.OperacionesCaja.Where(x => x.IdOperacion == closing).Select(x => x.Estado).SingleAsync());
+        }
+        finally { await db.DisposeAsync(); }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Revoked_role_while_waiting_for_global_lock_blocks_prepare_and_execution(bool execute)
+    {
+        var db = new TemporaryPostgresDatabase();
+        try
+        {
+            await db.InitializeAsync();
+            var id = Guid.NewGuid();
+            await using (var setup = db.CreateContext())
+            {
+                await setup.Database.ExecuteSqlRawAsync("UPDATE usuario SET rol = 'Jefa', activo = true WHERE id_usuario = 1");
+                if (execute) await CreateService(setup).PrepararAsync(id, 1, CajaOperacionCanonica.Abrir(0, true), default);
+            }
+            await using var blocker = new NpgsqlConnection(db.ConnectionString);
+            await blocker.OpenAsync();
+            await using var tx = await blocker.BeginTransactionAsync();
+            await using (var command = new NpgsqlCommand("SELECT pg_advisory_xact_lock(40040001)", blocker, tx))
+                await command.ExecuteNonQueryAsync();
+            var name = $"caja_role_{Guid.NewGuid():N}";
+            var options = new DbContextOptionsBuilder<ElCarbonazo.Api.Data.AppDbContext>()
+                .UseNpgsql(new NpgsqlConnectionStringBuilder(db.ConnectionString) { ApplicationName = name }.ConnectionString).Options;
+            await using var context = new ElCarbonazo.Api.Data.AppDbContext(options);
+            var audit = Audit(context);
+            var service = new CajaOperacionesService(context, audit, TimeProvider.System, new CajaAperturaExecutor(context, audit, TimeProvider.System));
+            var request = execute ? service.EjecutarAsync(id, 1, default) : service.PrepararAsync(id, 1, CajaOperacionCanonica.Abrir(0, true), default);
+            var committed = false;
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                await using var observer = new NpgsqlConnection(db.ConnectionString);
+                await observer.OpenAsync(timeout.Token);
+                while (true)
+                {
+                    await using var check = new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE application_name = @name AND cardinality(pg_blocking_pids(pid)) > 0)", observer);
+                    check.Parameters.AddWithValue("name", name);
+                    if ((bool)(await check.ExecuteScalarAsync(timeout.Token))!) break;
+                    await Task.Delay(25, timeout.Token);
+                }
+                await using (var revoke = db.CreateContext())
+                    await revoke.Database.ExecuteSqlRawAsync("UPDATE usuario SET rol = 'Mesero' WHERE id_usuario = 1");
+                await tx.CommitAsync();
+                committed = true;
+                Assert.Equal(403, (await request.WaitAsync(TimeSpan.FromSeconds(20))).Status);
+                await using var verify = db.CreateContext();
+                Assert.Empty(await verify.TurnosCaja.ToListAsync());
+                Assert.Equal(execute ? 1 : 0, await verify.OperacionesCaja.CountAsync(x => x.IdOperacion == id));
+            }
+            finally
+            {
+                if (!committed) await tx.RollbackAsync();
+            }
+        }
+        finally { await db.DisposeAsync(); }
+    }
+
+    [Fact]
+    public async Task Opening_audit_failure_rolls_back_shift_and_keeps_operation_prepared()
+    {
+        var db = new TemporaryPostgresDatabase();
+        try
+        {
+            await db.InitializeAsync();
+            var id = Guid.NewGuid();
+            await using (var setup = db.CreateContext())
+            {
+                await setup.Database.ExecuteSqlRawAsync("UPDATE usuario SET rol = 'Jefa', activo = true WHERE id_usuario = 1");
+                await CreateService(setup).PrepararAsync(id, 1, CajaOperacionCanonica.Abrir(0, true), default);
+            }
+            await using (var context = db.CreateContext())
+            {
+                var audit = new FailingAudit();
+                var service = new CajaOperacionesService(context, audit, TimeProvider.System, new CajaAperturaExecutor(context, audit, TimeProvider.System));
+                await Assert.ThrowsAsync<InvalidOperationException>(() => service.EjecutarAsync(id, 1, default));
+            }
+            await using var verify = db.CreateContext();
+            Assert.Empty(await verify.TurnosCaja.ToListAsync());
+            Assert.Equal(CajaStates.OperacionPreparada, await verify.OperacionesCaja.Where(x => x.IdOperacion == id).Select(x => x.Estado).SingleAsync());
+        }
+        finally { await db.DisposeAsync(); }
+    }
+
+    [Fact]
+    public async Task Concurrent_opening_executions_never_create_two_open_shifts()
+    {
+        var db = new TemporaryPostgresDatabase();
+        try
+        {
+            await db.InitializeAsync();
+            var ids = new[] { Guid.NewGuid(), Guid.NewGuid() };
+            await using (var setup = db.CreateContext())
+            {
+                await setup.Database.ExecuteSqlRawAsync("UPDATE usuario SET rol = 'Jefa', activo = true WHERE id_usuario = 1");
+                foreach (var id in ids) await CreateService(setup).PrepararAsync(id, 1, CajaOperacionCanonica.Abrir(1, true), default);
+            }
+            async Task<CajaCancelacionResult> Run(Guid id)
+            {
+                await using var context = db.CreateContext();
+                var audit = Audit(context);
+                return await new CajaOperacionesService(context, audit, TimeProvider.System, new CajaAperturaExecutor(context, audit, TimeProvider.System))
+                    .EjecutarAsync(id, 1, default);
+            }
+            var results = await Task.WhenAll(ids.Select(Run));
+            Assert.All(results, result => Assert.True(result.Status is 201 or 409));
+            await using var verify = db.CreateContext();
+            Assert.True(await verify.TurnosCaja.CountAsync(x => x.Estado == CajaStates.TurnoAbierto) <= 1);
+            Assert.True(await verify.EventosAuditoria.CountAsync(x => x.TipoEvento == "TurnoCajaAbierto") <= 1);
+        }
+        finally { await db.DisposeAsync(); }
+    }
+
     [Theory]
     [InlineData("success", CajaStates.OperacionCompletada, 1)]
     [InlineData("reject", CajaStates.OperacionRechazada, 0)]
@@ -221,5 +452,12 @@ public sealed class CajaOperacionesTests
             await Release.Task.WaitAsync(cancellationToken);
             return new(true, 200, "OK", "{}");
         }
+    }
+
+    private sealed class FailingAudit : IAuditRecorder
+    {
+        public void Record(string eventType, string result, int? userId = null, Guid? sessionId = null,
+            string? entityType = null, string? entityId = null, IReadOnlyDictionary<string, object?>? details = null) =>
+            throw new InvalidOperationException("Injected audit failure");
     }
 }

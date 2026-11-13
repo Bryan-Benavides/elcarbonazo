@@ -18,6 +18,7 @@ public partial class App : Application
     private DesktopJsonLogger? _logger;
     private bool _closeInProgress;
     private bool _closeAuthorized;
+    public CajaRecoveryCoordinator? CajaRecovery { get; private set; }
 
     public override void Initialize()
     {
@@ -40,6 +41,19 @@ public partial class App : Application
                 _apiClient = new ApiClientService(configuration, _logger);
                 _serverClock = new ServerClock();
                 _sessionManager = new SessionManager(_apiClient, _serverClock, _logger);
+                if (OperatingSystem.IsWindows())
+                {
+                    var directory = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                        "ElCarbonazo", "recovery");
+                    var sid = System.Security.Principal.WindowsIdentity.GetCurrent().User;
+                    if (sid is not null)
+                    {
+                        var store = new CajaRecoveryStore(System.IO.Path.Combine(directory, "caja-journal.json"),
+                            configuration.IdInstalacion, new WindowsCajaRecoverySecurityPolicy(directory, sid));
+                        CajaRecovery = new CajaRecoveryCoordinator(store, new CajaRecoveryHttpTransport(_sessionManager),
+                            () => _sessionManager.CurrentSession?.IdUsuario);
+                    }
+                }
                 initialViewModel = new LoginViewModel(_sessionManager, navigation);
             }
             catch (DesktopConfigurationException exception)

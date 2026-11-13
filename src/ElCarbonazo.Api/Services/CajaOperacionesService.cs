@@ -7,13 +7,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ElCarbonazo.Api.Services;
 
-// Prepared execution remains unavailable until the C3 domain handlers are registered.
+// Only types supported by a registered domain handler can execute.
 public sealed record CajaEjecucionPreparada(Guid IdOperacion, int IdUsuario, string Tipo, short Version, string ArgumentosJson);
 public sealed record CajaResultadoDominio(bool Exitoso, short Status, string Codigo, string ResultadoJson);
 
 // Implementations must use the supplied context and its existing transaction; never commit independently.
 public interface ICajaEjecutorDominio
 {
+    bool PuedeEjecutar(string tipo) => true;
     Task<CajaResultadoDominio> EjecutarAsync(CajaEjecucionPreparada operacion, CancellationToken cancellationToken);
 }
 
@@ -35,9 +36,12 @@ public sealed class CajaOperacionesService(AppDbContext context, IAuditRecorder 
                 return new(409, "OPERACION_CLAVE_EN_USO");
             return Respuesta(existing);
         }
+        // Serialize new intentions with opening/closing before they inspect nonterminal operations.
+        await CajaLocks.CajaCompartidaAsync(context, ct);
+        if (sessionId is not null && !await CajaSesion.VigenteAsync(context, sessionId.Value, actorId, time.GetUtcNow(), ct)) return new(401, "AUTH_SESION_EXPIRADA");
+        if (!await ActorAutorizadoAsync(actorId, ct)) return new(403, "AUTH_PROHIBIDO");
         if (intent.Tipo == "CobrarCuenta")
         {
-            await CajaLocks.CajaCompartidaAsync(context, ct);
             using var json = JsonDocument.Parse(intent.ArgumentosJson);
             var shiftId = json.RootElement.GetProperty("turnoId").GetInt32();
             if (!await context.TurnosCaja.AsNoTracking().AnyAsync(x => x.IdTurnoCaja == shiftId && x.Estado == CajaStates.TurnoAbierto, ct))
@@ -91,9 +95,17 @@ public sealed class CajaOperacionesService(AppDbContext context, IAuditRecorder 
             .SingleOrDefaultAsync(ct);
         if (operation is null || operation.IdUsuarioPropietario != actorId) return new(404, "RECURSO_NO_ENCONTRADO");
         if (operation.Estado != CajaStates.OperacionPreparada) return Respuesta(operation);
-        if (ejecutor is null) return new(503, "OPERACION_EJECUCION_NO_DISPONIBLE", operation.Estado);
         if (operation.Tipo is null || operation.VersionContrato is null || operation.Argumentos is null)
             throw new InvalidOperationException("La operación preparada carece de contrato válido.");
+        if (ejecutor is null || !ejecutor.PuedeEjecutar(operation.Tipo)) return new(503, "OPERACION_EJECUCION_NO_DISPONIBLE", operation.Estado);
+
+        if (operation.Tipo is "AbrirTurno" or "CerrarTurno")
+        {
+            // Keep the shared lock outside the domain savepoint, including deterministic rejections.
+            await CajaLocks.CajaCompartidaAsync(context, ct);
+            if (sessionId is not null && !await CajaSesion.VigenteAsync(context, sessionId.Value, actorId, time.GetUtcNow(), ct)) return new(401, "AUTH_SESION_EXPIRADA");
+            if (!await ActorAutorizadoAsync(actorId, ct)) return new(403, "AUTH_PROHIBIDO");
+        }
 
         await tx.CreateSavepointAsync("caja_dominio", ct);
         var outcome = await ejecutor.EjecutarAsync(new CajaEjecucionPreparada(

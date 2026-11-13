@@ -24,7 +24,13 @@ public interface ISessionManager
     void EvaluateState();
 }
 
-public sealed class SessionManager : ISessionManager, IDisposable
+public interface ICajaSessionSender
+{
+    Task<HttpResponseMessage> SendCajaOnceAsync(int expectedActor, Func<HttpRequestMessage> requestFactory,
+        bool isRead, CancellationToken cancellationToken = default);
+}
+
+public sealed class SessionManager : ISessionManager, ICajaSessionSender, IDisposable
 {
     private static readonly TimeSpan RefreshMargin = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ActivityInterval = TimeSpan.FromMinutes(1);
@@ -169,6 +175,24 @@ public sealed class SessionManager : ISessionManager, IDisposable
         }
 
         return response;
+    }
+
+    public async Task<HttpResponseMessage> SendCajaOnceAsync(int expectedActor, Func<HttpRequestMessage> requestFactory,
+        bool isRead, CancellationToken cancellationToken = default)
+    {
+        EvaluateState();
+        using var request = requestFactory();
+        lock (_sessionGate)
+        {
+            if (expectedActor <= 0 || _idUsuario != expectedActor || _accessToken is null ||
+                _state is not (SessionLifecycleState.Active or SessionLifecycleState.Expiring) ||
+                _serverClock.UtcNow >= _accessTokenExpiresAt ||
+                _rol is not ("Jefa" or "Encargado de Caja"))
+                throw new SessionExpiredException();
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
+        }
+        // No refresh and no retry: a failed write may already have committed.
+        return await _apiClient.SendAsync(request, isRead ? ApiRequestKind.Read : ApiRequestKind.Write, cancellationToken);
     }
 
     public async Task<HttpResponseMessage> SendPollingAsync(
