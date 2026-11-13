@@ -17,6 +17,55 @@ public sealed class EnviosConcurrencyTests : IAsyncLifetime
     public Task InitializeAsync() => database.InitializeAsync();
     public Task DisposeAsync() => database.DisposeAsync();
 
+    [Fact]
+    public async Task Paid_group_requires_explicit_close_before_new_send()
+    {
+        var (product, _) = await SetupAsync();
+        int groupId;
+        await using (var context = database.CreateContext())
+        {
+            var tables = await context.Mesas.Where(x => x.IdMesa == 2 || x.IdMesa == 3).ToListAsync();
+            var group = await new GruposMesaService(context, TimeProvider.System, Audit(context)).CreateAsync(
+                new CreateGrupoMesaRequest(tables.Select(x => new MesaVersionRequest(x.IdMesa, x.Version)).ToList()), 1, CancellationToken.None);
+            groupId = group.Grupo!.IdGrupo;
+            context.Pedidos.Add(new Pedido
+            {
+                IdGrupo = groupId,
+                IdUsuario = 1,
+                FechaHora = DateTimeOffset.UtcNow,
+                Estado = PedidoStates.Pagado,
+                Subtotal = 10,
+                Total = 10
+            });
+            await context.SaveChangesAsync();
+        }
+        var result = await StartSend(new EnvioRequest(Guid.NewGuid(), null, groupId, null, [new EnvioLineaRequest(product, 1, 1, "")]));
+        Assert.Equal(409, result.Status);
+        Assert.Equal("GRUPO_PAGADO_REQUIERE_CIERRE", result.Code);
+        int nextGroupId;
+        await using (var verify = database.CreateContext())
+        {
+            Assert.Equal(1, await verify.Pedidos.CountAsync());
+            Assert.Empty(await verify.Comandas.ToListAsync());
+            var groups = new GruposMesaService(verify, TimeProvider.System, Audit(verify));
+            Assert.Equal(GrupoMesaOutcome.Success, (await groups.CloseAsync(groupId, 1, CancellationToken.None)).Outcome);
+        }
+        await using (var next = database.CreateContext())
+        {
+            var tables = await next.Mesas.Where(x => x.IdMesa == 2 || x.IdMesa == 3).ToListAsync();
+            Assert.All(tables, x => Assert.Equal(MesaStates.Libre, x.Estado));
+            var created = await new GruposMesaService(next, TimeProvider.System, Audit(next)).CreateAsync(
+                new CreateGrupoMesaRequest(tables.Select(x => new MesaVersionRequest(x.IdMesa, x.Version)).ToList()), 1, CancellationToken.None);
+            Assert.Equal(GrupoMesaOutcome.Success, created.Outcome);
+            nextGroupId = created.Grupo!.IdGrupo;
+        }
+        Assert.Equal(201, (await StartSend(new EnvioRequest(Guid.NewGuid(), null, nextGroupId, null,
+            [new EnvioLineaRequest(product, 1, 1, "")]))).Status);
+        await using var final = database.CreateContext();
+        Assert.Equal(PedidoStates.Pagado, await final.Pedidos.Where(x => x.IdGrupo == groupId).Select(x => x.Estado).SingleAsync());
+        Assert.Equal(2, await final.Pedidos.CountAsync());
+    }
+
     [Theory]
     [InlineData(false, false, false)]
     [InlineData(false, true, false)]

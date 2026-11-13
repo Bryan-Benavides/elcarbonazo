@@ -91,6 +91,36 @@ public sealed class ApiFlowTests : IAsyncLifetime
         var line = item.GetProperty("comandas")[0].GetProperty("lineas")[0];
         Assert.Equal("Nombre histórico", line.GetProperty("nombreProducto").GetString());
         Assert.Equal(10m, line.GetProperty("precioUnitario").GetDecimal());
+        var opening = $"/api/caja/operaciones/{Guid.NewGuid()}";
+        await _client.PutAsJsonAsync(opening, new { tipo = "AbrirTurno", version = 1, argumentos = new { fondoInicial = 0m, confirmado = true } });
+        var opened = await _client.PostAsJsonAsync(opening + "/ejecucion", new { });
+        var shift = (await opened.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("idTurnoCaja").GetInt32();
+        var payment = $"/api/caja/operaciones/{Guid.NewGuid()}";
+        var prepare = await _client.PutAsJsonAsync(payment, new
+        {
+            tipo = "CobrarCuenta",
+            version = 1,
+            argumentos = new
+            {
+                pedidoId = item.GetProperty("idPedido").GetInt32(),
+                turnoId = shift,
+                totalVisto = 10m,
+                huellaLineas = item.GetProperty("huellaLineas").GetString(),
+                metodo = "Efectivo",
+                efectivoRecibido = 10m,
+                referencia = (string?)null,
+                verificacionExterna = false,
+                referenciaRepetida = false
+            }
+        });
+        Assert.Equal(HttpStatusCode.OK, prepare.StatusCode);
+        var paid = await _client.PostAsJsonAsync(payment + "/ejecucion", new { });
+        Assert.Equal(HttpStatusCode.Created, paid.StatusCode);
+        var paymentId = (await paid.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("idCobro").GetInt64();
+        Assert.Equal(HttpStatusCode.NoContent, (await _client.DeleteAsync($"/api/grupos-mesa/{item.GetProperty("idGrupo").GetInt32()}")).StatusCode);
+        var receipt = await _client.GetFromJsonAsync<JsonElement>($"/api/caja/comprobantes/{paymentId}");
+        Assert.Equal(new[] { 2, 3 }, receipt.GetProperty("numerosMesasGrupo").EnumerateArray().Select(x => x.GetInt32()).ToArray());
+        Assert.Equal("Nombre histórico", receipt.GetProperty("lineas")[0].GetProperty("nombreProducto").GetString());
     }
 
     [Fact]
@@ -175,6 +205,210 @@ public sealed class ApiFlowTests : IAsyncLifetime
         var pending = Assert.Single(refreshed.GetProperty("items").EnumerateArray().ToArray());
         Assert.False(pending.GetProperty("cobrable").GetBoolean());
         Assert.Equal("OPERACION_NO_TERMINAL", pending.GetProperty("motivo").GetString());
+        var tables = (await _client.GetFromJsonAsync<JsonElement[]>("/api/mesas"))!;
+        var tableVersion = tables.Single(x => x.GetProperty("idMesa").GetInt32() == 1).GetProperty("version").GetUInt32();
+        var send = await _client.PostAsJsonAsync("/api/pedidos/envios", new
+        {
+            envioId = Guid.NewGuid(),
+            mesaId = 1,
+            versionMesa = tableVersion,
+            lineas = new[] { new { idProducto = eligible.GetProperty("comandas")[0].GetProperty("lineas")[0].GetProperty("idProducto").GetInt32(), versionProducto = 1, cantidad = 1 } }
+        });
+        Assert.Equal(HttpStatusCode.Conflict, send.StatusCode);
+        Assert.Equal("OPERACION_NO_TERMINAL", (await send.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+        var paid = await _client.PostAsJsonAsync(payment + "/ejecucion", new { });
+        Assert.Equal(HttpStatusCode.Created, paid.StatusCode);
+        var paidBody = await paid.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Completada", paidBody.GetProperty("estado").GetString());
+        Assert.Equal(0m, paidBody.GetProperty("vuelto").GetDecimal());
+        var replay = await _client.PostAsJsonAsync(payment + "/ejecucion", new { });
+        Assert.Equal(HttpStatusCode.Created, replay.StatusCode);
+        Assert.True(JsonElement.DeepEquals(paidBody, await replay.Content.ReadFromJsonAsync<JsonElement>()));
+        await using var verify = _database.CreateContext();
+        Assert.Equal(PedidoStates.Pagado, await verify.Pedidos.Where(x => x.IdPedido == eligible.GetProperty("idPedido").GetInt32()).Select(x => x.Estado).SingleAsync());
+        Assert.Equal(MesaStates.Ocupada, await verify.Mesas.Where(x => x.IdMesa == 1).Select(x => x.Estado).SingleAsync());
+        Assert.Single(await verify.Cobros.ToListAsync());
+        Assert.Single(await verify.ComprobantesCobroLineas.ToListAsync());
+        Assert.Equal(1, await verify.EventosAuditoria.CountAsync(x => x.TipoEvento == "CobroRegistrado"));
+        var cobroId = paidBody.GetProperty("idCobro").GetInt64();
+        var receipt = await _client.GetFromJsonAsync<JsonElement>($"/api/caja/comprobantes/{cobroId}");
+        Assert.Contains("DEMOSTRACIÓN", receipt.GetProperty("leyenda").GetString());
+        Assert.Equal(10m, receipt.GetProperty("total").GetDecimal());
+        Assert.Equal("Producto de prueba", receipt.GetProperty("lineas")[0].GetProperty("nombreProducto").GetString());
+        Assert.Equal(1, receipt.GetProperty("numeroMesa").GetInt32());
+        Assert.False(receipt.TryGetProperty("cliente", out _));
+        await verify.Database.ExecuteSqlRawAsync("UPDATE producto SET nombre = 'Nombre posterior', precio = 25 WHERE id_producto = 1");
+        var afterCatalogEdit = await _client.GetFromJsonAsync<JsonElement>($"/api/caja/comprobantes/{cobroId}");
+        Assert.True(JsonElement.DeepEquals(receipt, afterCatalogEdit));
+        var receipts = await _client.GetFromJsonAsync<JsonElement>("/api/caja/comprobantes?limite=1");
+        Assert.Single(receipts.GetProperty("items").EnumerateArray().ToArray());
+        Assert.Equal(HttpStatusCode.BadRequest, (await _client.GetAsync("/api/caja/comprobantes?cursor=malformed")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await _client.GetAsync("/api/caja/comprobantes/999999")).StatusCode);
+        var kitchenAgain = await LoginAsync("cocina", "kitchen password");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", kitchenAgain);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync($"/api/caja/comprobantes/{cobroId}")).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("Tarjeta")]
+    [InlineData("Transferencia")]
+    public async Task Caja_external_reference_collision_requires_explicit_confirmation(string method)
+    {
+        await using (var setup = _database.CreateContext())
+        {
+            var product = new Producto { Nombre = "Producto", Categoria = "Comida", Precio = 10m, Disponible = true };
+            setup.Productos.Add(product);
+            await setup.SaveChangesAsync();
+            foreach (var mesaId in new[] { 1, 2 })
+            {
+                (await setup.Mesas.SingleAsync(x => x.IdMesa == mesaId)).Estado = MesaStates.Ocupada;
+                var order = new Pedido
+                {
+                    IdMesa = mesaId,
+                    IdUsuario = 1,
+                    FechaHora = DateTimeOffset.UtcNow,
+                    Estado = PedidoStates.Listo,
+                    Subtotal = 10m,
+                    Total = 10m
+                };
+                setup.Pedidos.Add(order);
+                await setup.SaveChangesAsync();
+                var command = new Comanda { IdPedido = order.IdPedido, IdUsuario = 1, FechaHora = DateTimeOffset.UtcNow, Estado = "Lista" };
+                command.Detalles.Add(new DetallePedido
+                {
+                    IdProducto = product.IdProducto,
+                    NombreProducto = product.Nombre,
+                    Cantidad = 1,
+                    PrecioUnitario = 10m,
+                    Subtotal = 10m,
+                    Notas = ""
+                });
+                setup.Comandas.Add(command);
+                await setup.SaveChangesAsync();
+            }
+        }
+        var token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var opening = $"/api/caja/operaciones/{Guid.NewGuid()}";
+        await _client.PutAsJsonAsync(opening, new { tipo = "AbrirTurno", version = 1, argumentos = new { fondoInicial = 0m, confirmado = true } });
+        var opened = await _client.PostAsJsonAsync(opening + "/ejecucion", new { });
+        var shift = (await opened.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("idTurnoCaja").GetInt32();
+        var page = await _client.GetFromJsonAsync<JsonElement>("/api/caja/cuentas");
+        var accounts = page.GetProperty("items").EnumerateArray().ToArray();
+        Assert.Equal(2, accounts.Length);
+        async Task<HttpResponseMessage> Charge(JsonElement account, bool repeated)
+        {
+            var url = $"/api/caja/operaciones/{Guid.NewGuid()}";
+            var prepare = await _client.PutAsJsonAsync(url, new
+            {
+                tipo = "CobrarCuenta",
+                version = 1,
+                argumentos = new
+                {
+                    pedidoId = account.GetProperty("idPedido").GetInt32(),
+                    turnoId = shift,
+                    totalVisto = 10m,
+                    huellaLineas = account.GetProperty("huellaLineas").GetString(),
+                    metodo = method,
+                    efectivoRecibido = (decimal?)null,
+                    referencia = "ref-prueba",
+                    verificacionExterna = true,
+                    referenciaRepetida = repeated
+                }
+            });
+            Assert.Equal(HttpStatusCode.OK, prepare.StatusCode);
+            return await _client.PostAsJsonAsync(url + "/ejecucion", new { });
+        }
+        Assert.Equal(HttpStatusCode.Created, (await Charge(accounts[0], false)).StatusCode);
+        var collision = await Charge(accounts[1], false);
+        Assert.Equal(HttpStatusCode.Conflict, collision.StatusCode);
+        Assert.Equal("REFERENCIA_REQUIERE_CONFIRMACION", (await collision.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("codigo").GetString());
+        Assert.Equal(HttpStatusCode.Created, (await Charge(accounts[1], true)).StatusCode);
+        await using var verify = _database.CreateContext();
+        Assert.Equal(2, await verify.Cobros.CountAsync());
+        Assert.Equal(2, await verify.Cobros.CountAsync(x => x.MetodoPago == method && x.VerificacionExternaConfirmada));
+        Assert.Equal(2, await verify.Pedidos.CountAsync(x => x.Estado == PedidoStates.Pagado));
+        Assert.DoesNotContain(await verify.EventosAuditoria.ToListAsync(), x => x.Detalles.Contains("ref-prueba", StringComparison.Ordinal));
+        var first = await _client.GetFromJsonAsync<JsonElement>("/api/caja/comprobantes?limite=1");
+        var firstItem = Assert.Single(first.GetProperty("items").EnumerateArray().ToArray());
+        Assert.False(firstItem.TryGetProperty("referenciaExterna", out _));
+        var cursor = Uri.EscapeDataString(first.GetProperty("cursorSiguiente").GetString()!);
+        var second = await _client.GetFromJsonAsync<JsonElement>($"/api/caja/comprobantes?limite=1&cursor={cursor}");
+        var secondItem = Assert.Single(second.GetProperty("items").EnumerateArray().ToArray());
+        Assert.NotEqual(firstItem.GetProperty("idCobro").GetInt64(), secondItem.GetProperty("idCobro").GetInt64());
+        Assert.Equal(JsonValueKind.Null, second.GetProperty("cursorSiguiente").ValueKind);
+    }
+
+    [Fact]
+    public async Task Caja_payment_rejects_insufficient_cash_and_changed_command_without_partial_effects()
+    {
+        await using (var setup = _database.CreateContext())
+        {
+            (await setup.Mesas.SingleAsync(x => x.IdMesa == 1)).Estado = MesaStates.Ocupada;
+            var product = new Producto { Nombre = "Prueba", Categoria = "Comida", Precio = 10m, Disponible = true };
+            var order = new Pedido
+            {
+                IdMesa = 1,
+                IdUsuario = 1,
+                FechaHora = DateTimeOffset.UtcNow,
+                Estado = PedidoStates.Listo,
+                Subtotal = 10m,
+                Total = 10m
+            };
+            setup.Productos.Add(product);
+            setup.Pedidos.Add(order);
+            await setup.SaveChangesAsync();
+            var command = new Comanda { IdPedido = order.IdPedido, IdUsuario = 1, FechaHora = DateTimeOffset.UtcNow, Estado = "Lista" };
+            command.Detalles.Add(new DetallePedido
+            {
+                IdProducto = product.IdProducto,
+                NombreProducto = product.Nombre,
+                Cantidad = 1,
+                PrecioUnitario = 10m,
+                Subtotal = 10m,
+                Notas = ""
+            });
+            setup.Comandas.Add(command);
+            await setup.SaveChangesAsync();
+        }
+        var token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var opening = $"/api/caja/operaciones/{Guid.NewGuid()}";
+        await _client.PutAsJsonAsync(opening, new { tipo = "AbrirTurno", version = 1, argumentos = new { fondoInicial = 0m, confirmado = true } });
+        var opened = await _client.PostAsJsonAsync(opening + "/ejecucion", new { });
+        var shift = (await opened.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("idTurnoCaja").GetInt32();
+        var page = await _client.GetFromJsonAsync<JsonElement>("/api/caja/cuentas");
+        var account = Assert.Single(page.GetProperty("items").EnumerateArray().ToArray());
+        object Body(decimal cash) => new
+        {
+            tipo = "CobrarCuenta",
+            version = 1,
+            argumentos = new
+            {
+                pedidoId = account.GetProperty("idPedido").GetInt32(),
+                turnoId = shift,
+                totalVisto = 10m,
+                huellaLineas = account.GetProperty("huellaLineas").GetString(),
+                metodo = "Efectivo",
+                efectivoRecibido = cash,
+                referencia = (string?)null,
+                verificacionExterna = false,
+                referenciaRepetida = false
+            }
+        };
+        var insufficient = $"/api/caja/operaciones/{Guid.NewGuid()}";
+        Assert.Equal(HttpStatusCode.OK, (await _client.PutAsJsonAsync(insufficient, Body(9m))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await _client.PostAsJsonAsync(insufficient + "/ejecucion", new { })).StatusCode);
+        var changed = $"/api/caja/operaciones/{Guid.NewGuid()}";
+        Assert.Equal(HttpStatusCode.OK, (await _client.PutAsJsonAsync(changed, Body(10m))).StatusCode);
+        await using (var edit = _database.CreateContext())
+            await edit.Database.ExecuteSqlRawAsync("UPDATE comanda SET estado = 'En Preparación'");
+        Assert.Equal(HttpStatusCode.Conflict, (await _client.PostAsJsonAsync(changed + "/ejecucion", new { })).StatusCode);
+        await using var verify = _database.CreateContext();
+        Assert.Empty(await verify.Cobros.ToListAsync());
+        Assert.Empty(await verify.ComprobantesCobroLineas.ToListAsync());
+        Assert.Equal(PedidoStates.Listo, await verify.Pedidos.Select(x => x.Estado).SingleAsync());
+        Assert.Empty(await verify.EventosAuditoria.Where(x => x.TipoEvento == "CobroRegistrado").ToListAsync());
     }
 
     [Fact]
@@ -182,6 +416,37 @@ public sealed class ApiFlowTests : IAsyncLifetime
     {
         var token = await LoginAsync("jefa central", "correct horse battery staple");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        await using (var setup = _database.CreateContext())
+        {
+            (await setup.Mesas.SingleAsync(x => x.IdMesa == 1)).Estado = MesaStates.Ocupada;
+            var product = new Producto { Nombre = "Prueba", Categoria = "Comida", Precio = 10m, Disponible = true };
+            var order = new Pedido
+            {
+                IdMesa = 1,
+                IdUsuario = 1,
+                FechaHora = DateTimeOffset.UtcNow,
+                Estado = PedidoStates.Listo,
+                Subtotal = 10m,
+                Total = 10m
+            };
+            setup.Productos.Add(product);
+            setup.Pedidos.Add(order);
+            await setup.SaveChangesAsync();
+            var command = new Comanda { IdPedido = order.IdPedido, IdUsuario = 1, FechaHora = DateTimeOffset.UtcNow, Estado = "Lista" };
+            command.Detalles.Add(new DetallePedido
+            {
+                IdProducto = product.IdProducto,
+                NombreProducto = product.Nombre,
+                Cantidad = 1,
+                PrecioUnitario = 10m,
+                Subtotal = 10m,
+                Notas = ""
+            });
+            setup.Comandas.Add(command);
+            await setup.SaveChangesAsync();
+        }
+        var accounts = await _client.GetFromJsonAsync<JsonElement>("/api/caja/cuentas");
+        var account = Assert.Single(accounts.GetProperty("items").EnumerateArray().ToArray());
         var open = $"/api/caja/operaciones/{Guid.NewGuid()}";
         await _client.PutAsJsonAsync(open, new { tipo = "AbrirTurno", version = 1, argumentos = new { fondoInicial = 0m, confirmado = true } });
         var opened = await _client.PostAsJsonAsync(open + "/ejecucion", new { });
@@ -197,10 +462,10 @@ public sealed class ApiFlowTests : IAsyncLifetime
             version = 1,
             argumentos = new
             {
-                pedidoId = 1,
+                pedidoId = account.GetProperty("idPedido").GetInt32(),
                 turnoId = shift,
                 totalVisto = 10m,
-                huellaLineas = new string('a', 64),
+                huellaLineas = account.GetProperty("huellaLineas").GetString(),
                 metodo = "Efectivo",
                 efectivoRecibido = 10m,
                 referencia = (string?)null,
@@ -252,6 +517,9 @@ public sealed class ApiFlowTests : IAsyncLifetime
         var opened = await _client.PostAsJsonAsync(opening + "/ejecucion", new { });
         Assert.Equal(HttpStatusCode.Created, opened.StatusCode);
         var shift = (await opened.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("idTurnoCaja").GetInt32();
+        var current = await _client.GetFromJsonAsync<JsonElement>("/api/caja/turno/actual");
+        Assert.Equal(shift, current.GetProperty("turno").GetProperty("idTurnoCaja").GetInt32());
+        Assert.Equal(10m, current.GetProperty("turno").GetProperty("efectivoEsperado").GetDecimal());
         await using (var setup = _database.CreateContext())
         {
             setup.Pedidos.Add(new Pedido
@@ -278,12 +546,20 @@ public sealed class ApiFlowTests : IAsyncLifetime
         Assert.Equal(10m, response.GetProperty("efectivoEsperado").GetDecimal());
         Assert.Equal(2m, response.GetProperty("diferencia").GetDecimal());
         Assert.Equal(1, response.GetProperty("cantidadCuentasPendientes").GetInt32());
+        var summary = await _client.GetFromJsonAsync<JsonElement>($"/api/caja/turnos/{shift}/resumen");
+        Assert.Equal("Cerrado", summary.GetProperty("estado").GetString());
+        Assert.Equal(2m, summary.GetProperty("diferencia").GetDecimal());
+        Assert.Equal("Conteo revisado", summary.GetProperty("motivoDiferencia").GetString());
+        Assert.Equal(JsonValueKind.Null, (await _client.GetFromJsonAsync<JsonElement>("/api/caja/turno/actual")).GetProperty("turno").ValueKind);
         var replay = await _client.PostAsJsonAsync(close + "/ejecucion", new { });
         Assert.True(JsonElement.DeepEquals(response, await replay.Content.ReadFromJsonAsync<JsonElement>()));
         await using var verify = _database.CreateContext();
         Assert.Equal(CajaStates.TurnoCerrado, await verify.TurnosCaja.Where(x => x.IdTurnoCaja == shift).Select(x => x.Estado).SingleAsync());
         Assert.Equal(PedidoStates.Abierto, await verify.Pedidos.Select(x => x.Estado).SingleAsync());
         Assert.Equal(1, await verify.EventosAuditoria.CountAsync(x => x.TipoEvento == "TurnoCajaCerrado"));
+        await verify.Database.ExecuteSqlRawAsync("UPDATE pedido SET estado = 'Pagado' WHERE id_mesa = 1");
+        var historical = await _client.GetFromJsonAsync<JsonElement>($"/api/caja/turnos/{shift}/resumen");
+        Assert.Equal(1, historical.GetProperty("cantidadCuentasPendientes").GetInt32());
     }
 
     [Fact]
@@ -421,8 +697,10 @@ public sealed class ApiFlowTests : IAsyncLifetime
         var kitchen = await LoginAsync("cocina", "kitchen password");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", kitchen);
         Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync(url)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync("/api/caja/turno/actual")).StatusCode);
         var owner = await LoginAsync("jefa central", "correct horse battery staple");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", owner);
+        Assert.Equal(HttpStatusCode.NotFound, (await _client.GetAsync("/api/caja/turnos/999999/resumen")).StatusCode);
         using var duplicate = new StringContent("{\"tipo\":\"AbrirTurno\",\"tipo\":\"AbrirTurno\",\"version\":1,\"argumentos\":{\"fondoInicial\":0,\"confirmado\":true}}", System.Text.Encoding.UTF8, "application/json");
         Assert.Equal(HttpStatusCode.BadRequest, (await _client.PutAsync(url, duplicate)).StatusCode);
         using var oversize = new StringContent(new string('x', 32769), System.Text.Encoding.UTF8, "application/json");

@@ -1,5 +1,11 @@
 # Bitácora de errores y lecciones — El Carbonazo
 
+### 004: identidad del actor no distingue dos sesiones
+
+- **Hecho confirmado por revisión y prueba con generación simulada:** comprobar únicamente el ID del actor permite confundir la sesión que observó una preparación con otra sesión posterior del mismo usuario.
+- **Control parcial:** el coordinador recibe una generación local que cambia al iniciar una sesión nueva y comprueba que no cambió al recibir respuestas, antes de ejecutar una preparación observada o limpiar el diario. El refresh no cambia esa generación.
+- **Evidencia y límites:** `CajaRecoveryCoordinatorTests` prueba cambios de generación simulados durante preparación y conciliación; aún falta probar intercalaciones de sesión con el consumidor real y servicios reales. El diario sigue bloqueado si la generación cambia durante esas respuestas.
+
 ### 004: autorización después de esperar el lock global
 
 - **Hecho comprobado:** la preparación y ejecución de apertura podían esperar el lock global después de comprobar el rol, sin volver a consultar la autorización antes de persistir.

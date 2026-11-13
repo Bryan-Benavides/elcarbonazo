@@ -1,0 +1,50 @@
+<UserControl x:Class="ElCarbonazo.Desktop.Views.CajaRecoveryView"
+             xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:ElCarbonazo.Desktop.ViewModels" mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
+             x:CompileBindings="True" x:DataType="vm:CajaRecoveryViewModel" Background="{StaticResource FondoPrincipalBrush}">
+    <Design.DataContext><vm:CajaRecoveryViewModel /></Design.DataContext>
+    <UserControl.Resources>
+        <ControlTheme x:Key="RecoveryButtonTheme" TargetType="Button">
+            <Setter Property="Background" Value="#3F3F46" /><Setter Property="Foreground" Value="#F3F4F6" />
+            <Setter Property="BorderBrush" Value="#71717A" /><Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="16,12" />
+            <Setter Property="Template"><ControlTemplate><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}"><ContentPresenter Content="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" /></Border></ControlTemplate></Setter>
+            <Style Selector="^:pointerover"><Setter Property="BorderBrush" Value="#FF784E" /></Style>
+            <Style Selector="^:focus-visible"><Setter Property="BorderBrush" Value="#F3F4F6" /><Setter Property="BorderThickness" Value="2" /></Style>
+            <Style Selector="^:disabled"><Setter Property="Background" Value="#303034" /><Setter Property="Foreground" Value="#A1A1AA" /></Style>
+        </ControlTheme>
+    </UserControl.Resources>
+    <UserControl.Styles><Style Selector="Button"><Setter Property="Theme" Value="{StaticResource RecoveryButtonTheme}" /></Style></UserControl.Styles>
+    <ScrollViewer>
+        <StackPanel Margin="24" Spacing="16" MaxWidth="900" HorizontalAlignment="Stretch">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
+                <Button Content="← Mesas" Command="{Binding VolverCommand}" IsEnabled="{Binding !Ocupado}" />
+                <TextBlock Grid.Column="1" Text="Recuperación de caja" FontSize="26" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+            </Grid>
+            <TextBlock Text="DEMOSTRACIÓN · Esta pantalla no realiza cobros ni vuelve a ejecutar operaciones." Foreground="{StaticResource TextoSecundarioBrush}" TextWrapping="Wrap" />
+            <Border Background="{StaticResource FondoPanelBrush}" Padding="16" CornerRadius="6">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Diario local" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="{Binding EstadoDiario}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Mensaje}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <WrapPanel>
+                        <Button Content="Consultar operación" Command="{Binding ConsultarCommand}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
+                        <Button Content="Conciliar resultado" Command="{Binding ConciliarCommand}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+            <Border Background="{StaticResource FondoPanelBrush}" Padding="16" CornerRadius="6">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Cancelar o establecer barrera" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="Si un cobro externo ya ocurrió, no lo repita. Si la operación ya se completó, cancelarla no revierte el cobro." Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <CheckBox Content="Confirmo que deseo cancelar esta operación; si es ajena, actúo como Jefa." IsChecked="{Binding ConfirmarCancelacion}" IsEnabled="{Binding !Ocupado}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <Button Content="Confirmar cancelación" Command="{Binding CancelarCommand}" IsEnabled="{Binding ConfirmarCancelacion}" HorizontalAlignment="Left" />
+                </StackPanel>
+            </Border>
+            <Border Background="{StaticResource FondoPanelBrush}" Padding="16" CornerRadius="6">
+                <StackPanel Spacing="8"><TextBlock Text="Fotografía reconciliada" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" /><TextBlock Text="{Binding Fotografia}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" /></StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

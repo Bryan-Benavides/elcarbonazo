@@ -96,6 +96,8 @@ public sealed class EnviosService(AppDbContext context, IAuditRecorder audit, Ti
                 """).ToListAsync(cancellationToken);
             if (members.Count < 2 || members.Any(item => item.Estado != MesaStates.Agrupada))
                 return new EnvioResult(409, "DESTINO_STATE_CONFLICT");
+            if (await context.Pedidos.AsNoTracking().AnyAsync(item => item.IdGrupo == groupId && item.Estado == PedidoStates.Pagado, cancellationToken))
+                return new EnvioResult(409, "GRUPO_PAGADO_REQUIERE_CIERRE");
         }
 
         var pedido = await context.Pedidos.SingleOrDefaultAsync(item =>
@@ -108,6 +110,8 @@ public sealed class EnviosService(AppDbContext context, IAuditRecorder audit, Ti
                 """).SingleAsync(cancellationToken);
             if (!await context.Comandas.AnyAsync(item => item.IdPedido == pedido.IdPedido, cancellationToken))
                 return new EnvioResult(409, "CUENTA_LEGADA_SIN_COMANDAS");
+            if (await CajaPendientes.HayCobroParaCuentaAsync(context, pedido.IdPedido, Guid.Empty, cancellationToken))
+                return new EnvioResult(409, "OPERACION_NO_TERMINAL");
         }
         if (mesa is not null && ((pedido is null && mesa.Estado is not (MesaStates.Libre or MesaStates.Reservada)) ||
                                  (pedido is not null && mesa.Estado != MesaStates.Ocupada)))

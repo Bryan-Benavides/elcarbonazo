@@ -8,27 +8,32 @@ public interface ICajaRecoveryTransport
     Task<CajaRecoveryOutcome> PrepareAsync(Guid operation, int actor, string type, object? arguments, CancellationToken cancellationToken);
     Task<CajaRecoveryOutcome> QueryAsync(Guid operation, int actor, CancellationToken cancellationToken);
     Task<CajaRecoveryOutcome> ExecuteAsync(Guid operation, int actor, CancellationToken cancellationToken);
-    Task<CajaRecoveryOutcome> CancelAsync(Guid operation, int actor, CancellationToken cancellationToken);
+    Task<CajaRecoveryOutcome> CancelAsync(Guid operation, int actor, bool confirmaIntervencion, CancellationToken cancellationToken);
     Task<bool> ReconcileAsync(Guid operation, int actor, string type, CancellationToken cancellationToken);
 }
 
 // The application wires this coordinator to REST; C3/C4 must supply typed requests and business reconciliation.
-public sealed class CajaRecoveryCoordinator(CajaRecoveryStore store, ICajaRecoveryTransport transport, Func<int?> currentActor)
+public sealed class CajaRecoveryCoordinator(CajaRecoveryStore store, ICajaRecoveryTransport transport, Func<int?> currentActor, Func<bool>? isJefa = null, Func<long>? sessionGeneration = null)
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Guid? _observedPrepared;
+    private long _preparedGeneration;
 
     public async Task<CajaRecoveryOutcome> BeginAsync(Guid operation, int actor, string type, CancellationToken cancellationToken = default, object? arguments = null)
     {
         await _gate.WaitAsync(cancellationToken);
         try
         {
+            var generation = sessionGeneration?.Invoke() ?? 0;
             if (currentActor() != actor || !store.Begin(operation, actor, type)) return CajaRecoveryOutcome.Uncertain;
-            if (currentActor() != actor) return CajaRecoveryOutcome.Uncertain;
+            if (currentActor() != actor || !SameGeneration(generation)) return CajaRecoveryOutcome.Uncertain;
             try
             {
                 var outcome = await transport.PrepareAsync(operation, actor, type, arguments, cancellationToken);
-                return RecordOutcome(operation, actor, outcome, allowExecution: true);
+                if (!SameGeneration(generation)) return CajaRecoveryOutcome.Uncertain;
+                var result = RecordOutcome(operation, actor, outcome, allowExecution: true);
+                if (_observedPrepared == operation) _preparedGeneration = generation;
+                return result;
             }
             catch (Exception ex) when (IsUncertain(ex))
             {
@@ -43,14 +48,16 @@ public sealed class CajaRecoveryCoordinator(CajaRecoveryStore store, ICajaRecove
         await _gate.WaitAsync(cancellationToken);
         try
         {
+            var generation = sessionGeneration?.Invoke() ?? 0;
             var state = store.Read();
-            if (state?.Operacion is not Guid id || state.Propietario is not int owner || currentActor() != owner)
+            if (state?.Operacion is not Guid id || state.Propietario is not int owner || currentActor() is not int actor || !PuedeSupervisar(owner, actor))
                 return CajaRecoveryOutcome.Uncertain;
             _observedPrepared = null;
             try
             {
-                var outcome = await transport.QueryAsync(id, owner, cancellationToken);
-                return RecordOutcome(id, owner, outcome);
+                var outcome = await transport.QueryAsync(id, actor, cancellationToken);
+                if (!SameGeneration(generation)) return CajaRecoveryOutcome.Uncertain;
+                return RecordOutcome(id, owner, outcome, actor: actor);
             }
             catch (Exception ex) when (IsUncertain(ex))
             {
@@ -60,16 +67,22 @@ public sealed class CajaRecoveryCoordinator(CajaRecoveryStore store, ICajaRecove
         finally { _gate.Release(); }
     }
 
-    public async Task<CajaRecoveryOutcome> CancelAsync(CancellationToken cancellationToken = default)
+    public async Task<CajaRecoveryOutcome> CancelAsync(CancellationToken cancellationToken = default, bool confirmaIntervencion = false)
     {
         await _gate.WaitAsync(cancellationToken);
         try
         {
+            var generation = sessionGeneration?.Invoke() ?? 0;
             var state = store.Read();
-            if (state?.Estado != "Pendiente" || state.Operacion is not Guid id || state.Propietario is not int owner || currentActor() != owner)
+            if (state?.Estado != "Pendiente" || state.Operacion is not Guid id || state.Propietario is not int owner ||
+                currentActor() is not int actor || !PuedeSupervisar(owner, actor) || (actor != owner && !confirmaIntervencion))
                 return CajaRecoveryOutcome.Uncertain;
             _observedPrepared = null;
-            try { return RecordOutcome(id, owner, await transport.CancelAsync(id, owner, cancellationToken)); }
+            try
+            {
+                var outcome = await transport.CancelAsync(id, actor, actor != owner && confirmaIntervencion, cancellationToken);
+                return SameGeneration(generation) ? RecordOutcome(id, owner, outcome, actor: actor) : CajaRecoveryOutcome.Uncertain;
+            }
             catch (Exception ex) when (IsUncertain(ex)) { return CajaRecoveryOutcome.Uncertain; }
         }
         finally { _gate.Release(); }
@@ -80,12 +93,17 @@ public sealed class CajaRecoveryCoordinator(CajaRecoveryStore store, ICajaRecove
         await _gate.WaitAsync(cancellationToken);
         try
         {
+            var generation = sessionGeneration?.Invoke() ?? 0;
             var state = store.Read();
             if (state?.Estado != "Pendiente" || state.Operacion is not Guid id || state.Propietario is not int owner ||
-                currentActor() != owner || _observedPrepared != id) return CajaRecoveryOutcome.Uncertain;
+                currentActor() != owner || _observedPrepared != id || _preparedGeneration != generation) return CajaRecoveryOutcome.Uncertain;
             // Consume the one fresh preparation response before sending. Recovery cannot rearm execution.
             _observedPrepared = null;
-            try { return RecordOutcome(id, owner, await transport.ExecuteAsync(id, owner, cancellationToken)); }
+            try
+            {
+                var outcome = await transport.ExecuteAsync(id, owner, cancellationToken);
+                return SameGeneration(generation) ? RecordOutcome(id, owner, outcome) : CajaRecoveryOutcome.Uncertain;
+            }
             catch (Exception ex) when (IsUncertain(ex)) { return CajaRecoveryOutcome.Uncertain; }
         }
         finally { _gate.Release(); }
@@ -96,12 +114,13 @@ public sealed class CajaRecoveryCoordinator(CajaRecoveryStore store, ICajaRecove
         await _gate.WaitAsync(cancellationToken);
         try
         {
+            var generation = sessionGeneration?.Invoke() ?? 0;
             var state = store.Read();
             if (state?.Estado != "TerminalPorConciliar" || state.Operacion is not Guid id ||
-                state.Propietario is not int owner || state.Tipo is null || currentActor() != owner) return false;
+                state.Propietario is not int owner || state.Tipo is null || currentActor() is not int actor || !PuedeSupervisar(owner, actor)) return false;
             try
             {
-                if (!await transport.ReconcileAsync(id, owner, state.Tipo, cancellationToken) || currentActor() != owner) return false;
+                if (!await transport.ReconcileAsync(id, actor, state.Tipo, cancellationToken) || !SameGeneration(generation) || !PuedeSupervisar(owner, actor)) return false;
                 return store.CompleteReconciliation(id, owner);
             }
             catch (Exception ex) when (IsUncertain(ex))
@@ -115,10 +134,13 @@ public sealed class CajaRecoveryCoordinator(CajaRecoveryStore store, ICajaRecove
     private static bool IsUncertain(Exception ex) => ex is HttpRequestException or IOException or OperationCanceledException or
         System.Text.Json.JsonException or SessionExpiredException or SessionPausedException or SecurityConnectionException;
 
-    private CajaRecoveryOutcome RecordOutcome(Guid operation, int owner, CajaRecoveryOutcome outcome, bool allowExecution = false)
+    private bool PuedeSupervisar(int owner, int actor) => currentActor() == actor && (owner == actor || isJefa?.Invoke() == true);
+    private bool SameGeneration(long generation) => (sessionGeneration?.Invoke() ?? 0) == generation;
+
+    private CajaRecoveryOutcome RecordOutcome(Guid operation, int owner, CajaRecoveryOutcome outcome, bool allowExecution = false, int? actor = null)
     {
         _observedPrepared = null;
-        if (currentActor() != owner) return CajaRecoveryOutcome.Uncertain;
+        if (!PuedeSupervisar(owner, actor ?? owner)) return CajaRecoveryOutcome.Uncertain;
         var state = store.Read();
         if (state?.Operacion != operation || state.Propietario != owner) return CajaRecoveryOutcome.Uncertain;
         if (allowExecution && outcome == CajaRecoveryOutcome.Prepared && state.Estado == "Pendiente") _observedPrepared = operation;

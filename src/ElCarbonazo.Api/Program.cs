@@ -198,8 +198,11 @@ builder.Services.AddScoped<CocinaService>();
 builder.Services.AddScoped<CajaOperacionesService>();
 builder.Services.AddScoped<CajaCancelacionService>();
 builder.Services.AddScoped<CajaCuentasService>();
+builder.Services.AddScoped<CajaTurnosService>();
+builder.Services.AddScoped<CajaComprobantesService>();
 builder.Services.AddScoped<CajaAperturaExecutor>();
 builder.Services.AddScoped<CajaCierreExecutor>();
+builder.Services.AddScoped<CajaCobroExecutor>();
 builder.Services.AddScoped<ICajaEjecutorDominio, CajaEjecutorDominio>();
 
 builder.Services

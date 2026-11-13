@@ -12,6 +12,103 @@ namespace ElCarbonazo.Api.Tests;
 public sealed class CajaOperacionesTests
 {
     [Fact]
+    public async Task Reconciliation_evidence_distinguishes_terminal_intent_and_tombstone()
+    {
+        var db = new TemporaryPostgresDatabase();
+        try
+        {
+            await db.InitializeAsync();
+            await using var context = db.CreateContext();
+            await context.Database.ExecuteSqlRawAsync("UPDATE usuario SET rol = 'Jefa', activo = true WHERE id_usuario = 1");
+            var audit = Audit(context);
+            var operations = new CajaOperacionesService(context, audit, TimeProvider.System);
+            var cancellations = new CajaCancelacionService(context, audit, TimeProvider.System);
+            var intent = Guid.NewGuid();
+            Assert.Equal(200, (await operations.PrepararAsync(intent, 1, CajaOperacionCanonica.Abrir(0, true), default)).Status);
+            Assert.Equal(409, (await operations.EvidenciaAsync(intent, 1, default)).Error.Status);
+            Assert.Equal(200, (await cancellations.CancelarAsync(intent, 1, false, default)).Status);
+            var evidence = (await operations.EvidenciaAsync(intent, 1, default)).Evidencia;
+            Assert.NotNull(evidence);
+            Assert.Equal("AbrirTurno", evidence.Tipo);
+            Assert.False(evidence.SinIntencion);
+            Assert.Null(evidence.IdPedido);
+            var barrier = Guid.NewGuid();
+            await cancellations.CancelarAsync(barrier, 1, false, default);
+            var tombstone = (await operations.EvidenciaAsync(barrier, 1, default)).Evidencia;
+            Assert.NotNull(tombstone);
+            Assert.True(tombstone.SinIntencion);
+            Assert.Null(tombstone.Tipo);
+            Assert.Equal(404, (await operations.EvidenciaAsync(Guid.NewGuid(), 1, default)).Error.Status);
+        }
+        finally { await db.DisposeAsync(); }
+    }
+
+    [Fact]
+    public async Task Payment_audit_failure_rolls_back_payment_snapshot_and_order()
+    {
+        var db = new TemporaryPostgresDatabase();
+        try
+        {
+            await db.InitializeAsync();
+            var paymentId = Guid.NewGuid();
+            int orderId;
+            await using (var setup = db.CreateContext())
+            {
+                await setup.Database.ExecuteSqlRawAsync("UPDATE usuario SET rol = 'Jefa', activo = true WHERE id_usuario = 1");
+                (await setup.Mesas.SingleAsync(x => x.IdMesa == 1)).Estado = MesaStates.Ocupada;
+                var product = new Producto { Nombre = "Prueba", Categoria = "Comida", Precio = 10m, Disponible = true };
+                var order = new Pedido
+                {
+                    IdMesa = 1,
+                    IdUsuario = 1,
+                    FechaHora = DateTimeOffset.UtcNow,
+                    Estado = PedidoStates.Listo,
+                    Subtotal = 10m,
+                    Total = 10m
+                };
+                setup.Productos.Add(product);
+                setup.Pedidos.Add(order);
+                await setup.SaveChangesAsync();
+                orderId = order.IdPedido;
+                var command = new Comanda { IdPedido = order.IdPedido, IdUsuario = 1, FechaHora = DateTimeOffset.UtcNow, Estado = "Lista" };
+                command.Detalles.Add(new DetallePedido
+                {
+                    IdProducto = product.IdProducto,
+                    NombreProducto = product.Nombre,
+                    Cantidad = 1,
+                    PrecioUnitario = 10m,
+                    Subtotal = 10m,
+                    Notas = ""
+                });
+                setup.Comandas.Add(command);
+                await setup.SaveChangesAsync();
+                var audit = Audit(setup);
+                var opening = Guid.NewGuid();
+                var service = new CajaOperacionesService(setup, audit, TimeProvider.System, new CajaAperturaExecutor(setup, audit, TimeProvider.System));
+                await service.PrepararAsync(opening, 1, CajaOperacionCanonica.Abrir(0, true), default);
+                Assert.Equal(201, (await service.EjecutarAsync(opening, 1, default)).Status);
+                var shift = await setup.TurnosCaja.Select(x => x.IdTurnoCaja).SingleAsync();
+                var loaded = await setup.Pedidos.AsNoTracking().Include(x => x.Comandas).ThenInclude(x => x.Detalles).SingleAsync(x => x.IdPedido == orderId);
+                var hash = CajaElegibilidad.Evaluar(loaded).HuellaLineas;
+                var intent = CajaOperacionCanonica.Cobrar(orderId, shift, 10, hash, CajaStates.Efectivo, 10, null, false, false);
+                Assert.Equal(200, (await service.PrepararAsync(paymentId, 1, intent, default)).Status);
+            }
+            await using (var context = db.CreateContext())
+            {
+                var audit = new FailingAudit();
+                var service = new CajaOperacionesService(context, audit, TimeProvider.System, new CajaCobroExecutor(context, audit, TimeProvider.System));
+                await Assert.ThrowsAsync<InvalidOperationException>(() => service.EjecutarAsync(paymentId, 1, default));
+            }
+            await using var verify = db.CreateContext();
+            Assert.Equal(PedidoStates.Listo, await verify.Pedidos.Where(x => x.IdPedido == orderId).Select(x => x.Estado).SingleAsync());
+            Assert.Empty(await verify.Cobros.ToListAsync());
+            Assert.Empty(await verify.ComprobantesCobroLineas.ToListAsync());
+            Assert.Equal(CajaStates.OperacionPreparada, await verify.OperacionesCaja.Where(x => x.IdOperacion == paymentId).Select(x => x.Estado).SingleAsync());
+        }
+        finally { await db.DisposeAsync(); }
+    }
+
+    [Fact]
     public async Task Closing_totals_use_confirmed_payments_per_method_and_cash_net_of_change()
     {
         var db = new TemporaryPostgresDatabase();

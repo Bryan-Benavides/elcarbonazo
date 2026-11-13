@@ -94,6 +94,8 @@ Orden global aprobado como contrato de implementación, sujeto a pruebas determi
 6. La **ejecución** de cobro nunca toma el lock global de apertura/cierre; después de su pedido toma `turno_caja FOR UPDATE`. Si cierre obtuvo el turno primero, cobro espera y luego observa cerrado/rechaza. Si cobro obtuvo primero, cierre espera y calcula totales confirmados después del commit. Si hay una operación preparada observable, cierre se bloquea conservadoramente; terminalizar/cancelar es una acción separada y cierre se intenta de nuevo explícitamente. Prepare sí toma la barrera indicada en el punto 5.
 7. Producto no se bloquea para cobro: líneas históricas son autoridad; catálogo actual irrelevante.
 
+La preparación de cobro toma la barrera global y después los locks del destino y pedido/comandas según los puntos 2–3 antes de validar e insertar la intención. Así serializa la creación de la intención con envíos y cambios KDS, que comprueban bajo los mismos locks si existe un cobro preparado para esa cuenta. La ejecución de cobro no toma la barrera global; consulta intenciones competidoras sin bloquear sus filas antes de bloquear turno. Un payload pendiente no interpretable bloquea conservadoramente.
+
 Antes de añadir código, C1 inspecciona el SQL/orden implementado y valida esta matriz con pruebas PostgreSQL concurrentes. Toda incompatibilidad requiere detener y actualizar/aprobar plan antes de alterar orden. No mantener locks durante interacción humana ni validación bancaria externa. La confirmación externa ocurre antes de preparar/ejecutar el registro local.
 
 ### Invariantes cruzadas
@@ -116,6 +118,7 @@ JSON camelCase, JWT/sesión actual, `ProblemDetails` con `code`, `traceId`, sin 
 | `GET /api/caja/comprobantes?cursor=&limite=` | Historial interno por autorización. |
 | `GET /api/caja/comprobantes/{id}` | Snapshot persistido. |
 | cuatro rutas `/api/caja/operaciones/...` | Prepare/execute/query/cancel descritas en §4. |
+| `GET /api/caja/operaciones/{uuid}/evidencia-conciliacion` | Evidencia mínima autorizada para rechazos/cancelaciones: UUID, estado, tipo, IDs de cuenta/turno y distinción de barrera sin intención; no devuelve argumentos ni referencias. Por sí sola no sustituye la reconciliación de negocio. |
 
 Errores estables: 400 `VALIDATION_ERROR`; 401 contratos de sesión 001; 403 `AUTH_PROHIBIDO`; 404 `RECURSO_NO_ENCONTRADO` genérico/no enumerativo; 409 `TURNO_YA_ABIERTO`, `TURNO_NO_ABIERTO`, `CUENTA_NO_COBRABLE`, `CUENTA_CAMBIO_REQUIERE_REVISION`, `CUENTA_YA_PAGADA`, `OPERACION_CLAVE_EN_USO`, `OPERACION_NO_TERMINAL`, `REFERENCIA_REQUIERE_CONFIRMACION`, `GRUPO_PAGADO_REQUIERE_CIERRE`, `VERSION_CONFLICT`; 413 `REQUEST_TOO_LARGE`; 500 genérico. Las respuestas de consulta solo muestran recursos autorizados. `traceId` en todos los problemas.
 

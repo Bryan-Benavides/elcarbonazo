@@ -8,7 +8,8 @@ namespace ElCarbonazo.Desktop.ViewModels;
 
 public partial class LoginViewModel(
     ISessionManager sessionManager,
-    INavigationService navigation) : ViewModelBase
+    INavigationService navigation,
+    CajaRecoveryViewModel? recoveryPanel = null) : ViewModelBase
 {
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(LoginCommand))]
@@ -42,7 +43,7 @@ public partial class LoginViewModel(
         try
         {
             var session = await sessionManager.LoginAsync(Nombre, Contrasena, cancellationToken);
-            navigation.Navigate(new MesasViewModel(session.Nombre, session.Rol, sessionManager, new MesasApiService(sessionManager)));
+            navigation.Navigate(new MesasViewModel(session.Nombre, session.Rol, sessionManager, new MesasApiService(sessionManager), recoveryPanel: recoveryPanel));
         }
         catch (ApiException exception) when (
             exception.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.TooManyRequests)

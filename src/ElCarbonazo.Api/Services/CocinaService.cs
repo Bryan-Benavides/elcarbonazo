@@ -97,6 +97,8 @@ public sealed class CocinaService(AppDbContext context, IAuditRecorder audit)
         if (pedido is null || !PedidoStates.Active.Contains(pedido.Estado) ||
             pedido.IdMesa != destination.IdMesa || pedido.IdGrupo != destination.IdGrupo)
             return new CocinaResult(409, "DESTINO_STATE_CONFLICT");
+        if (await CajaPendientes.HayCobroParaCuentaAsync(context, pedido.IdPedido, Guid.Empty, cancellationToken))
+            return new CocinaResult(409, "OPERACION_NO_TERMINAL");
         var command = await context.Comandas.FromSqlInterpolated($"""
             SELECT xmin, * FROM comanda WHERE id_comanda = {id} FOR UPDATE
             """).SingleOrDefaultAsync(cancellationToken);

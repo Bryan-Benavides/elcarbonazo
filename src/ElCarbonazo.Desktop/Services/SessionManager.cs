@@ -58,6 +58,10 @@ public sealed class SessionManager : ISessionManager, ICajaSessionSender, IDispo
     private string? _rol;
     private SessionLifecycleState _state = SessionLifecycleState.SignedOut;
     private bool _disposed;
+    private long _cajaSessionGeneration;
+
+    // Changes on each login, not on token refresh. Never contains a credential.
+    public long CajaSessionGeneration { get { lock (_sessionGate) return _cajaSessionGeneration; } }
 
     public SessionManager(
         IApiClientService apiClient,
@@ -631,6 +635,7 @@ public sealed class SessionManager : ISessionManager, ICajaSessionSender, IDispo
             }
 
             _accessToken = session.AccessToken;
+            if (expectedRefreshToken is null) _cajaSessionGeneration++;
             _refreshToken = session.RefreshToken;
             _accessTokenExpiresAt = session.AccessTokenExpiresAt;
             _inactivityExpiresAt = session.InactivityExpiresAt;

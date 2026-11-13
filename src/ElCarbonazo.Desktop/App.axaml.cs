@@ -33,6 +33,7 @@ public partial class App : Application
             _logger.Information("DesktopStarting", "La aplicación Desktop está iniciando.");
             var configurationService = new DesktopConfigurationService();
             var navigation = new NavigationService();
+            CajaRecoveryViewModel? recoveryPanel = null;
             ViewModelBase initialViewModel;
 
             try
@@ -50,11 +51,15 @@ public partial class App : Application
                     {
                         var store = new CajaRecoveryStore(System.IO.Path.Combine(directory, "caja-journal.json"),
                             configuration.IdInstalacion, new WindowsCajaRecoverySecurityPolicy(directory, sid));
-                        CajaRecovery = new CajaRecoveryCoordinator(store, new CajaRecoveryHttpTransport(_sessionManager),
-                            () => _sessionManager.CurrentSession?.IdUsuario);
+                        recoveryPanel = new CajaRecoveryViewModel(store, _sessionManager, () => _sessionManager.CajaSessionGeneration);
+                        CajaRecovery = new CajaRecoveryCoordinator(store, new CajaRecoveryHttpTransport(_sessionManager, recoveryPanel),
+                            () => _sessionManager.CurrentSession?.IdUsuario,
+                            () => _sessionManager.CurrentSession?.Rol == "Jefa",
+                            () => _sessionManager.CajaSessionGeneration);
+                        recoveryPanel.Attach(CajaRecovery);
                     }
                 }
-                initialViewModel = new LoginViewModel(_sessionManager, navigation);
+                initialViewModel = new LoginViewModel(_sessionManager, navigation, recoveryPanel);
             }
             catch (DesktopConfigurationException exception)
             {
@@ -68,7 +73,7 @@ public partial class App : Application
                 initialViewModel,
                 navigation,
                 _sessionManager,
-                _serverClock);
+                _serverClock, recoveryPanel);
             var window = new MainWindow { DataContext = _shellViewModel };
             window.AddHandler(
                 InputElement.PointerPressedEvent,

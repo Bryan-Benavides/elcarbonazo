@@ -7,6 +7,65 @@ namespace ElCarbonazo.Desktop.Tests;
 public sealed class CajaRecoveryCoordinatorTests
 {
     [Fact]
+    public async Task Same_actor_new_session_cannot_execute_previous_preparation_or_clear_journal()
+    {
+        using var fixture = new Fixture();
+        long generation = 1;
+        var transport = new FakeTransport();
+        var coordinator = new CajaRecoveryCoordinator(fixture.Store, transport, () => 1, sessionGeneration: () => generation);
+        var id = Guid.NewGuid();
+        Assert.Equal(CajaRecoveryOutcome.Prepared, await coordinator.BeginAsync(id, 1, "AbrirTurno"));
+        generation++;
+        Assert.Equal(CajaRecoveryOutcome.Uncertain, await coordinator.ExecuteAsync());
+        Assert.Equal(0, transport.ExecuteCalls);
+        transport.QueryResult = CajaRecoveryOutcome.Completed;
+        Assert.Equal(CajaRecoveryOutcome.Completed, await coordinator.RecoverAsync());
+        transport.ReconcileResult = true;
+        transport.OnReconcile = () => generation++;
+        Assert.False(await coordinator.ReconcileAsync());
+        Assert.Equal(id, fixture.Store.Read()!.Operacion);
+        Assert.Equal("TerminalPorConciliar", fixture.Store.Read()!.Estado);
+    }
+
+    [Fact]
+    public async Task Same_actor_new_session_during_prepare_keeps_journal_pending()
+    {
+        using var fixture = new Fixture();
+        long generation = 1;
+        var transport = new FakeTransport { OnPrepare = () => generation++, PrepareResult = CajaRecoveryOutcome.Completed };
+        var coordinator = new CajaRecoveryCoordinator(fixture.Store, transport, () => 1, sessionGeneration: () => generation);
+        var id = Guid.NewGuid();
+        Assert.Equal(CajaRecoveryOutcome.Uncertain, await coordinator.BeginAsync(id, 1, "AbrirTurno"));
+        Assert.Equal("Pendiente", fixture.Store.Read()!.Estado);
+        Assert.Equal(id, fixture.Store.Read()!.Operacion);
+    }
+
+    [Fact]
+    public async Task Jefa_can_supervise_and_cancel_foreign_intention_only_with_confirmation()
+    {
+        using var fixture = new Fixture();
+        var id = Guid.NewGuid();
+        Assert.True(fixture.Store.Begin(id, 1, "CobrarCuenta"));
+        var transport = new FakeTransport { QueryResult = CajaRecoveryOutcome.Prepared };
+        var isJefa = false;
+        var coordinator = new CajaRecoveryCoordinator(fixture.Store, transport, () => 2, () => isJefa);
+        Assert.Equal(CajaRecoveryOutcome.Uncertain, await coordinator.RecoverAsync());
+        Assert.Equal(CajaRecoveryOutcome.Uncertain, await coordinator.CancelAsync(confirmaIntervencion: true));
+        Assert.Equal(0, transport.QueryCalls);
+        Assert.Equal(0, transport.CancelCalls);
+        isJefa = true;
+        Assert.Equal(CajaRecoveryOutcome.Prepared, await coordinator.RecoverAsync());
+        Assert.Equal(CajaRecoveryOutcome.Uncertain, await coordinator.ExecuteAsync());
+        Assert.Equal(CajaRecoveryOutcome.Uncertain, await coordinator.CancelAsync());
+        Assert.Equal(0, transport.CancelCalls);
+        Assert.Equal(CajaRecoveryOutcome.Cancelled, await coordinator.CancelAsync(confirmaIntervencion: true));
+        Assert.Equal(2, transport.LastActor);
+        Assert.True(transport.SupervisionConfirmed);
+        Assert.Equal(1, fixture.Store.Read()!.Propietario);
+        Assert.Equal("TerminalPorConciliar", fixture.Store.Read()!.Estado);
+    }
+
+    [Fact]
     public async Task Execute_is_explicit_and_never_retried_after_uncertain_response()
     {
         using var fixture = new Fixture();
@@ -105,12 +164,16 @@ public sealed class CajaRecoveryCoordinatorTests
     {
         public bool PrepareError { get; init; }
         public Action? OnPrepare { get; init; }
+        public Action? OnReconcile { get; set; }
         public CajaRecoveryOutcome PrepareResult { get; init; } = CajaRecoveryOutcome.Prepared;
         public CajaRecoveryOutcome QueryResult { get; set; }
         public bool ReconcileResult { get; set; }
         public int PrepareCalls { get; private set; }
         public int QueryCalls { get; private set; }
         public int ExecuteCalls { get; private set; }
+        public int CancelCalls { get; private set; }
+        public int LastActor { get; private set; }
+        public bool SupervisionConfirmed { get; private set; }
         public Task<CajaRecoveryOutcome> PrepareAsync(Guid operation, int actor, string type, object? arguments, CancellationToken cancellationToken)
         {
             PrepareCalls++;
@@ -123,13 +186,23 @@ public sealed class CajaRecoveryCoordinatorTests
             QueryCalls++;
             return Task.FromResult(QueryResult);
         }
-        public Task<CajaRecoveryOutcome> CancelAsync(Guid operation, int actor, CancellationToken cancellationToken) => Task.FromResult(CajaRecoveryOutcome.Cancelled);
+        public Task<CajaRecoveryOutcome> CancelAsync(Guid operation, int actor, bool confirmaIntervencion, CancellationToken cancellationToken)
+        {
+            CancelCalls++;
+            LastActor = actor;
+            SupervisionConfirmed = confirmaIntervencion;
+            return Task.FromResult(CajaRecoveryOutcome.Cancelled);
+        }
         public Task<CajaRecoveryOutcome> ExecuteAsync(Guid operation, int actor, CancellationToken cancellationToken)
         {
             ExecuteCalls++;
             return Task.FromResult(CajaRecoveryOutcome.Uncertain);
         }
-        public Task<bool> ReconcileAsync(Guid operation, int actor, string type, CancellationToken cancellationToken) => Task.FromResult(ReconcileResult);
+        public Task<bool> ReconcileAsync(Guid operation, int actor, string type, CancellationToken cancellationToken)
+        {
+            OnReconcile?.Invoke();
+            return Task.FromResult(ReconcileResult);
+        }
     }
 
     private sealed class Fixture : IDisposable

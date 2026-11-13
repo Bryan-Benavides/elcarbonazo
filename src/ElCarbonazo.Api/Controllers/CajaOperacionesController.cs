@@ -65,6 +65,15 @@ public sealed class CajaOperacionesController(CajaOperacionesService operations,
         }
     }
 
+    [HttpGet("{id:guid}/evidencia-conciliacion")]
+    public async Task<IActionResult> Evidencia(Guid id, CancellationToken ct)
+    {
+        var actor = Actor();
+        if (actor is null || Session() is null) return Error(401, "AUTH_NO_AUTENTICADO");
+        var (error, evidencia) = await operations.EvidenciaAsync(id, actor.Value, ct, Session());
+        return evidencia is null ? Error(error.Status, error.Code) : Ok(evidencia);
+    }
+
     private static CajaIntencionCanonica? ParseIntent(JsonElement root)
     {
         if (!Fields(root, "tipo", "version", "argumentos") || !Text(root, "tipo", out var type) ||

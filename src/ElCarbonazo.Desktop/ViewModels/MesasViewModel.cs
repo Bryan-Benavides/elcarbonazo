@@ -18,6 +18,44 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     private readonly SemaphoreSlim _refresh = new(0, 1);
     private readonly MesasRequestCoordinator _coordinator = new();
     private bool _disposed;
+    private readonly CajaRecoveryViewModel? _recoveryPanel;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MostrandoRecuperacionCaja))]
+    [NotifyPropertyChangedFor(nameof(MostrandoModulo))]
+    private CajaRecoveryViewModel? _recuperacionCajaActual;
+    public bool MostrandoRecuperacionCaja => RecuperacionCajaActual is not null;
+    public bool RolPuedeRecuperarCaja => (Rol is "Jefa" or "Encargado de Caja") && _recoveryPanel is not null;
+    public bool PuedeAbrirRecuperacionCaja => RolPuedeRecuperarCaja && !_disposed && !MostrandoModulo && !Mutando && !ResultadoIncierto && !SeleccionandoGrupo && _coordinator.CanMutate;
+
+    [RelayCommand]
+    private async Task AbrirRecuperacionCajaAsync()
+    {
+        if (!PuedeAbrirRecuperacionCaja || _recoveryPanel is null) return;
+        Mutando = true;
+        bool reserved;
+        try { reserved = await _coordinator.TryBeginMutationAsync(_lifetime.Token); }
+        catch (OperationCanceledException) { Mutando = false; return; }
+        if (!reserved) { Mutando = false; return; }
+        if (!_recoveryPanel.Open(CerrarRecuperacionCaja))
+        {
+            _coordinator.CompleteMutation(requiresReconciliation: true);
+            Mutando = false;
+            SolicitarConsulta();
+            return;
+        }
+        RecuperacionCajaActual = _recoveryPanel;
+        ActualizarAcciones();
+    }
+
+    private void CerrarRecuperacionCaja()
+    {
+        RecuperacionCajaActual = null;
+        _coordinator.CompleteMutation(requiresReconciliation: true);
+        Mutando = false;
+        SolicitarConsulta();
+        ActualizarAcciones();
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(MostrandoPedidos))]
@@ -29,7 +67,7 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(MostrandoModulo))]
     private CocinaViewModel? _cocinaActual;
     public bool MostrandoCocina => CocinaActual is not null;
-    public bool MostrandoModulo => MostrandoPedidos || MostrandoCocina;
+    public bool MostrandoModulo => MostrandoPedidos || MostrandoCocina || MostrandoRecuperacionCaja;
     public bool RolPuedeCocina => Rol is "Jefa" or "Supervisor" or "Personal de Cocina";
     public bool PuedeAbrirCocina => RolPuedeCocina && !_disposed && !MostrandoModulo && !Mutando && !ResultadoIncierto && !SeleccionandoGrupo && _coordinator.CanMutate;
 
@@ -142,6 +180,7 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(AyudaAcciones));
         OnPropertyChanged(nameof(PuedeAbrirCuenta));
         OnPropertyChanged(nameof(PuedeAbrirCocina));
+        OnPropertyChanged(nameof(PuedeAbrirRecuperacionCaja));
         ActualizarAccionesGrupo();
     }
 
@@ -297,11 +336,12 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     }
 
     public MesasViewModel(string nombre, string rol, ISessionManager session, IMesasApiService mesasService,
-        Func<Action, Task>? dispatch = null, IGruposMesaApiService? gruposService = null)
+        Func<Action, Task>? dispatch = null, IGruposMesaApiService? gruposService = null, CajaRecoveryViewModel? recoveryPanel = null)
     {
         Nombre = nombre;
         Rol = rol;
         _session = session;
+        _recoveryPanel = recoveryPanel;
         _mesasService = mesasService;
         _gruposService = gruposService ?? new GruposMesaApiService(session);
         _dispatch = dispatch ?? DispatchToUiAsync;
@@ -460,6 +500,7 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
         _disposed = true;
         PedidosActual?.Dispose();
         CocinaActual?.Dispose();
+        RecuperacionCajaActual?.Deactivate();
         _session.SessionStateChanged -= OnSessionStateChanged;
         Mesas.CollectionChanged -= AlCambiarMesas;
         _coordinator.Stop();
