@@ -36,6 +36,7 @@ public sealed class CajaRecoveryViewModelTests
             vm.AttachAccountsReader(new CashAccountsReader());
             Assert.True(vm.Open(() => { }));
             await vm.ConsultarTurnoCommand.ExecuteAsync(null);
+            Assert.Contains("Abierto por usuario 1", vm.ResumenTurno, StringComparison.Ordinal);
             await vm.ConsultarCuentasCommand.ExecuteAsync(null);
             vm.SeleccionarCuentaCommand.Execute(vm.Cuentas[0]);
             vm.MetodoPago = "Transferencia";
@@ -273,6 +274,72 @@ public sealed class CajaRecoveryViewModelTests
     }
 
     [Fact]
+    public async Task Historical_receipt_preserves_selected_account_and_open_shift()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"caja-history-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "journal.json");
+        var installation = Guid.NewGuid();
+        try
+        {
+            File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                version = 1,
+                instalacion = installation,
+                estado = "SinPendientes",
+                operacion = (Guid?)null,
+                propietario = (int?)null,
+                tipo = (string?)null
+            }));
+            File.WriteAllText(path + ".lock", "");
+            var vm = new CajaRecoveryViewModel(new CajaRecoveryStore(path, installation, new Policy()), new FakeSession(), () => 1);
+            var reader = new HistoryReader(vm);
+            vm.AttachShiftReader(new OpenShiftReader());
+            vm.AttachAccountsReader(new CashAccountsReader());
+            vm.AttachReceiptsReader(reader);
+            Assert.True(vm.Open(() => { }));
+            await vm.ConsultarTurnoCommand.ExecuteAsync(null);
+            await vm.ConsultarCuentasCommand.ExecuteAsync(null);
+            vm.SeleccionarCuentaCommand.Execute(vm.Cuentas[0]);
+            var selected = Assert.IsType<CajaCuentaVista>(vm.CuentaSeleccionada);
+            vm.EfectivoContado = "0";
+            var difference = vm.DiferenciaCierre;
+            await vm.ConsultarComprobantesCommand.ExecuteAsync(null);
+            var reading = vm.VerComprobanteCommand.ExecuteAsync(vm.Comprobantes[0]);
+            reader.Complete();
+            await reading;
+            Assert.Same(selected, vm.CuentaSeleccionada);
+            Assert.Equal(2, vm.Cuentas.Count);
+            Assert.Equal(difference, vm.DiferenciaCierre);
+            Assert.Contains("Comprobante interno 8", vm.Fotografia, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(path + ".lock");
+            Directory.Delete(directory);
+        }
+    }
+
+    [Fact]
+    public async Task Historical_receipt_is_not_applied_after_session_changes()
+    {
+        long generation = 1;
+        var path = Path.Combine(Path.GetTempPath(), $"missing-caja-{Guid.NewGuid():N}.json");
+        var vm = new CajaRecoveryViewModel(new CajaRecoveryStore(path, Guid.NewGuid(), new Policy()), new FakeSession(), () => generation);
+        var reader = new HistoryReader(vm);
+        vm.AttachReceiptsReader(reader);
+        Assert.True(vm.Open(() => { }));
+        await vm.ConsultarComprobantesCommand.ExecuteAsync(null);
+        var reading = vm.VerComprobanteCommand.ExecuteAsync(vm.Comprobantes[0]);
+        generation++;
+        reader.Complete();
+        await reading;
+        Assert.Equal("Sin fotografía reconciliada.", vm.Fotografia);
+        Assert.Contains("No se pudo validar", vm.EstadoComprobantes, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Account_read_is_discarded_when_session_changes()
     {
         long generation = 1;
@@ -386,6 +453,19 @@ public sealed class CajaRecoveryViewModelTests
 
     private sealed class Policy : ICajaRecoverySecurityPolicy { public bool IsProtected(string path) => true; }
 
+    private sealed class HistoryReader(ICajaHistorySnapshotSink sink) : ICajaComprobantesReader
+    {
+        private readonly TaskCompletionSource _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task<CajaComprobantePagina?> ReadPageAsync(int actor, string? cursor, CancellationToken cancellationToken) =>
+            Task.FromResult<CajaComprobantePagina?>(new CajaComprobantePagina([new CajaComprobanteResumen(4, 8, 3, "Efectivo", 10)], null));
+        public async Task<bool> ApplyDetailAsync(int actor, long id, CancellationToken cancellationToken)
+        {
+            await _completion.Task;
+            return await sink.ApplyHistoryPaymentAsync(new CajaPagoSnapshot(4, 8, 3, 17, 1, 10, "Efectivo", [new CajaPagoLineaSnapshot(1, "Comida", 1, 10, 10)], 15, 5), cancellationToken);
+        }
+        public void Complete() => _completion.SetResult();
+    }
+
     private sealed class EmptyShiftReader : ICajaTurnoActualReader
     {
         public Task<(bool Valid, CajaTurnoSnapshot? Snapshot)> ReadCurrentShiftAsync(int actor, CancellationToken cancellationToken) =>
@@ -395,7 +475,7 @@ public sealed class CajaRecoveryViewModelTests
     private sealed class OpenShiftReader : ICajaTurnoActualReader
     {
         public Task<(bool Valid, CajaTurnoSnapshot? Snapshot)> ReadCurrentShiftAsync(int actor, CancellationToken cancellationToken) =>
-            Task.FromResult<(bool, CajaTurnoSnapshot?)>((true, new CajaTurnoSnapshot(17, "Abierto", 0, 0, 0, 0, 0, 0)));
+            Task.FromResult<(bool, CajaTurnoSnapshot?)>((true, new CajaTurnoSnapshot(17, "Abierto", 0, 0, 0, 0, 0, 0, 1)));
     }
 
     private sealed class ExternalCollisionTransport(CajaRecoveryViewModel sink) : ICajaRecoveryTransport
@@ -417,7 +497,7 @@ public sealed class CajaRecoveryViewModelTests
         public Task<CajaRecoveryOutcome> QueryAsync(Guid operation, int actor, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CajaRecoveryOutcome> CancelAsync(Guid operation, int actor, bool confirmaIntervencion, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> ReconcileAsync(Guid operation, int actor, string type, CancellationToken cancellationToken) => Requests.Count == 1
-            ? sink.ApplyPaymentRejectionAsync("REFERENCIA_REQUIERE_CONFIRMACION", new CajaCuentaRecoverySnapshot(3, "Listo", 10, true, null), new CajaTurnoSnapshot(17, "Abierto", 0, 0, 0, 0, 0, 0), cancellationToken)
+            ? sink.ApplyPaymentRejectionAsync("REFERENCIA_REQUIERE_CONFIRMACION", new CajaCuentaRecoverySnapshot(3, "Listo", 10, true, null), new CajaTurnoSnapshot(17, "Abierto", 0, 0, 0, 0, 0, 0, 1), cancellationToken)
             : sink.ApplyPaymentAsync(new CajaPagoSnapshot(4, 8, 3, 17, 1, 10, "Tarjeta", [new CajaPagoLineaSnapshot(1, "Comida", 1, 10, 10)]), cancellationToken);
     }
 
@@ -444,7 +524,7 @@ public sealed class CajaRecoveryViewModelTests
         public Task<CajaRecoveryOutcome> QueryAsync(Guid operation, int actor, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CajaRecoveryOutcome> CancelAsync(Guid operation, int actor, bool confirmaIntervencion, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> ReconcileAsync(Guid operation, int actor, string type, CancellationToken cancellationToken) =>
-            sink.ApplyShiftAsync(new CajaTurnoSnapshot(17, "Cerrado", 0, 0, 0, 0, 0, 0), cancellationToken);
+            sink.ApplyShiftAsync(new CajaTurnoSnapshot(17, "Cerrado", 0, 0, 0, 0, 0, 0, 1), cancellationToken);
     }
 
     private sealed class CashAccountsReader : ICajaCuentasReader
@@ -509,7 +589,7 @@ public sealed class CajaRecoveryViewModelTests
         public Task<CajaRecoveryOutcome> QueryAsync(Guid operation, int actor, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CajaRecoveryOutcome> CancelAsync(Guid operation, int actor, bool confirmaIntervencion, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> ReconcileAsync(Guid operation, int actor, string type, CancellationToken cancellationToken) =>
-            sink.ApplyShiftAsync(new CajaTurnoSnapshot(17, "Abierto", 0, 0, 0, 0, 0, 0), cancellationToken);
+            sink.ApplyShiftAsync(new CajaTurnoSnapshot(17, "Abierto", 0, 0, 0, 0, 0, 0, 1), cancellationToken);
     }
 
     private sealed class FakeTransport(ICajaRecoverySnapshotSink sink) : ICajaRecoveryTransport
@@ -524,7 +604,7 @@ public sealed class CajaRecoveryViewModelTests
             return Task.FromResult(CajaRecoveryOutcome.Cancelled);
         }
         public Task<bool> ReconcileAsync(Guid operation, int actor, string type, CancellationToken cancellationToken) =>
-            sink.ApplyShiftAsync(new CajaTurnoSnapshot(17, "Abierto", 10, 0, 0, 0, 10, 0), cancellationToken);
+            sink.ApplyShiftAsync(new CajaTurnoSnapshot(17, "Abierto", 10, 0, 0, 0, 10, 0, 1), cancellationToken);
     }
 
     private sealed class FakeSession : ISessionManager

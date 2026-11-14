@@ -23,7 +23,8 @@ public sealed class CuentasService(AppDbContext context) : ICuentasService
             return null;
         }
 
-        var pedido = await context.Pedidos.AsNoTracking()
+        // One nested command/detail hierarchy; keep the existing single-query behavior.
+        var pedido = await context.Pedidos.AsNoTracking().AsSingleQuery()
             .Include(item => item.Comandas).ThenInclude(comanda => comanda.Detalles)
             .SingleOrDefaultAsync(item =>
                 (mesaId != null ? item.IdMesa == mesaId : item.IdGrupo == grupoId) &&

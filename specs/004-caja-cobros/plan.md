@@ -114,7 +114,7 @@ JSON camelCase, JWT/sesión actual, `ProblemDetails` con `code`, `traceId`, sin 
 |---|---|
 | `GET /api/caja/turno/actual` | Turno abierto/estado vacío y resumen; no prueba resultado terminal. |
 | `GET /api/caja/cuentas?cursor=&limite=` | Cuentas cobrables y bloqueadas con motivo, total/detalle histórico y destino. |
-| `GET /api/caja/turnos/{id}/resumen` | Totales/estado para revisión y cierre, con límites de paginación para pendientes. |
+| `GET /api/caja/turnos/{id}/resumen` | Totales, estado y cantidad de cuentas pendientes; no incluye una segunda lista paginada. |
 | `GET /api/caja/comprobantes?cursor=&limite=` | Historial interno por autorización. |
 | `GET /api/caja/comprobantes/{id}` | Snapshot persistido. |
 | cuatro rutas `/api/caja/operaciones/...` | Prepare/execute/query/cancel descritas en §4. |
@@ -125,6 +125,8 @@ Errores estables: 400 `VALIDATION_ERROR`; 401 contratos de sesión 001; 403 `AUT
 El DTO consulta incluye elegibilidad y causas como códigos estables/localizables; cliente no deduce elegibilidad de color ni estado solo. Totales server-authoritative. Rutas y paginación no alteran contrato 003 salvo cambio RF-06 explícito. Nunca se responde éxito antes de commit. Repetir GET no se considera resultado de operación.
 
 El listado de cuentas usa cursor `caja-cuentas-id-v1` por ID ascendente y devuelve pedidos históricos y activos con estado explícito. Las causas incluyen `DESTINO_INVALIDO`, `CUENTA_YA_PAGADA`, `CUENTA_CANCELADA`, `ESTADO_INVALIDO`, `CUENTA_LEGADA_SIN_COMANDAS`, `COMANDAS_PENDIENTES`, `CUENTA_SIN_DETALLE`, `DETALLE_INCONSISTENTE`, `TOTAL_NO_COBRABLE`, `TOTAL_INCONSISTENTE` y `OPERACION_NO_TERMINAL`. La huella se entrega solo para una cuenta que pasa la evaluación; una intención preparada visible bloquea su presentación como cobrable. La fotografía MVCC no demuestra que no haya una escritura en curso aún invisible.
+
+Por decisión aprobada por el usuario, el resumen muestra el conteo de pendientes y Caja reutiliza `GET /api/caja/cuentas` para revisar el estado y detalle de cuentas, sin incorporar otro listado paginado al resumen. El listado incluye también cuentas históricas y se consulta por separado: sus páginas pueden reflejar momentos distintos del conteo y no constituyen una fotografía histórica del cierre. El turno cerrado conserva el conteo registrado al cerrar. Ninguna de estas lecturas demuestra que una escritura anterior haya terminado ni desbloquea una operación incierta.
 
 ## 7. Auditoría, privacidad y logs
 
@@ -137,7 +139,7 @@ Evento y cambio de negocio comparten transacción. Si auditoría falla, rollback
 - Módulo de caja con servicios REST/DTO propios, ViewModels y navegación solo para roles implementados. Seguir patrones de sesión y coordinador para serializar lecturas/mutaciones, descartar lecturas obsoletas y pausar con sesión.
 - Caja no confía en polling para liberar bloqueo. Solo resultado terminal + reconciliación permiten avanzar.
 - Confirmación de cobro muestra destino, líneas, total exacto, método y efectivo recibido/vuelto esperado; confirmación externa expresa “verificado fuera de El Carbonazo”. Para referencia repetida, muestra alcance de coincidencia y exige una segunda confirmación explícita.
-- Cierre presenta efectivo esperado, conteo, diferencia, motivo obligatorio y cantidad de cuentas pendientes. No inferir pago de cuenta pendiente ni conciliación bancaria.
+- Cierre presenta efectivo esperado, conteo, diferencia, motivo obligatorio y cantidad de cuentas pendientes; la revisión de sus estados usa el listado existente de Caja. No inferir pago de cuenta pendiente ni conciliación bancaria.
 - Comprobante persistido permite consulta aunque cierre sesión/turno; diseño demuestra historicidad.
 - Sin red, stale/solo lectura, sin cola de mutaciones. Polling no genera actividad de sesión. Timeout de lectura/escritura con políticas específicas; escritura queda incierta y bloquea.
 - Evaluar SukiUI 7.0.1 real, contraste, teclado, foco, escalado, pantalla mínima y scroll; revisar visualmente mensajes de incertidumbre y pasos de confirmación.

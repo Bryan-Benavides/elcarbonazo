@@ -1,5 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Net;
+using System.Globalization;
 using System.Text.Json;
 using ElCarbonazo.Api.Domain;
 using ElCarbonazo.Api.Entities;
@@ -190,6 +192,7 @@ internal static class CajaSmoke
             Require(store.Read()?.Estado == "SinPendientes" && vm.Mensaje.Contains("cerrado y reconciliado", StringComparison.Ordinal), "El cierre no quedó reconciliado.");
             var shift = await verify.TurnosCaja.AsNoTracking().SingleAsync(token);
             Require(shift.Estado == CajaStates.TurnoCerrado && shift.EfectivoEsperado == 20m && shift.EfectivoContado == 20m && shift.TotalTarjeta == 20m && shift.TotalTransferencia == 10m && shift.CantidadCuentasPendientes == 2, "El cierre persistido no coincide.");
+            await RunIntegratedOrdersAsync(client, vm, token);
             Console.WriteLine("CAJA SMOKE: barreras, preparación, consultas, cobro confirmado no reversible, recuperación y cierre con datos ficticios.");
             Console.WriteLine("Sin ventana ni render; sesión adaptada y política del diario solo de prueba, no valida ACL ni LAN.");
         }
@@ -199,6 +202,106 @@ internal static class CajaSmoke
             File.Delete(path + ".lock");
             Directory.Delete(directory);
         }
+    }
+
+    private static async Task RunIntegratedOrdersAsync(HttpClient client, CajaRecoveryViewModel vm, CancellationToken token)
+    {
+        await vm.ConsultarTurnoCommand.ExecuteAsync(null);
+        vm.FondoInicial = "0.00";
+        vm.ConfirmarApertura = true;
+        await vm.AbrirTurnoCommand.ExecuteAsync(null);
+        Require(vm.Mensaje.Contains("abierto y reconciliado", StringComparison.Ordinal), "No se abrió el turno del recorrido integrado.");
+        Require(vm.ResumenTurno.Contains("Abierto por usuario 1", StringComparison.Ordinal), "No se mostró el actor de apertura.");
+
+        var products = await client.GetFromJsonAsync<JsonElement>("api/productos?disponibles=true&limite=25", token);
+        var product = products.GetProperty("items")[0];
+        var productId = product.GetProperty("idProducto").GetInt32();
+        var productVersion = product.GetProperty("version").GetInt32();
+        var tables = await client.GetFromJsonAsync<JsonElement[]>("api/mesas", token) ?? throw new InvalidDataException("Faltan mesas.");
+        var single = tables.Single(x => x.GetProperty("numero").GetInt32() == 9);
+        var singleId = single.GetProperty("idMesa").GetInt32();
+        var members = tables.Where(x => x.GetProperty("numero").GetInt32() is 10 or 11)
+            .Select(x => new { idMesa = x.GetProperty("idMesa").GetInt32(), version = x.GetProperty("version").GetUInt32() }).ToArray();
+        using var create = await client.PostAsJsonAsync("api/grupos-mesa", new { mesas = members }, token);
+        create.EnsureSuccessStatusCode();
+        var groupId = (await create.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: token)).GetProperty("idGrupo").GetInt32();
+
+        async Task<(int Order, int Command)> SendAsync(int? tableId, int? group, uint? version)
+        {
+            using var response = await client.PostAsJsonAsync("api/pedidos/envios", new
+            {
+                envioId = Guid.NewGuid(),
+                mesaId = tableId,
+                grupoId = group,
+                versionMesa = version,
+                lineas = new[] { new { idProducto = productId, versionProducto = productVersion, cantidad = 1, notas = "" } }
+            }, token);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: token);
+            return (result.GetProperty("pedido").GetProperty("idPedido").GetInt32(), result.GetProperty("idComanda").GetInt32());
+        }
+
+        var individual = await SendAsync(singleId, null, single.GetProperty("version").GetUInt32());
+        var grouped = await SendAsync(null, groupId, null);
+        var queue = await client.GetFromJsonAsync<JsonElement>("api/cocina/cola?limite=25", token);
+        foreach (var commandId in new[] { individual.Command, grouped.Command })
+        {
+            var command = queue.GetProperty("items").EnumerateArray().Single(x => x.GetProperty("idComanda").GetInt32() == commandId);
+            using var prepare = await client.PutAsJsonAsync($"api/cocina/comandas/{commandId}/estado", new
+            {
+                estado = "En Preparación",
+                versionComanda = command.GetProperty("version").GetUInt32()
+            }, token);
+            prepare.EnsureSuccessStatusCode();
+            var prepared = await prepare.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: token);
+            using var ready = await client.PutAsJsonAsync($"api/cocina/comandas/{commandId}/estado", new
+            {
+                estado = "Lista",
+                versionComanda = prepared.GetProperty("version").GetUInt32()
+            }, token);
+            ready.EnsureSuccessStatusCode();
+        }
+
+        using (var blocked = await client.DeleteAsync($"api/grupos-mesa/{groupId}", token))
+            Require(blocked.StatusCode == HttpStatusCode.Conflict, "Se cerró un grupo con cuenta pendiente.");
+
+        foreach (var orderId in new[] { individual.Order, grouped.Order })
+        {
+            await vm.ConsultarTurnoCommand.ExecuteAsync(null);
+            await vm.ConsultarCuentasCommand.ExecuteAsync(null);
+            var account = vm.Cuentas.SingleOrDefault(x => x.IdPedido == orderId);
+            Require(account is { Cobrable: true, Estado: "Listo" }, "La cuenta integrada no está lista para cobro.");
+            vm.SeleccionarCuentaCommand.Execute(account);
+            vm.EfectivoRecibido = account!.Total.ToString("0.00", CultureInfo.InvariantCulture);
+            vm.ConfirmarCobro = true;
+            await vm.CobrarEfectivoCommand.ExecuteAsync(null);
+            Require(vm.Mensaje.Contains("Cobro confirmado", StringComparison.Ordinal) && vm.Fotografia.Contains("NO ES FACTURA FISCAL", StringComparison.Ordinal), "El cobro integrado no concilió su comprobante.");
+        }
+
+        var current = await client.GetFromJsonAsync<JsonElement[]>("api/mesas", token) ?? throw new InvalidDataException("Faltan mesas.");
+        var occupied = current.Single(x => x.GetProperty("idMesa").GetInt32() == singleId);
+        Require(occupied.GetProperty("estado").GetString() == "Ocupada" && current.Where(x => x.GetProperty("numero").GetInt32() is 10 or 11)
+            .All(x => x.GetProperty("estado").GetString() == "Agrupada"), "El pago alteró el estado de la mesa o grupo.");
+        using var resend = await client.PostAsJsonAsync("api/pedidos/envios", new
+        {
+            envioId = Guid.NewGuid(),
+            mesaId = (int?)null,
+            grupoId = groupId,
+            versionMesa = (uint?)null,
+            lineas = new[] { new { idProducto = productId, versionProducto = productVersion, cantidad = 1, notas = "" } }
+        }, token);
+        Require(resend.StatusCode == HttpStatusCode.Conflict &&
+            (await resend.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: token)).GetProperty("code").GetString() == "GRUPO_PAGADO_REQUIERE_CIERRE",
+            "El grupo pagado aceptó un nuevo envío antes de cerrarse.");
+        using var release = await client.PutAsJsonAsync($"api/mesas/{singleId}/estado", new { estado = "Libre", version = occupied.GetProperty("version").GetUInt32() }, token);
+        release.EnsureSuccessStatusCode();
+        using var closeGroup = await client.DeleteAsync($"api/grupos-mesa/{groupId}", token);
+        Require(closeGroup.StatusCode == HttpStatusCode.NoContent, "No se cerró explícitamente el grupo pagado.");
+        await vm.ConsultarComprobantesCommand.ExecuteAsync(null);
+        Require(vm.Comprobantes.Count == 7, "El historial integrado no conservó los comprobantes.");
+        await vm.VerComprobanteCommand.ExecuteAsync(vm.Comprobantes[^1]);
+        Require(vm.Fotografia.Contains("NO ES FACTURA FISCAL", StringComparison.Ordinal), "No se abrió el comprobante integrado.");
+        Console.WriteLine("RECORRIDO INTEGRADO: mesa y grupo, pedidos, Cocina, cobros, historial y liberación/cierre explícito verificados por REST y ViewModel.");
     }
 
     private static void Require(bool condition, string message)

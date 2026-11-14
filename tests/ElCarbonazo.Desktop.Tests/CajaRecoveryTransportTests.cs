@@ -16,16 +16,18 @@ public sealed class CajaRecoveryTransportTests
         const string page = "{\"items\":[{\"idCobro\":4,\"numeroComprobante\":9,\"idPedido\":3,\"idTurnoCaja\":2,\"idUsuario\":1,\"metodoPago\":\"Efectivo\",\"total\":10,\"fechaHora\":\"2026-01-01T00:00:00Z\"}],\"cursorSiguiente\":\"abc\"}";
         var receipt = $$"""{"leyenda":"COMPROBANTE INTERNO — DEMOSTRACIÓN — NO ES FACTURA FISCAL","fechaHora":"2026-01-01T00:00:00Z","numeroMesa":1,"idGrupo":null,"numerosMesasGrupo":[],"idCobro":4,"numeroComprobante":9,"idOperacion":"{{id}}","idPedido":3,"idTurnoCaja":2,"idUsuario":1,"total":10,"subtotal":10,"impuestos":0,"metodoPago":"Efectivo","efectivoRecibido":15,"vuelto":5,"referenciaExterna":null,"lineas":[{"orden":1,"nombreProducto":"Comida","cantidad":1,"precioUnitario":10,"subtotal":10}]}""";
         var sink = new SnapshotSink { Accept = true };
-        var reader = new CajaRecoveryHttpTransport(new SnapshotSession(page, receipt, receipt), sink);
+        var session = new SnapshotSession(page, receipt);
+        var reader = new CajaRecoveryHttpTransport(session, sink);
         var result = await reader.ReadPageAsync(1, null, default);
         Assert.NotNull(result);
         Assert.Equal("abc", result.CursorSiguiente);
         Assert.Equal(4, Assert.Single(result.Items).IdCobro);
         Assert.True(await reader.ApplyDetailAsync(1, 4, default));
+        Assert.Equal(2, session.Calls); // One page request and one detail request.
         Assert.Equal("Mesa 1", sink.Payment!.Destino);
         var bad = receipt.Replace("\"subtotal\":10}", "\"subtotal\":9}", StringComparison.Ordinal);
         var rejected = new SnapshotSink { Accept = true };
-        Assert.False(await new CajaRecoveryHttpTransport(new SnapshotSession(receipt, bad), rejected).ApplyDetailAsync(1, 4, default));
+        Assert.False(await new CajaRecoveryHttpTransport(new SnapshotSession(bad), rejected).ApplyDetailAsync(1, 4, default));
         Assert.Null(rejected.Payment);
         Assert.Null(await new CajaRecoveryHttpTransport(new SnapshotSession(page.Replace("\"idPedido\":3,", "", StringComparison.Ordinal)))
             .ReadPageAsync(1, null, default));
@@ -38,7 +40,7 @@ public sealed class CajaRecoveryTransportTests
         const string terminal = "{\"estado\":\"Rechazada\",\"codigo\":\"REFERENCIA_REQUIERE_CONFIRMACION\"}";
         var evidence = $$"""{"idOperacion":"{{id}}","estado":"Rechazada","tipo":"CobrarCuenta","idPedido":3,"idTurnoCaja":17,"sinIntencion":false}""";
         const string accounts = "{\"items\":[{\"idPedido\":3,\"estado\":\"Listo\",\"total\":10,\"cobrable\":true,\"motivo\":null}],\"cursorSiguiente\":null}";
-        const string shift = "{\"idTurnoCaja\":17,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":1}";
+        const string shift = "{\"idTurnoCaja\":17,\"idUsuarioApertura\":1,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":1}";
         var sink = new SnapshotSink { Accept = true };
         Assert.True(await new CajaRecoveryHttpTransport(new EvidenceSession(HttpStatusCode.Conflict, terminal, evidence, accounts, shift), sink)
             .ReconcileAsync(id, 1, "CobrarCuenta", default));
@@ -134,7 +136,7 @@ public sealed class CajaRecoveryTransportTests
         var evidence = $$"""{"idOperacion":"{{id}}","estado":"{{state}}","tipo":"CobrarCuenta","idPedido":3,"idTurnoCaja":17,"sinIntencion":false}""";
         const string first = "{\"items\":[{\"idPedido\":1}],\"cursorSiguiente\":\"abc\"}";
         const string second = "{\"items\":[{\"idPedido\":3,\"estado\":\"Listo\",\"total\":10,\"cobrable\":true,\"motivo\":null}],\"cursorSiguiente\":null}";
-        const string shift = "{\"idTurnoCaja\":17,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":1}";
+        const string shift = "{\"idTurnoCaja\":17,\"idUsuarioApertura\":1,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":1}";
         var sink = new SnapshotSink { Accept = true };
         var session = new EvidenceSession(status, $"{{\"estado\":\"{state}\",\"codigo\":\"CUENTA_NO_COBRABLE\"}}", evidence, first, second, shift);
         Assert.True(await new CajaRecoveryHttpTransport(session, sink).ReconcileAsync(id, 1, "CobrarCuenta", default));
@@ -199,7 +201,7 @@ public sealed class CajaRecoveryTransportTests
 
     [Theory]
     [InlineData("Rechazada", HttpStatusCode.Conflict, "{\"turno\":null}")]
-    [InlineData("Cancelada", HttpStatusCode.OK, "{\"turno\":{\"idTurnoCaja\":17,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":0}}")]
+    [InlineData("Cancelada", HttpStatusCode.OK, "{\"turno\":{\"idTurnoCaja\":17,\"idUsuarioApertura\":1,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":0}}")]
     public async Task Unsuccessful_opening_applies_explicit_current_shift(string state, HttpStatusCode status, string current)
     {
         var id = Guid.NewGuid();
@@ -215,7 +217,9 @@ public sealed class CajaRecoveryTransportTests
     [InlineData("{}")]
     [InlineData("{\"turno\":{}}")]
     [InlineData("{\"turno\":null,\"turno\":null}")]
-    [InlineData("{\"turno\":{\"idTurnoCaja\":17,\"estado\":\"Cerrado\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":0}}")]
+    [InlineData("{\"turno\":{\"idTurnoCaja\":17,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":0}}")]
+    [InlineData("{\"turno\":{\"idTurnoCaja\":17,\"idUsuarioApertura\":0,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":0}}")]
+    [InlineData("{\"turno\":{\"idTurnoCaja\":17,\"idUsuarioApertura\":1,\"estado\":\"Cerrado\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":0}}")]
     public async Task Unsuccessful_opening_rejects_missing_or_invalid_current_shift(string current)
     {
         var id = Guid.NewGuid();
@@ -233,7 +237,7 @@ public sealed class CajaRecoveryTransportTests
     {
         var id = Guid.NewGuid();
         var evidence = $$"""{"idOperacion":"{{id}}","estado":"{{state}}","tipo":"CerrarTurno","idPedido":null,"idTurnoCaja":17,"sinIntencion":false}""";
-        const string shift = "{\"idTurnoCaja\":17,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":0}";
+        const string shift = "{\"idTurnoCaja\":17,\"idUsuarioApertura\":1,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":0}";
         var sink = new SnapshotSink { Accept = true };
         var session = new EvidenceSession(status, $"{{\"estado\":\"{state}\",\"codigo\":\"OPERACION_NO_TERMINAL\"}}", evidence, shift);
         Assert.True(await new CajaRecoveryHttpTransport(session, sink).ReconcileAsync(id, 1, "CerrarTurno", default));
@@ -276,7 +280,7 @@ public sealed class CajaRecoveryTransportTests
         var operation = Guid.NewGuid();
         var evidence = $$"""{"idOperacion":"{{operation}}","estado":"Cancelada","tipo":"CerrarTurno","idPedido":null,"idTurnoCaja":17,"sinIntencion":false}""";
         const string terminal = "{\"estado\":\"Cancelada\"}";
-        const string shift = "{\"idTurnoCaja\":17,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":0}";
+        const string shift = "{\"idTurnoCaja\":17,\"idUsuarioApertura\":1,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":0}";
         try
         {
             File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(new
@@ -382,7 +386,7 @@ public sealed class CajaRecoveryTransportTests
         var installation = Guid.NewGuid();
         var operation = Guid.NewGuid();
         const string terminal = "{\"estado\":\"Completada\",\"codigo\":\"TURNO_ABIERTO\",\"idTurnoCaja\":17}";
-        const string shift = "{\"idTurnoCaja\":17,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":0}";
+        const string shift = "{\"idTurnoCaja\":17,\"idUsuarioApertura\":1,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":0}";
         try
         {
             File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(new
@@ -421,7 +425,7 @@ public sealed class CajaRecoveryTransportTests
         var id = Guid.NewGuid();
         var session = new SnapshotSession(
             "{\"estado\":\"Completada\",\"codigo\":\"TURNO_ABIERTO\",\"idTurnoCaja\":17}",
-            "{\"idTurnoCaja\":17,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":20,\"totalTarjeta\":5,\"totalTransferencia\":0,\"efectivoEsperado\":30,\"cantidadCuentasPendientes\":2}");
+            "{\"idTurnoCaja\":17,\"idUsuarioApertura\":1,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":20,\"totalTarjeta\":5,\"totalTransferencia\":0,\"efectivoEsperado\":30,\"cantidadCuentasPendientes\":2}");
         var sink = new SnapshotSink { Accept = true };
         var transport = new CajaRecoveryHttpTransport(session, sink);
         Assert.True(await transport.ReconcileAsync(id, 1, "AbrirTurno", default));
@@ -447,7 +451,7 @@ public sealed class CajaRecoveryTransportTests
     public async Task Reconcile_refuses_inconsistent_shift_and_unapplied_snapshot()
     {
         const string terminal = "{\"estado\":\"Completada\",\"codigo\":\"TURNO_CERRADO\",\"idTurnoCaja\":17}";
-        const string shift = "{\"idTurnoCaja\":17,\"estado\":\"Cerrado\",\"fondoInicial\":10,\"totalEfectivo\":20,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":30,\"cantidadCuentasPendientes\":0}";
+        const string shift = "{\"idTurnoCaja\":17,\"idUsuarioApertura\":1,\"estado\":\"Cerrado\",\"fondoInicial\":10,\"totalEfectivo\":20,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":30,\"cantidadCuentasPendientes\":0}";
         var rejected = new SnapshotSink { Accept = false };
         Assert.False(await new CajaRecoveryHttpTransport(new SnapshotSession(terminal, shift), rejected)
             .ReconcileAsync(Guid.NewGuid(), 1, "CerrarTurno", default));
@@ -563,12 +567,13 @@ public sealed class CajaRecoveryTransportTests
 
     private sealed class TestPolicy : ICajaRecoverySecurityPolicy { public bool IsProtected(string path) => true; }
 
-    private sealed class SnapshotSink : ICajaRecoverySnapshotSink, ICajaRejectionSnapshotSink
+    private sealed class SnapshotSink : ICajaRecoverySnapshotSink, ICajaRejectionSnapshotSink, ICajaHistorySnapshotSink
     {
         public bool Accept { get; init; }
         public Action? OnShift { get; init; }
         public CajaTurnoSnapshot? Last { get; private set; }
         public CajaPagoSnapshot? Payment { get; private set; }
+        public Task<bool> ApplyHistoryPaymentAsync(CajaPagoSnapshot snapshot, CancellationToken cancellationToken) => ApplyPaymentAsync(snapshot, cancellationToken);
         public CajaCuentaRecoverySnapshot? Account { get; private set; }
         public string? RejectionCode { get; private set; }
         public Task<bool> ApplyPaymentRejectionAsync(string code, CajaCuentaRecoverySnapshot account, CajaTurnoSnapshot shift, CancellationToken cancellationToken)

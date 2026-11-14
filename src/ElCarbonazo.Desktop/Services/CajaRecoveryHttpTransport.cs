@@ -6,7 +6,7 @@ using System.Text;
 namespace ElCarbonazo.Desktop.Services;
 
 public sealed record CajaTurnoSnapshot(int IdTurnoCaja, string Estado, decimal FondoInicial, decimal TotalEfectivo,
-    decimal TotalTarjeta, decimal TotalTransferencia, decimal EfectivoEsperado, int CantidadCuentasPendientes);
+    decimal TotalTarjeta, decimal TotalTransferencia, decimal EfectivoEsperado, int CantidadCuentasPendientes, int IdUsuarioApertura);
 public sealed record CajaPagoLineaSnapshot(int Orden, string NombreProducto, int Cantidad, decimal PrecioUnitario, decimal Subtotal);
 public sealed record CajaPagoSnapshot(long IdCobro, long NumeroComprobante, int IdPedido, int IdTurnoCaja,
     int IdUsuario, decimal Total, string MetodoPago, IReadOnlyList<CajaPagoLineaSnapshot> Lineas,
@@ -37,6 +37,11 @@ public interface ICajaTurnoActualReader
 public interface ICajaRejectionSnapshotSink
 {
     Task<bool> ApplyPaymentRejectionAsync(string code, CajaCuentaRecoverySnapshot account, CajaTurnoSnapshot shift, CancellationToken cancellationToken);
+}
+
+public interface ICajaHistorySnapshotSink
+{
+    Task<bool> ApplyHistoryPaymentAsync(CajaPagoSnapshot snapshot, CancellationToken cancellationToken);
 }
 
 public sealed record CajaComprobanteResumen(long IdCobro, long NumeroComprobante, int IdPedido, string MetodoPago, decimal Total);
@@ -108,7 +113,7 @@ public sealed class CajaRecoveryHttpTransport(ICajaSessionSender session, ICajaR
             efectivoRecibido = cash,
             vuelto = change
         });
-        return await ReconcilePaymentAsync(operation, actor, terminal, ct);
+        return await ApplyPaymentReceiptAsync(operation, terminal, root, ct, history: true);
     }
 
     private static bool ValidCursor(string value) => value.Length is > 0 and <= 256 &&
@@ -307,12 +312,13 @@ public sealed class CajaRecoveryHttpTransport(ICajaSessionSender session, ICajaR
         if (root.ValueKind != JsonValueKind.Object ||
             root.EnumerateObject().Select(x => x.Name).Distinct(StringComparer.Ordinal).Count() != root.EnumerateObject().Count() ||
             !TryInt(root, "idTurnoCaja", out var id) || id <= 0 ||
+            !TryInt(root, "idUsuarioApertura", out var opener) || opener <= 0 ||
             !TryString(root, "estado", out var state) || state is not ("Abierto" or "Cerrado") ||
             !TryMoney(root, "fondoInicial", out var fund) || !TryMoney(root, "totalEfectivo", out var cash) ||
             !TryMoney(root, "totalTarjeta", out var card) || !TryMoney(root, "totalTransferencia", out var transfer) ||
             !TryMoney(root, "efectivoEsperado", out var expected) ||
             !TryInt(root, "cantidadCuentasPendientes", out var pending) || pending < 0 || expected != fund + cash) return false;
-        snapshot = new CajaTurnoSnapshot(id, state, fund, cash, card, transfer, expected, pending);
+        snapshot = new CajaTurnoSnapshot(id, state, fund, cash, card, transfer, expected, pending, opener);
         return true;
     }
 
@@ -321,6 +327,17 @@ public sealed class CajaRecoveryHttpTransport(ICajaSessionSender session, ICajaR
 
     private async Task<bool> ReconcilePaymentAsync(Guid operation, int actor, JsonElement terminal, CancellationToken ct)
     {
+        if (sink is null || !TryLong(terminal, "idCobro", out var paymentId) || paymentId <= 0) return false;
+        using var response = await session.SendCajaOnceAsync(actor,
+            () => new HttpRequestMessage(HttpMethod.Get, $"api/caja/comprobantes/{paymentId}"), true, ct);
+        if (!response.IsSuccessStatusCode) return false;
+        using var receipt = await ReadObjectAsync(response, ct, 1048576);
+        if (receipt is null) return false;
+        return await ApplyPaymentReceiptAsync(operation, terminal, receipt.RootElement, ct);
+    }
+
+    private async Task<bool> ApplyPaymentReceiptAsync(Guid operation, JsonElement terminal, JsonElement root, CancellationToken ct, bool history = false)
+    {
         if (sink is null || !TryString(terminal, "codigo", out var code) || code != "COBRO_REGISTRADO" ||
             !TryLong(terminal, "idCobro", out var paymentId) || paymentId <= 0 ||
             !TryLong(terminal, "numeroComprobante", out var number) || number <= 0 ||
@@ -328,12 +345,6 @@ public sealed class CajaRecoveryHttpTransport(ICajaSessionSender session, ICajaR
             !TryInt(terminal, "idTurnoCaja", out var shiftId) || shiftId <= 0 ||
             !TryMoney(terminal, "total", out var total) || total <= 0 ||
             !TryString(terminal, "metodoPago", out var method) || method is not ("Efectivo" or "Tarjeta" or "Transferencia")) return false;
-        using var response = await session.SendCajaOnceAsync(actor,
-            () => new HttpRequestMessage(HttpMethod.Get, $"api/caja/comprobantes/{paymentId}"), true, ct);
-        if (!response.IsSuccessStatusCode) return false;
-        using var receipt = await ReadObjectAsync(response, ct, 1048576);
-        if (receipt is null) return false;
-        var root = receipt.RootElement;
         if (!TryString(root, "leyenda", out var legend) || legend != "COMPROBANTE INTERNO — DEMOSTRACIÓN — NO ES FACTURA FISCAL" ||
             !TryString(root, "fechaHora", out var dateText) || !DateTimeOffset.TryParse(dateText, out var date) || date.Offset != TimeSpan.Zero ||
             !TryDestination(root, out var destination) ||
@@ -380,7 +391,10 @@ public sealed class CajaRecoveryHttpTransport(ICajaSessionSender session, ICajaR
                 !TryString(root, "referenciaExterna", out var reference) || !ValidExternalReference(reference)) return false;
             externalReference = reference;
         }
-        return await sink.ApplyPaymentAsync(new CajaPagoSnapshot(paymentId, number, orderId, shiftId, owner, total, method!, snapshots, cash, change, date, destination, externalReference), ct);
+        var snapshot = new CajaPagoSnapshot(paymentId, number, orderId, shiftId, owner, total, method!, snapshots, cash, change, date, destination, externalReference);
+        return history
+            ? sink is ICajaHistorySnapshotSink historySink && await historySink.ApplyHistoryPaymentAsync(snapshot, ct)
+            : await sink.ApplyPaymentAsync(snapshot, ct);
     }
 
     private static bool TryDestination(JsonElement root, out string? destination)

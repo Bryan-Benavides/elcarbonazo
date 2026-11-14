@@ -10,7 +10,7 @@ using ElCarbonazo.Desktop.Services;
 namespace ElCarbonazo.Desktop.ViewModels;
 
 // Opening uses the durable coordinator; recovery never executes a previously prepared intention.
-public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapshotSink, ICajaRejectionSnapshotSink
+public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapshotSink, ICajaRejectionSnapshotSink, ICajaHistorySnapshotSink
 {
     private readonly CajaRecoveryStore? _store;
     private readonly ISessionManager? _session;
@@ -476,7 +476,7 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
     }
 
     private static string DescribeTurno(CajaTurnoSnapshot shift) =>
-        $"Turno {shift.IdTurnoCaja}: {shift.Estado}. Fondo C$ {shift.FondoInicial:N2}; efectivo C$ {shift.TotalEfectivo:N2}; tarjeta C$ {shift.TotalTarjeta:N2}; transferencia C$ {shift.TotalTransferencia:N2}; efectivo esperado C$ {shift.EfectivoEsperado:N2}; cuentas pendientes {shift.CantidadCuentasPendientes}.";
+        $"Turno {shift.IdTurnoCaja}: {shift.Estado}. Abierto por usuario {shift.IdUsuarioApertura}. Fondo C$ {shift.FondoInicial:N2}; efectivo C$ {shift.TotalEfectivo:N2}; tarjeta C$ {shift.TotalTarjeta:N2}; transferencia C$ {shift.TotalTransferencia:N2}; efectivo esperado C$ {shift.EfectivoEsperado:N2}; cuentas pendientes {shift.CantidadCuentasPendientes}.";
 
     private static bool TryMoney(string value, out decimal amount) =>
         decimal.TryParse(value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out amount) &&
@@ -667,6 +667,13 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
         if (ct.IsCancellationRequested || !Vigente() || !Ocupado) return Task.FromResult(false);
         InvalidarCuentas();
         _turnoActual = null;
+        return Apply(DescribePayment(snapshot), ct);
+    }
+
+    public Task<bool> ApplyHistoryPaymentAsync(CajaPagoSnapshot snapshot, CancellationToken ct) => Apply(DescribePayment(snapshot), ct);
+
+    private static string DescribePayment(CajaPagoSnapshot snapshot)
+    {
         var cash = snapshot.MetodoPago == "Efectivo" ? $" Recibido C$ {snapshot.EfectivoRecibido:N2}; vuelto C$ {snapshot.Vuelto:N2}." : "";
         var lines = string.Join(Environment.NewLine, snapshot.Lineas.Select(line =>
             $"{line.Cantidad} × {line.NombreProducto} · C$ {line.PrecioUnitario:N2} · subtotal C$ {line.Subtotal:N2}"));
@@ -674,9 +681,9 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
             ? TimeZoneInfo.ConvertTime(instant, TimeZoneInfo.FindSystemTimeZoneById("America/Managua")).ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture)
             : "Fecha no disponible";
         var reference = snapshot.ReferenciaExterna is null ? "" : $" Referencia: {snapshot.ReferenciaExterna}.";
-        return Apply($"Comprobante interno {snapshot.NumeroComprobante} — DEMOSTRACIÓN, NO ES FACTURA FISCAL.{Environment.NewLine}" +
+        return $"Comprobante interno {snapshot.NumeroComprobante} — DEMOSTRACIÓN, NO ES FACTURA FISCAL.{Environment.NewLine}" +
             $"{date} · {snapshot.Destino ?? "Destino no disponible"} · cuenta {snapshot.IdPedido} · turno {snapshot.IdTurnoCaja} · actor {snapshot.IdUsuario}{Environment.NewLine}" +
-            $"{lines}{Environment.NewLine}Subtotal C$ {snapshot.Total:N2} · impuestos C$ 0.00 · total C$ {snapshot.Total:N2} · método {snapshot.MetodoPago}.{cash}{reference}", ct);
+            $"{lines}{Environment.NewLine}Subtotal C$ {snapshot.Total:N2} · impuestos C$ 0.00 · total C$ {snapshot.Total:N2} · método {snapshot.MetodoPago}.{cash}{reference}";
     }
     public Task<bool> ApplyCurrentShiftAsync(CajaTurnoSnapshot? snapshot, CancellationToken ct) => Apply(snapshot is null ? "No hay turno abierto." : $"Turno actual {snapshot.IdTurnoCaja}: {snapshot.Estado}; efectivo esperado C$ {snapshot.EfectivoEsperado:N2}.", ct);
     public Task<bool> ApplyAccountAndShiftAsync(CajaCuentaRecoverySnapshot account, CajaTurnoSnapshot shift, CancellationToken ct)

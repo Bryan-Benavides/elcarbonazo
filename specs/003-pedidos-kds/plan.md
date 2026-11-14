@@ -1,6 +1,6 @@
 # Plan técnico — 003 Pedidos y KDS
 
-**Estado: D0, D1 y API de D2/D3 completos; D4 de salón aceptada localmente.** D5 incorpora cola y transiciones KDS Desktop con pruebas automatizadas; la revisión visual y la integración de extremo a extremo siguen pendientes. Hay casos Unicode compartidos de API y Desktop. No se ha aplicado la migración a una base persistente.
+**Estado:** D0–D6 aceptados para la demostración local aislada; consultar `tasks.md` para la evidencia y los límites. La disponibilidad de las migraciones depende de la base configurada; no implica aceptación de operación real ni LAN física.
 
 ## 1. Arquitectura y límites
 
@@ -126,7 +126,7 @@ Pruebas por capas: validación de catálogo, notas, cantidades, precios, redonde
 
 ### Adenda de compatibilidad 004 — grupo con cuenta pagada
 
-La regla funcional está aprobada en `spec.md` y es parte de la línea base de 004, pero aún no está implementada. Al enviar a un grupo, después de adquirir los locks existentes `grupo → mesas miembro en orden ascendente → pedido`, la API debe rechazar el envío cuando la cuenta asociada esté `Pagado`, con conflicto estable `GRUPO_PAGADO_REQUIERE_CIERRE`. El grupo se cierra explícitamente por la ruta 001; no se elimina ni altera la cuenta pagada histórica. El gate se evalúa en API bajo el mismo lock que serializa envíos/cierre, no solo en Desktop. Pruebas de C5 en 004 cubren pago, intento concurrente de envío y cierre de grupo en ambos órdenes. Hasta que esa tarea se implemente, no afirmar que 003 aplica el gate.
+La regla funcional está aprobada en `spec.md` y es parte de la línea base de 004. La API rechaza el envío a un grupo con cuenta `Pagado` mediante `GRUPO_PAGADO_REQUIERE_CIERRE`, bajo los locks existentes `grupo → mesas miembro en orden ascendente → pedido`. El grupo se cierra explícitamente por la ruta 001; no se elimina ni altera la cuenta pagada histórica. `specs/004-caja-cobros/tasks.md` describe la prueba existente y las carreras de C5 aún pendientes.
 
 1. D0 está aprobado: implementar únicamente el alcance y contratos de `spec.md`; los cambios funcionales requieren actualización y aprobación previa.
 2. Antes de aplicar migración, revisar SQL generado y probar migración idempotente/datos legados exclusivamente en PostgreSQL temporal. La aprobación actual no autoriza alterar bases persistentes.

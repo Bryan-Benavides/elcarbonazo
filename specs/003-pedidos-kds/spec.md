@@ -1,12 +1,12 @@
 # Especificación 003 — Pedidos y monitor de cocina (KDS)
 
-**Estado: D0, D1 y API de D2/D3 completos; D4 de salón aceptada para su alcance local.** D5 incorpora pantalla KDS y pruebas automatizadas, pendientes de revisión visual y de integración con salón. Hay pruebas Unicode compartidas de Desktop y API. La migración no se ha aplicado a una base persistente. Esto no convierte el MVP universitario en un sistema apto para operación real.
+**Estado:** D0–D6 aceptados para la demostración local aislada; consultar `tasks.md` para la evidencia y los límites. La disponibilidad de las migraciones depende de la base configurada. Esto no autoriza operación real ni acredita LAN física.
 
 ## 1. Objetivo y contexto
 
 Digitalizar la toma de consumos para una mesa individual o una cuenta compartida de grupo y comunicar envíos a cocina mediante una cola local. Desktop usa Avalonia/MVVM y exclusivamente REST; la API ASP.NET Core contiene reglas, persistencia EF Core/PostgreSQL, permisos y auditoría. Operación en LAN, sin dependencia de Internet y sin desactivar TLS de producción.
 
-`001-auth-mesas-mvp` contiene sesiones, roles, mesas, grupos y una entidad `pedido` parcial. D2 implementa la toma mediante API; D3 incorpora la API de cocina y D5 la pantalla Desktop, pendiente de validación visual. `002-operaciones-seguras` permanece pospuesto y trata operaciones de mesas/grupos, no resuelve automáticamente pedidos. No renumerar ni sobrescribirlo.
+`001-auth-mesas-mvp` contiene sesiones, roles, mesas, grupos y una entidad `pedido` parcial. D2 implementa la toma mediante API; D3 incorpora la API de cocina y D5 la pantalla Desktop. `002-operaciones-seguras` permanece pospuesto y trata operaciones de mesas/grupos, no resuelve automáticamente pedidos. No renumerar ni sobrescribirlo.
 
 ## 2. Alcance acordado
 
@@ -101,7 +101,7 @@ La tabla `pedido` puede contener registros adoptados o usados para verificar cue
 
 ## 9. Dependencias posteriores
 
-Inventario/recetas, autorización administrativa y anulación enviada, caja/pago/facturación, gestión de catálogo, recuperación definitiva y despliegue real tendrán especificaciones o ampliaciones propias. Sus nombres y números todavía no están asignados; `004` y `005` mencionados en material inicial no se reservan automáticamente.
+Inventario/recetas, autorización administrativa y anulación enviada, gestión de catálogo y despliegue real quedan fuera de 003. Caja y cobros tienen especificación propia en `specs/004-caja-cobros/`, todavía en curso; sus comprobantes no son facturas fiscales. Las demás propuestas requieren aprobación y especificación antes de implementarse.
 
 ## 10. Decisiones cerradas para iniciar implementación
 

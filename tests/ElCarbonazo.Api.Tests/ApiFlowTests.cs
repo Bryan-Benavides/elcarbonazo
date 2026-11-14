@@ -42,6 +42,49 @@ public sealed class ApiFlowTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Caja_routes_enforce_role_matrix_before_processing_requests()
+    {
+        var operation = Guid.NewGuid();
+        var routes = new (HttpMethod Method, string Path, HttpStatusCode Authorized)[]
+        {
+            (HttpMethod.Get, "/api/caja/turno/actual", HttpStatusCode.OK),
+            (HttpMethod.Get, "/api/caja/turnos/1/resumen", HttpStatusCode.NotFound),
+            (HttpMethod.Get, "/api/caja/cuentas", HttpStatusCode.OK),
+            (HttpMethod.Get, "/api/caja/comprobantes", HttpStatusCode.OK),
+            (HttpMethod.Get, "/api/caja/comprobantes/1", HttpStatusCode.NotFound),
+            (HttpMethod.Get, $"/api/caja/operaciones/{operation}", HttpStatusCode.NotFound),
+            (HttpMethod.Get, $"/api/caja/operaciones/{operation}/evidencia-conciliacion", HttpStatusCode.NotFound),
+            (HttpMethod.Put, $"/api/caja/operaciones/{operation}", HttpStatusCode.BadRequest),
+            (HttpMethod.Post, $"/api/caja/operaciones/{operation}/ejecucion", HttpStatusCode.NotFound),
+            (HttpMethod.Post, $"/api/caja/operaciones/{operation}/cancelacion", HttpStatusCode.BadRequest)
+        };
+        async Task CheckAsync(HttpStatusCode? denied)
+        {
+            foreach (var route in routes)
+            {
+                using var request = new HttpRequestMessage(route.Method, route.Path);
+                if (route.Method != HttpMethod.Get) request.Content = JsonContent.Create(new { });
+                using var response = await _client.SendAsync(request);
+                Assert.Equal(denied ?? route.Authorized, response.StatusCode);
+            }
+        }
+
+        await CheckAsync(HttpStatusCode.Unauthorized);
+        var owner = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", owner);
+        await CheckAsync(null);
+        foreach (var role in new[] { "Encargado de Caja", "Supervisor", "Mesero", "Personal de Cocina" })
+        {
+            await using (var context = _database.CreateContext())
+                await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE usuario SET rol = {role} WHERE id_usuario = 2");
+            _client.DefaultRequestHeaders.Authorization = null;
+            var token = await LoginAsync("cocina", "kitchen password");
+            _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            await CheckAsync(role == "Encargado de Caja" ? null : HttpStatusCode.Forbidden);
+        }
+    }
+
+    [Fact]
     public async Task Caja_accounts_show_group_destination_and_historical_lines()
     {
         await using (var setup = _database.CreateContext())
@@ -637,6 +680,9 @@ public sealed class ApiFlowTests : IAsyncLifetime
         Assert.Equal("Cerrado", summary.GetProperty("estado").GetString());
         Assert.Equal(2m, summary.GetProperty("diferencia").GetDecimal());
         Assert.Equal("Conteo revisado", summary.GetProperty("motivoDiferencia").GetString());
+        Assert.Equal(1, summary.GetProperty("cantidadCuentasPendientes").GetInt32());
+        var accountsAtClose = await _client.GetFromJsonAsync<JsonElement>("/api/caja/cuentas?limite=1");
+        Assert.Equal("Abierto", Assert.Single(accountsAtClose.GetProperty("items").EnumerateArray()).GetProperty("estado").GetString());
         Assert.Equal(JsonValueKind.Null, (await _client.GetFromJsonAsync<JsonElement>("/api/caja/turno/actual")).GetProperty("turno").ValueKind);
         var replay = await _client.PostAsJsonAsync(close + "/ejecucion", new { });
         Assert.True(JsonElement.DeepEquals(response, await replay.Content.ReadFromJsonAsync<JsonElement>()));
@@ -647,6 +693,8 @@ public sealed class ApiFlowTests : IAsyncLifetime
         await verify.Database.ExecuteSqlRawAsync("UPDATE pedido SET estado = 'Pagado' WHERE id_mesa = 1");
         var historical = await _client.GetFromJsonAsync<JsonElement>($"/api/caja/turnos/{shift}/resumen");
         Assert.Equal(1, historical.GetProperty("cantidadCuentasPendientes").GetInt32());
+        var currentAccounts = await _client.GetFromJsonAsync<JsonElement>("/api/caja/cuentas?limite=1");
+        Assert.Equal("Pagado", Assert.Single(currentAccounts.GetProperty("items").EnumerateArray()).GetProperty("estado").GetString());
     }
 
     [Fact]
@@ -1709,6 +1757,8 @@ public sealed class ApiFlowTests : IAsyncLifetime
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", owner);
         var account = (await _client.GetFromJsonAsync<JsonElement>("/api/pedidos/activo?mesaId=1")).GetProperty("pedido");
         Assert.Equal("Abierto", account.GetProperty("estado").GetString());
+        Assert.Equal(2, account.GetProperty("comandas").GetArrayLength());
+        Assert.All(account.GetProperty("comandas").EnumerateArray(), command => Assert.Single(command.GetProperty("lineas").EnumerateArray()));
         Assert.Contains(account.GetProperty("comandas").EnumerateArray(), command => command.GetProperty("estado").GetString() == "Lista");
         var second = remaining.GetProperty("items")[0];
         var secondId = second.GetProperty("idComanda").GetInt32();

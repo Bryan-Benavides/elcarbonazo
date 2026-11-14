@@ -1,5 +1,15 @@
 # Bitácora de errores y lecciones — El Carbonazo
 
+### 004: historial de caja con esquema ausente
+
+- **Hecho observado en registros locales:** una consulta de `CajaComprobantesController` falló con PostgreSQL `42P01` porque faltaba la relación `cobro`. El registro demuestra el error en esa ejecución, no el estado actual de cualquier otra base o instancia HTTPS.
+- **Control:** confirmar la instancia, el destino y las migraciones antes de modificar la base. La API no aplica migraciones automáticamente; no crear tablas manualmente ni aplicar migraciones a una base persistente sin autorización y respaldo.
+
+### 004: consultar un comprobante histórico no es conciliar un cobro
+
+- **Hecho confirmado por revisión:** el detalle histórico hacía dos GET del mismo comprobante y reutilizaba una aplicación que invalidaba la cuenta seleccionada y el turno.
+- **Control:** validar la respuesta una vez y aplicar el historial sin modificar la revisión de cobro; conservar la invalidación al conciliar una operación. Las pruebas comprueban una sola consulta de detalle, preservación de selección/turno y descarte al cambiar de sesión.
+
 ### 004: resultado JSON durable no conserva el orden textual de propiedades
 
 - **Hecho confirmado en pruebas:** PostgreSQL JSONB puede devolver un resultado reproducido con propiedades reordenadas y espacios distintos al resultado inicial, sin cambiar sus valores.
@@ -131,11 +141,11 @@ Copiar este formato y completar solo lo que se haya verificado:
 - **Evidencia:** captura aportada por el usuario; `PedidosSalonViewModelTests.Api_failures_explain_the_problem_without_enabling_writes`; `PedidosSalonView.axaml`. El ajuste visual todavía no ha sido confirmado en una nueva captura.
 
 ### ERR-018 — Aviso de EF Core por consultas con varias colecciones
-- **Estado:** pendiente de análisis de rendimiento; no se ha confirmado un fallo funcional.
+- **Estado:** consulta identificada y estrategia existente declarada explícitamente; no se ha medido su rendimiento ni confirmado un fallo funcional.
 - **Contexto:** `AcceptanceHost --pedidos-smoke` completó el recorrido local, pero la API emitió dos `MultipleCollectionIncludeWarning` de EF Core.
-- **Causa:** EF advierte que una consulta única que incluye varias colecciones puede generar más filas de las necesarias. La consulta concreta y el impacto no se han medido.
-- **Prevención:** identificar la consulta y medir con datos representativos antes de optimizar; si se usan consultas divididas, preservar explícitamente la consistencia de la lectura bajo concurrencia.
-- **Evidencia:** ejecución `--pedidos-smoke` del 9 de noviembre de 2026; el resultado no mide latencia ni rendimiento de producción.
+- **Causa:** la lectura de `CuentasService.GetActivaAsync` carga la jerarquía de comandas y detalles en una sola consulta. EF advierte de las colecciones anidadas, tanto para mesa como para grupo; no se ha medido su impacto.
+- **Decisión:** mantener `AsSingleQuery()` explícito y la transacción `RepeatableRead`, sin prometer mejoras. Una consulta dividida añade viajes y debe evaluarse con datos representativos antes de sustituir la estrategia actual.
+- **Evidencia:** diagnóstico de pila durante `--pedidos-smoke` con base temporal; no mide latencia ni rendimiento de producción.
 
 ### ERR-019 — Se indicó comprobar una transición de Cocina desde una vista aún no implementada
 - **Estado:** aclarado y documentado; prevención aplicable a verificaciones futuras.

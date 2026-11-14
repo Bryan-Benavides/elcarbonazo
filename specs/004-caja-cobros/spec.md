@@ -54,7 +54,7 @@ La API calcula y vuelve a validar todo. El precio/nombre histórico de líneas d
 2. Abrir requiere fondo inicial `>= C$0.00`, confirmación explícita y actor autorizado. Cero es válido.
 3. Turno cerrado es inmutable e irreabrible. Se puede abrir un turno posterior con identidad nueva; no se corrige el anterior mediante edición.
 4. No se abre ni cierra turno si existe una operación de apertura/cierre/cobro relevante sin resultado terminal que pueda afectar esa caja. Un cobro pendiente impide cerrar.
-5. El turno puede cerrarse aunque queden cuentas sin pagar. Desktop presenta el conteo/estado de pendientes; las cuentas siguen pendientes y no se imputan como pagadas.
+5. El turno puede cerrarse aunque queden cuentas sin pagar. Desktop presenta el conteo y la advertencia; las cuentas siguen pendientes y no se imputan como pagadas. Para revisar sus estados se reutiliza el listado paginado de cuentas de Caja, que también incluye cuentas históricas; no se exige otro listado dentro del resumen de turno.
 
 ### RF-03 — Consulta y elegibilidad de cuenta
 
@@ -97,7 +97,7 @@ La API calcula y vuelve a validar todo. El precio/nombre histórico de líneas d
 2. Sin egresos: `efectivoEsperado = fondoInicial + suma(efectivoRecibido - vuelto)` de cobros de efectivo confirmados en ese turno. Tarjeta y transferencia se informan separadamente; no forman parte del efectivo contado.
 3. `diferencia = efectivoContado - efectivoEsperado`; mostrar explícitamente sobrante, faltante o coincidencia, además del importe.
 4. Diferencia distinta de cero exige motivo no vacío y confirmación. Jefa o Encargado autorizado pueden confirmar; se conserva actor, motivo acotado, conteo y fotografía de totales.
-5. Cerrar con cuentas impagas es válido con advertencia y recuento. No cerrar con intención relevante no terminal ni con resultado de cobro incierto.
+5. Cerrar con cuentas impagas es válido con advertencia y recuento. Para consultar su detalle se utiliza el listado paginado de cuentas existente, no una segunda lista en el resumen. No cerrar con intención relevante no terminal ni con resultado de cobro incierto.
 6. El resumen no afirma conciliación de egresos (no soportados), conciliación bancaria ni cierre fiscal.
 
 ### RF-08 — Comprobante interno
@@ -169,4 +169,4 @@ Esta especificación no habilita uso con dinero real. Antes de operación real s
 
 ## 9. Decisiones cerradas / control de cambios
 
-El usuario aprobó en conversación el alcance, reglas de negocio, actores, métodos, cierre, límites del comprobante y exigencia de recuperación durable que constan aquí. El usuario aprueba `plan.md` como línea base técnica para iniciar C1. El cambio contractual respecto de 003 está registrado como adenda explícita en la especificación de ese módulo: se exige cerrar el grupo pagado antes de aceptar nuevos pedidos. No se reescribe la historia ni el estado de cuentas existentes; la implementación debe actualizar reglas autoritativas y pruebas cruzadas. Ninguna decisión documental autoriza migrar una base persistente. Cambios posteriores requieren actualizar spec/plan/tasks y aprobar antes de implementar.
+El usuario aprobó en conversación el alcance, reglas de negocio, actores, métodos, cierre, límites del comprobante y exigencia de recuperación durable que constan aquí. El usuario aprueba `plan.md` como línea base técnica para iniciar C1. El cambio contractual respecto de 003 está registrado como adenda explícita en la especificación de ese módulo: se exige cerrar el grupo pagado antes de aceptar nuevos pedidos. No se reescribe la historia ni el estado de cuentas existentes; la implementación debe actualizar reglas autoritativas y pruebas cruzadas. El usuario aprobó reutilizar el listado paginado de cuentas existente para revisar pendientes, sin añadir otro listado al resumen de turno; se conservan el conteo, la advertencia y el bloqueo por operación incierta. Ninguna decisión documental autoriza migrar una base persistente. Cambios posteriores requieren actualizar spec/plan/tasks y aprobar antes de implementar.
