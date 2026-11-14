@@ -22,7 +22,7 @@
                 <Button Content="← Mesas" Command="{Binding VolverCommand}" IsEnabled="{Binding !Ocupado}" />
                 <TextBlock Grid.Column="1" Text="Caja y recuperación" FontSize="26" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
             </Grid>
-            <TextBlock Text="DEMOSTRACIÓN · La recuperación no vuelve a ejecutar operaciones. Solo se puede registrar cobro en efectivo; tarjeta y transferencia están en preparación." Foreground="{StaticResource TextoSecundarioBrush}" TextWrapping="Wrap" />
+            <TextBlock Text="DEMOSTRACIÓN · La recuperación no vuelve a ejecutar operaciones. El sistema no verifica pagos bancarios." Foreground="{StaticResource TextoSecundarioBrush}" TextWrapping="Wrap" />
             <Border Background="{StaticResource FondoPanelBrush}" Padding="16" CornerRadius="6">
                 <StackPanel Spacing="12">
                     <TextBlock Text="Turno de caja" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
@@ -96,7 +96,11 @@
                         <TextBlock Text="Referencia externa (no introduzca números completos de tarjeta, PIN ni credenciales)" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
                         <TextBox Text="{Binding ReferenciaPago}" IsEnabled="{Binding !Ocupado}" MaxLength="200" />
                         <TextBlock Text="{Binding RevisionReferencia}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
-                        <TextBlock Text="Solo revisión: el registro de tarjeta y transferencia aún no está disponible. El Carbonazo no verifica pagos bancarios." Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                        <TextBlock Text="El Carbonazo no verifica pagos bancarios. Confirme la aprobación o recepción fuera del sistema." Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                        <CheckBox Content="Confirmo que verifiqué el pago fuera de El Carbonazo." IsChecked="{Binding ConfirmarVerificacionExterna}" IsEnabled="{Binding !Ocupado}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <CheckBox Content="Confirmo destino, líneas, total, método y referencia." IsChecked="{Binding ConfirmarCobro}" IsEnabled="{Binding !Ocupado}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <CheckBox Content="Si se advirtió coincidencia, revisé y confirmo registrar esta referencia." IsChecked="{Binding ConfirmarReferenciaRepetida}" IsEnabled="{Binding !Ocupado}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <Button Content="Registrar pago externo" Command="{Binding CobrarExternoCommand}" IsEnabled="{Binding ConfirmarCobro}" HorizontalAlignment="Left" />
                     </StackPanel>
                     <Button Content="Cancelar revisión" Command="{Binding CancelarSeleccionCobroCommand}" IsEnabled="{Binding !Ocupado}" HorizontalAlignment="Left" />
                 </StackPanel>
@@ -121,7 +125,25 @@
                 </StackPanel>
             </Border>
             <Border Background="{StaticResource FondoPanelBrush}" Padding="16" CornerRadius="6">
-                <StackPanel Spacing="8"><TextBlock Text="Fotografía reconciliada" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" /><TextBlock Text="{Binding Fotografia}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" /></StackPanel>
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Historial de comprobantes" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="{Binding EstadoComprobantes}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <WrapPanel>
+                        <Button Content="Consultar comprobantes" Command="{Binding ConsultarComprobantesCommand}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
+                        <Button Content="Siguiente página" Command="{Binding SiguientesComprobantesCommand}" IsVisible="{Binding HayMasComprobantes}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
+                    </WrapPanel>
+                    <ItemsControl ItemsSource="{Binding Comprobantes}">
+                        <ItemsControl.ItemTemplate><DataTemplate x:DataType="services:CajaComprobanteResumen">
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+                                <TextBlock Text="{Binding NumeroComprobante, StringFormat='Comprobante {0}'}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                <TextBlock Text="{Binding Total, StringFormat='C$ {0:N2}'}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                <Button Content="Ver detalle" Command="{Binding #Root.((vm:CajaRecoveryViewModel)DataContext).VerComprobanteCommand}" CommandParameter="{Binding}" />
+                            </StackPanel>
+                        </DataTemplate></ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="Fotografía del comprobante" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="{Binding Fotografia}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                </StackPanel>
             </Border>
         </StackPanel>
     </ScrollViewer>

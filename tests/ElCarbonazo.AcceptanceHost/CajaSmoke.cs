@@ -19,7 +19,7 @@ internal static class CajaSmoke
             var product = new Producto { Nombre = "Producto ficticio", Categoria = "Comida", Precio = 10m, Disponible = true };
             setup.Productos.Add(product);
             await setup.SaveChangesAsync(token);
-            foreach (var number in new[] { 4, 5 })
+            foreach (var number in new[] { 4, 5, 6, 7, 8 })
             {
                 var table = await setup.Mesas.SingleAsync(x => x.Numero == number, token);
                 table.Estado = MesaStates.Ocupada;
@@ -66,6 +66,7 @@ internal static class CajaSmoke
             vm.Attach(coordinator);
             vm.AttachShiftReader(transport);
             vm.AttachAccountsReader(new CajaCuentasReader(session));
+            vm.AttachReceiptsReader(transport);
             Require(vm.Open(() => { }), "No se abrió el ViewModel de caja.");
             var missingOperation = Guid.NewGuid();
             Require(store.Begin(missingOperation, auth.IdUsuario, "AbrirTurno"), "No se pudo registrar la identidad de prueba.");
@@ -128,11 +129,51 @@ internal static class CajaSmoke
             vm.Attach(coordinator);
             vm.AttachShiftReader(transport);
             vm.AttachAccountsReader(new CajaCuentasReader(session));
+            vm.AttachReceiptsReader(transport);
             Require(vm.Open(() => { }) && store.Read()?.Operacion == uncertainOperation, "El reinicio perdió la operación incierta.");
             await vm.ConsultarCommand.ExecuteAsync(null);
             Require(store.Read()?.Estado == "TerminalPorConciliar", "La consulta no recuperó el resultado durable.");
             await vm.ConciliarCommand.ExecuteAsync(null);
             Require(store.Read()?.Estado == "SinPendientes" && session.Executions == executionsBefore + 1, "La recuperación repitió la ejecución o no concilió.");
+            async Task SelectExternal(int id, string method, string reference)
+            {
+                await vm.ConsultarTurnoCommand.ExecuteAsync(null);
+                await vm.ConsultarCuentasCommand.ExecuteAsync(null);
+                var selected = vm.Cuentas.SingleOrDefault(x => x.IdPedido == id);
+                Require(selected is { Cobrable: true }, "La cuenta externa no está disponible.");
+                vm.SeleccionarCuentaCommand.Execute(selected);
+                vm.MetodoPago = method;
+                vm.ReferenciaPago = reference;
+                vm.ConfirmarCobro = true;
+                vm.ConfirmarVerificacionExterna = true;
+            }
+            await SelectExternal(orderIds[2], "Tarjeta", "REF-DEMO-CARD");
+            await vm.CobrarExternoCommand.ExecuteAsync(null);
+            Require(store.Read()?.Estado == "SinPendientes" && vm.Mensaje.Contains("registrado", StringComparison.Ordinal), "No se registró tarjeta.");
+            await SelectExternal(orderIds[3], "Transferencia", "REF-DEMO-TRANSFER");
+            var externalExecutions = session.Executions;
+            session.DropNextExecutionResponse = true;
+            await vm.CobrarExternoCommand.ExecuteAsync(null);
+            Require(store.Read()?.Estado == "Pendiente" && session.Executions == externalExecutions + 1, "La transferencia incierta no conservó el diario.");
+            await vm.ConsultarCommand.ExecuteAsync(null);
+            Require(store.Read()?.Estado == "TerminalPorConciliar", "No se recuperó la transferencia confirmada.");
+            await vm.ConciliarCommand.ExecuteAsync(null);
+            Require(store.Read()?.Estado == "SinPendientes" && session.Executions == externalExecutions + 1 && vm.Fotografia.Contains("Transferencia", StringComparison.Ordinal), "La transferencia no se concilió sin repetir.");
+            await SelectExternal(orderIds[4], "Tarjeta", "REF-DEMO-CARD");
+            await vm.CobrarExternoCommand.ExecuteAsync(null);
+            Require(store.Read()?.Estado == "TerminalPorConciliar", "La referencia repetida no quedó rechazada y bloqueada.");
+            await vm.ConciliarCommand.ExecuteAsync(null);
+            Require(store.Read()?.Estado == "SinPendientes" && vm.Mensaje.Contains("coincide", StringComparison.Ordinal), "No se concilió la advertencia de referencia.");
+            await SelectExternal(orderIds[4], "Tarjeta", "REF-DEMO-CARD");
+            await vm.CobrarExternoCommand.ExecuteAsync(null);
+            Require(store.Read()?.Estado == "SinPendientes" && vm.Mensaje.Contains("confirme", StringComparison.OrdinalIgnoreCase), "Se omitió la segunda confirmación.");
+            vm.ConfirmarReferenciaRepetida = true;
+            await vm.CobrarExternoCommand.ExecuteAsync(null);
+            Require(store.Read()?.Estado == "SinPendientes" && vm.Mensaje.Contains("registrado", StringComparison.Ordinal), "No se registró la referencia repetida revisada.");
+            await vm.ConsultarComprobantesCommand.ExecuteAsync(null);
+            Require(vm.Comprobantes.Count == 5, "El historial no mostró los cinco comprobantes.");
+            await vm.VerComprobanteCommand.ExecuteAsync(vm.Comprobantes[0]);
+            Require(vm.Fotografia.Contains("NO ES FACTURA FISCAL", StringComparison.Ordinal) && vm.Fotografia.Contains("Producto ficticio", StringComparison.Ordinal), "El detalle histórico no se aplicó.");
             await using var verify = database.CreateContext();
             var payment = await verify.Cobros.SingleAsync(x => x.IdPedido == orderIds[0], token);
             Require(payment.Total == 10m && payment.EfectivoRecibido == 15m && payment.Vuelto == 5m, "El cobro persistido no coincide.");
@@ -148,7 +189,7 @@ internal static class CajaSmoke
             await vm.CerrarTurnoCommand.ExecuteAsync(null);
             Require(store.Read()?.Estado == "SinPendientes" && vm.Mensaje.Contains("cerrado y reconciliado", StringComparison.Ordinal), "El cierre no quedó reconciliado.");
             var shift = await verify.TurnosCaja.AsNoTracking().SingleAsync(token);
-            Require(shift.Estado == CajaStates.TurnoCerrado && shift.EfectivoEsperado == 20m && shift.EfectivoContado == 20m && shift.CantidadCuentasPendientes == 2, "El cierre persistido no coincide.");
+            Require(shift.Estado == CajaStates.TurnoCerrado && shift.EfectivoEsperado == 20m && shift.EfectivoContado == 20m && shift.TotalTarjeta == 20m && shift.TotalTransferencia == 10m && shift.CantidadCuentasPendientes == 2, "El cierre persistido no coincide.");
             Console.WriteLine("CAJA SMOKE: barreras, preparación, consultas, cobro confirmado no reversible, recuperación y cierre con datos ficticios.");
             Console.WriteLine("Sin ventana ni render; sesión adaptada y política del diario solo de prueba, no valida ACL ni LAN.");
         }

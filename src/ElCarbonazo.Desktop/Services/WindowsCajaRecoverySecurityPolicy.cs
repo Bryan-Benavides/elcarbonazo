@@ -4,7 +4,7 @@ using System.Security.Principal;
 
 namespace ElCarbonazo.Desktop.Services;
 
-// Fail-closed policy. It is deliberately not registered until installer ACLs are verified.
+// Fail-closed policy: the app uses it for an explicitly provisioned journal.
 [SupportedOSPlatform("windows")]
 public sealed class WindowsCajaRecoverySecurityPolicy : ICajaRecoverySecurityPolicy
 {

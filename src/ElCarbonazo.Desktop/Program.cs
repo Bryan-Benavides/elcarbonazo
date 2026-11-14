@@ -22,18 +22,8 @@ sealed class Program
 
     private static int ProvisionCaja()
     {
-        if (!OperatingSystem.IsWindows()) return 1;
-        try
-        {
-            var configuration = new DesktopConfigurationService().Load();
-            var directory = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                "ElCarbonazo", "recovery");
-            return WindowsCajaJournalProvisioner.CreateFresh(directory, configuration.IdInstalacion) ? 0 : 1;
-        }
-        catch (Exception ex) when (ex is DesktopConfigurationException or System.IO.IOException or UnauthorizedAccessException)
-        {
-            return 1;
-        }
+        var directory = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ElCarbonazo");
+        return CajaFirstInstall.Create(directory) ? 0 : 1;
     }
 
     // Avalonia configuration, don't remove; also used by visual designer.

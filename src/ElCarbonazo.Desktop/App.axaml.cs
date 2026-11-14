@@ -60,6 +60,7 @@ public partial class App : Application
                         recoveryPanel.Attach(CajaRecovery);
                         recoveryPanel.AttachShiftReader(cajaTransport);
                         recoveryPanel.AttachAccountsReader(new CajaCuentasReader(_sessionManager));
+                        recoveryPanel.AttachReceiptsReader(cajaTransport);
                     }
                 }
                 initialViewModel = new LoginViewModel(_sessionManager, navigation, recoveryPanel);

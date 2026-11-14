@@ -10,7 +10,8 @@ public sealed record CajaTurnoSnapshot(int IdTurnoCaja, string Estado, decimal F
 public sealed record CajaPagoLineaSnapshot(int Orden, string NombreProducto, int Cantidad, decimal PrecioUnitario, decimal Subtotal);
 public sealed record CajaPagoSnapshot(long IdCobro, long NumeroComprobante, int IdPedido, int IdTurnoCaja,
     int IdUsuario, decimal Total, string MetodoPago, IReadOnlyList<CajaPagoLineaSnapshot> Lineas,
-    decimal? EfectivoRecibido = null, decimal? Vuelto = null);
+    decimal? EfectivoRecibido = null, decimal? Vuelto = null, DateTimeOffset? FechaHora = null,
+    string? Destino = null, string? ReferenciaExterna = null);
 // Recovery summary is informational; it must not replace a fresh, detailed account review before charging.
 public sealed record CajaCuentaRecoverySnapshot(int IdPedido, string Estado, decimal Total, bool Cobrable, string? Motivo);
 
@@ -31,8 +32,88 @@ public interface ICajaTurnoActualReader
     Task<(bool Valid, CajaTurnoSnapshot? Snapshot)> ReadCurrentShiftAsync(int actor, CancellationToken cancellationToken);
 }
 
-public sealed class CajaRecoveryHttpTransport(ICajaSessionSender session, ICajaRecoverySnapshotSink? sink = null) : ICajaRecoveryTransport, ICajaTurnoActualReader
+// Delivered only after the same terminal rejection and business evidence have been validated.
+// It contains no arguments or references and does not itself authorize a new payment.
+public interface ICajaRejectionSnapshotSink
 {
+    Task<bool> ApplyPaymentRejectionAsync(string code, CajaCuentaRecoverySnapshot account, CajaTurnoSnapshot shift, CancellationToken cancellationToken);
+}
+
+public sealed record CajaComprobanteResumen(long IdCobro, long NumeroComprobante, int IdPedido, string MetodoPago, decimal Total);
+public sealed record CajaComprobantePagina(IReadOnlyList<CajaComprobanteResumen> Items, string? CursorSiguiente);
+public interface ICajaComprobantesReader
+{
+    Task<CajaComprobantePagina?> ReadPageAsync(int actor, string? cursor, CancellationToken ct);
+    Task<bool> ApplyDetailAsync(int actor, long id, CancellationToken ct);
+}
+
+public sealed class CajaRecoveryHttpTransport(ICajaSessionSender session, ICajaRecoverySnapshotSink? sink = null) : ICajaRecoveryTransport, ICajaTurnoActualReader, ICajaComprobantesReader
+{
+    public async Task<CajaComprobantePagina?> ReadPageAsync(int actor, string? cursor, CancellationToken ct)
+    {
+        if (actor <= 0 || (cursor is not null && !ValidCursor(cursor))) return null;
+        var path = "api/caja/comprobantes?limite=25" + (cursor is null ? "" : $"&cursor={Uri.EscapeDataString(cursor)}");
+        using var response = await session.SendCajaOnceAsync(actor, () => new HttpRequestMessage(HttpMethod.Get, path), true, ct);
+        if (!response.IsSuccessStatusCode) return null;
+        using var document = await ReadObjectAsync(response, ct, 65536);
+        if (document is null || !document.RootElement.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array || items.GetArrayLength() > 25 ||
+            !document.RootElement.TryGetProperty("cursorSiguiente", out var next) || next.ValueKind is not (JsonValueKind.Null or JsonValueKind.String)) return null;
+        var nextCursor = next.ValueKind == JsonValueKind.Null ? null : next.GetString();
+        if (nextCursor is not null && (!ValidCursor(nextCursor) || nextCursor == cursor || items.GetArrayLength() == 0)) return null;
+        var result = new List<CajaComprobanteResumen>();
+        long previous = 0;
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object || item.EnumerateObject().Select(x => x.Name).Distinct(StringComparer.Ordinal).Count() != item.EnumerateObject().Count() ||
+                !TryLong(item, "idCobro", out var id) || id <= previous || !TryLong(item, "numeroComprobante", out var number) || number <= 0 ||
+                !TryInt(item, "idPedido", out var order) || order <= 0 || !TryInt(item, "idTurnoCaja", out var shift) || shift <= 0 ||
+                !TryInt(item, "idUsuario", out var owner) || owner <= 0 || !TryString(item, "metodoPago", out var method) || method is not ("Efectivo" or "Tarjeta" or "Transferencia") ||
+                !TryMoney(item, "total", out var total) || total <= 0 || !TryString(item, "fechaHora", out var date) ||
+                !DateTimeOffset.TryParse(date, out var timestamp) || timestamp.Offset != TimeSpan.Zero) return null;
+            result.Add(new CajaComprobanteResumen(id, number, order, method!, total));
+            previous = id;
+        }
+        return new CajaComprobantePagina(result, nextCursor);
+    }
+
+    public async Task<bool> ApplyDetailAsync(int actor, long id, CancellationToken ct)
+    {
+        if (actor <= 0 || id <= 0 || sink is null) return false;
+        using var response = await session.SendCajaOnceAsync(actor,
+            () => new HttpRequestMessage(HttpMethod.Get, $"api/caja/comprobantes/{id}"), true, ct);
+        if (!response.IsSuccessStatusCode) return false;
+        using var receipt = await ReadObjectAsync(response, ct, 1048576);
+        if (receipt is null) return false;
+        var root = receipt.RootElement;
+        if (!TryLong(root, "idCobro", out var payment) || payment != id || !TryLong(root, "numeroComprobante", out var number) ||
+            !TryInt(root, "idPedido", out var order) || !TryInt(root, "idTurnoCaja", out var shift) ||
+            !TryMoney(root, "total", out var total) || !TryString(root, "metodoPago", out var method) ||
+            !TryString(root, "idOperacion", out var operationText) || !Guid.TryParse(operationText, out var operation) || operation == Guid.Empty) return false;
+        decimal? cash = null, change = null;
+        if (method == "Efectivo")
+        {
+            if (!TryMoney(root, "efectivoRecibido", out var received) || !TryMoney(root, "vuelto", out var returned)) return false;
+            cash = received;
+            change = returned;
+        }
+        var terminal = JsonSerializer.SerializeToElement(new
+        {
+            codigo = "COBRO_REGISTRADO",
+            idCobro = payment,
+            numeroComprobante = number,
+            idPedido = order,
+            idTurnoCaja = shift,
+            total,
+            metodoPago = method,
+            efectivoRecibido = cash,
+            vuelto = change
+        });
+        return await ReconcilePaymentAsync(operation, actor, terminal, ct);
+    }
+
+    private static bool ValidCursor(string value) => value.Length is > 0 and <= 256 &&
+        value.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
+
     public async Task<CajaRecoveryOutcome> PrepareAsync(Guid operation, int actor, string type, object? arguments, CancellationToken cancellationToken)
     {
         if (arguments is null) return CajaRecoveryOutcome.Uncertain;
@@ -81,7 +162,9 @@ public sealed class CajaRecoveryHttpTransport(ICajaSessionSender session, ICajaR
         {
             if ((state == "Rechazada" && ((int)operationResponse.StatusCode is < 400 or >= 500)) ||
                 (state == "Cancelada" && !operationResponse.IsSuccessStatusCode)) return false;
-            return await ReconcileUnsuccessfulAsync(operation, actor, type, state, cancellationToken);
+            var unsuccessfulCode = state == "Rechazada" && TryString(terminal.RootElement, "codigo", out var rejectionCode) ? rejectionCode : null;
+            if (state == "Rechazada" && string.IsNullOrWhiteSpace(unsuccessfulCode)) return false;
+            return await ReconcileUnsuccessfulAsync(operation, actor, type, state, unsuccessfulCode, cancellationToken);
         }
         if (state != "Completada" || !operationResponse.IsSuccessStatusCode) return false;
         if (type == "CobrarCuenta") return await ReconcilePaymentAsync(operation, actor, terminal.RootElement, cancellationToken);
@@ -93,7 +176,7 @@ public sealed class CajaRecoveryHttpTransport(ICajaSessionSender session, ICajaR
         return await ReconcileShiftAsync(id, actor, type == "CerrarTurno", cancellationToken);
     }
 
-    private async Task<bool> ReconcileUnsuccessfulAsync(Guid operation, int actor, string type, string state, CancellationToken ct)
+    private async Task<bool> ReconcileUnsuccessfulAsync(Guid operation, int actor, string type, string state, string? code, CancellationToken ct)
     {
         using var response = await session.SendCajaOnceAsync(actor,
             () => new HttpRequestMessage(HttpMethod.Get, $"api/caja/operaciones/{operation:D}/evidencia-conciliacion"), true, ct);
@@ -122,6 +205,9 @@ public sealed class CajaRecoveryHttpTransport(ICajaSessionSender session, ICajaR
             var account = await ReadAccountAsync(orderId, actor, ct);
             if (account is null) return false;
             var shift = await ReadShiftAsync(paymentShiftId, actor, ct);
+            if (state == "Rechazada" && code == "REFERENCIA_REQUIERE_CONFIRMACION")
+                return shift is not null && sink is ICajaRejectionSnapshotSink rejectionSink &&
+                    await rejectionSink.ApplyPaymentRejectionAsync(code, account, shift, ct);
             return shift is not null && sink is not null && await sink.ApplyAccountAndShiftAsync(account, shift, ct);
         }
         if (type != "CerrarTurno" || !IsNull(root, "idPedido") ||
@@ -248,7 +334,10 @@ public sealed class CajaRecoveryHttpTransport(ICajaSessionSender session, ICajaR
         using var receipt = await ReadObjectAsync(response, ct, 1048576);
         if (receipt is null) return false;
         var root = receipt.RootElement;
-        if (!TryLong(root, "idCobro", out var actualPayment) || actualPayment != paymentId ||
+        if (!TryString(root, "leyenda", out var legend) || legend != "COMPROBANTE INTERNO — DEMOSTRACIÓN — NO ES FACTURA FISCAL" ||
+            !TryString(root, "fechaHora", out var dateText) || !DateTimeOffset.TryParse(dateText, out var date) || date.Offset != TimeSpan.Zero ||
+            !TryDestination(root, out var destination) ||
+            !TryLong(root, "idCobro", out var actualPayment) || actualPayment != paymentId ||
             !TryLong(root, "numeroComprobante", out var actualNumber) || actualNumber != number ||
             !TryInt(root, "idPedido", out var actualOrder) || actualOrder != orderId ||
             !TryInt(root, "idTurnoCaja", out var actualShift) || actualShift != shiftId ||
@@ -275,12 +364,13 @@ public sealed class CajaRecoveryHttpTransport(ICajaSessionSender session, ICajaR
         }
         if (sum != total) return false;
         decimal? cash = null, change = null;
+        string? externalReference = null;
         if (method == "Efectivo")
         {
             if (!TryMoney(root, "efectivoRecibido", out var received) || !TryMoney(root, "vuelto", out var returned) ||
                 received < total || returned != received - total ||
                 !TryMoney(terminal, "efectivoRecibido", out var terminalReceived) || terminalReceived != received ||
-                !TryMoney(terminal, "vuelto", out var terminalChange) || terminalChange != returned) return false;
+                !TryMoney(terminal, "vuelto", out var terminalChange) || terminalChange != returned || !IsNull(root, "referenciaExterna")) return false;
             cash = received;
             change = returned;
         }
@@ -288,8 +378,33 @@ public sealed class CajaRecoveryHttpTransport(ICajaSessionSender session, ICajaR
         {
             if (!IsNull(root, "efectivoRecibido") || !IsNull(root, "vuelto") ||
                 !TryString(root, "referenciaExterna", out var reference) || !ValidExternalReference(reference)) return false;
+            externalReference = reference;
         }
-        return await sink.ApplyPaymentAsync(new CajaPagoSnapshot(paymentId, number, orderId, shiftId, owner, total, method!, snapshots, cash, change), ct);
+        return await sink.ApplyPaymentAsync(new CajaPagoSnapshot(paymentId, number, orderId, shiftId, owner, total, method!, snapshots, cash, change, date, destination, externalReference), ct);
+    }
+
+    private static bool TryDestination(JsonElement root, out string? destination)
+    {
+        destination = null;
+        if (!root.TryGetProperty("numeroMesa", out var table) || !root.TryGetProperty("idGrupo", out var group) ||
+            !root.TryGetProperty("numerosMesasGrupo", out var members) || members.ValueKind != JsonValueKind.Array) return false;
+        if (table.ValueKind == JsonValueKind.Number && table.TryGetInt32(out var number) && number > 0 &&
+            group.ValueKind == JsonValueKind.Null && members.GetArrayLength() == 0)
+        {
+            destination = $"Mesa {number}";
+            return true;
+        }
+        if (table.ValueKind != JsonValueKind.Null || group.ValueKind != JsonValueKind.Number || !group.TryGetInt32(out var groupId) || groupId <= 0 ||
+            members.GetArrayLength() is < 2 or > 15) return false;
+        var numbers = new List<int>();
+        foreach (var member in members.EnumerateArray())
+        {
+            if (member.ValueKind != JsonValueKind.Number || !member.TryGetInt32(out var value) || value <= 0 ||
+                (numbers.Count > 0 && value <= numbers[^1])) return false;
+            numbers.Add(value);
+        }
+        destination = $"Grupo {groupId} · mesas {string.Join(", ", numbers)}";
+        return true;
     }
 
     private static bool ValidExternalReference(string? reference)

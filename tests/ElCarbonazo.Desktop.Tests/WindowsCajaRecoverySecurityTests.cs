@@ -10,6 +10,51 @@ namespace ElCarbonazo.Desktop.Tests;
 public sealed class WindowsCajaRecoverySecurityTests
 {
     [Fact]
+    public void First_install_reads_configuration_and_preserves_existing_pending_journal()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        VerifyFirstInstall();
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void VerifyFirstInstall()
+    {
+        var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Temp", "opencode");
+        var directory = Path.Combine(root, $"caja-install-{Guid.NewGuid():N}");
+        var recovery = Path.Combine(directory, "recovery");
+        var journal = Path.Combine(recovery, "caja-journal.json");
+        var configuration = Path.Combine(directory, "desktop.json");
+        var installation = Guid.NewGuid();
+        Directory.CreateDirectory(directory);
+        try
+        {
+            Assert.False(CajaFirstInstall.Create(directory));
+            Assert.False(Directory.Exists(recovery));
+            File.WriteAllText(configuration, JsonSerializer.Serialize(new { apiBaseUrl = "https://localhost:7191", idInstalacion = installation }));
+            Assert.True(CajaFirstInstall.Create(directory));
+            var policy = new WindowsCajaRecoverySecurityPolicy(recovery, WindowsIdentity.GetCurrent().User!);
+            var store = new CajaRecoveryStore(journal, installation, policy);
+            Assert.Equal("SinPendientes", store.Read()!.Estado);
+            var operation = Guid.NewGuid();
+            Assert.True(store.Begin(operation, 1, "CobrarCuenta"));
+            Assert.False(CajaFirstInstall.Create(directory));
+            Assert.Equal(operation, store.Read()!.Operacion);
+            Assert.Null(new CajaRecoveryStore(journal, Guid.NewGuid(), policy).Read());
+            using var json = JsonDocument.Parse(File.ReadAllBytes(journal));
+            Assert.Equal(new[] { "estado", "instalacion", "operacion", "propietario", "tipo", "version" },
+                json.RootElement.EnumerateObject().Select(x => x.Name).Order(StringComparer.Ordinal).ToArray());
+        }
+        finally
+        {
+            File.Delete(journal);
+            File.Delete(journal + ".lock");
+            if (Directory.Exists(recovery)) Directory.Delete(recovery);
+            File.Delete(configuration);
+            Directory.Delete(directory);
+        }
+    }
+
+    [Fact]
     public void Fresh_provisioning_is_explicit_and_never_overwrites_existing_journal()
     {
         if (!OperatingSystem.IsWindows()) return;

@@ -10,7 +10,7 @@ using ElCarbonazo.Desktop.Services;
 namespace ElCarbonazo.Desktop.ViewModels;
 
 // Opening uses the durable coordinator; recovery never executes a previously prepared intention.
-public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapshotSink
+public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapshotSink, ICajaRejectionSnapshotSink
 {
     private readonly CajaRecoveryStore? _store;
     private readonly ISessionManager? _session;
@@ -18,12 +18,20 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
     private CajaRecoveryCoordinator? _coordinator;
     private ICajaTurnoActualReader? _shiftReader;
     private ICajaCuentasReader? _accountsReader;
+    private ICajaComprobantesReader? _receiptsReader;
+    private string? _nextReceiptsCursor;
     private CajaTurnoSnapshot? _turnoActual;
     private string? _nextAccountsCursor;
     private Action? _back;
     private long _openedGeneration;
     private int _openedActor;
     private bool _open;
+    private bool _referenceCollisionApplied;
+    private sealed record ExternalAttempt(Guid Operation, int Account, int Shift, string Method, string Reference, long Generation);
+    private ExternalAttempt? _externalAttempt;
+    private ExternalAttempt? _repeatedReference;
+    private bool _reviewedShiftAfterCollision;
+    private bool _reviewedAccountsAfterCollision;
 
     [ObservableProperty] private string _estadoDiario = "Diario no disponible.";
     [ObservableProperty] private string _mensaje = "Consulte la operación antes de tomar una decisión.";
@@ -36,6 +44,9 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
     [ObservableProperty] private string _fondoInicial = "0.00";
     [ObservableProperty] private string _estadoCuentas = "Consulte las cuentas para ver sus estados.";
     [ObservableProperty] private bool _hayMasCuentas;
+    [ObservableProperty] private bool _hayMasComprobantes;
+    [ObservableProperty] private string _estadoComprobantes = "Consulte los comprobantes internos.";
+    public ObservableCollection<CajaComprobanteResumen> Comprobantes { get; } = [];
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HayCuentaSeleccionada))]
     [NotifyPropertyChangedFor(nameof(CambioPrevisto))]
@@ -44,6 +55,8 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
     [NotifyPropertyChangedFor(nameof(CambioPrevisto))]
     private string _efectivoRecibido = "";
     [ObservableProperty] private bool _confirmarCobro;
+    [ObservableProperty] private bool _confirmarVerificacionExterna;
+    [ObservableProperty] private bool _confirmarReferenciaRepetida;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EsEfectivo))]
     [NotifyPropertyChangedFor(nameof(EsPagoExterno))]
@@ -71,10 +84,17 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
     partial void OnMetodoPagoChanged(string value)
     {
         ConfirmarCobro = false;
+        ConfirmarVerificacionExterna = false;
+        ConfirmarReferenciaRepetida = false;
         EfectivoRecibido = "";
         ReferenciaPago = "";
     }
-    partial void OnReferenciaPagoChanged(string value) => ConfirmarCobro = false;
+    partial void OnReferenciaPagoChanged(string value)
+    {
+        ConfirmarCobro = false;
+        ConfirmarVerificacionExterna = false;
+        ConfirmarReferenciaRepetida = false;
+    }
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DiferenciaCierre))]
     private string _efectivoContado = "";
@@ -111,6 +131,7 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
     public void Attach(CajaRecoveryCoordinator coordinator) => _coordinator = coordinator;
     public void AttachShiftReader(ICajaTurnoActualReader reader) => _shiftReader = reader;
     public void AttachAccountsReader(ICajaCuentasReader reader) => _accountsReader = reader;
+    public void AttachReceiptsReader(ICajaComprobantesReader reader) => _receiptsReader = reader;
 
     public bool Open(Action back)
     {
@@ -118,6 +139,11 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
         _openedActor = session.IdUsuario;
         _openedGeneration = _generation();
         _open = true;
+        _externalAttempt = null;
+        _repeatedReference = null;
+        Comprobantes.Clear();
+        _nextReceiptsCursor = null;
+        HayMasComprobantes = false;
         _back = back;
         Fotografia = "Sin fotografía reconciliada.";
         Mensaje = "Consulte la operación antes de tomar una decisión. No se reintentará ningún cobro automáticamente.";
@@ -138,11 +164,59 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
     public void Deactivate()
     {
         _open = false;
+        Comprobantes.Clear();
+        _nextReceiptsCursor = null;
+        HayMasComprobantes = false;
+        _externalAttempt = null;
+        _repeatedReference = null;
         _back = null;
         _turnoConsultadoSinAbierto = false;
         _turnoActual = null;
         Fotografia = "Sin fotografía reconciliada.";
         InvalidarCuentas();
+    }
+
+    [RelayCommand]
+    private Task ConsultarComprobantesAsync(CancellationToken ct) => LoadReceiptsAsync(null, ct);
+
+    [RelayCommand]
+    private Task SiguientesComprobantesAsync(CancellationToken ct) => _nextReceiptsCursor is { } cursor
+        ? LoadReceiptsAsync(cursor, ct) : Task.CompletedTask;
+
+    private async Task LoadReceiptsAsync(string? cursor, CancellationToken ct)
+    {
+        if (Ocupado || !Vigente() || _receiptsReader is null) return;
+        Comprobantes.Clear();
+        _nextReceiptsCursor = null;
+        HayMasComprobantes = false;
+        Ocupado = true;
+        try
+        {
+            var page = await _receiptsReader.ReadPageAsync(_openedActor, cursor, ct);
+            if (!Vigente() || page is null) { EstadoComprobantes = "No se pudieron consultar los comprobantes."; return; }
+            foreach (var item in page.Items) Comprobantes.Add(item);
+            _nextReceiptsCursor = page.CursorSiguiente;
+            HayMasComprobantes = _nextReceiptsCursor is not null;
+            EstadoComprobantes = Comprobantes.Count == 0 ? "No hay comprobantes en esta página." : "Seleccione un comprobante para consultar su detalle.";
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or OperationCanceledException or JsonException or SessionExpiredException or SessionPausedException or SecurityConnectionException)
+        { EstadoComprobantes = "No se pudieron consultar los comprobantes."; }
+        finally { Ocupado = false; }
+    }
+
+    [RelayCommand]
+    private async Task VerComprobanteAsync(CajaComprobanteResumen? item, CancellationToken ct)
+    {
+        if (Ocupado || !Vigente() || item is null || !Comprobantes.Contains(item) || _receiptsReader is null) return;
+        Ocupado = true;
+        try
+        {
+            EstadoComprobantes = await _receiptsReader.ApplyDetailAsync(_openedActor, item.IdCobro, ct) && Vigente()
+                ? "Detalle validado en fotografía reconciliada." : "No se pudo validar el detalle del comprobante.";
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or OperationCanceledException or JsonException or SessionExpiredException or SessionPausedException or SecurityConnectionException)
+        { EstadoComprobantes = "No se pudo consultar el detalle del comprobante."; }
+        finally { Ocupado = false; }
     }
 
     private void InvalidarCuentas()
@@ -169,6 +243,68 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
         ReferenciaPago = "";
         EfectivoRecibido = "";
         ConfirmarCobro = false;
+        ConfirmarVerificacionExterna = false;
+        ConfirmarReferenciaRepetida = false;
+    }
+
+    [RelayCommand]
+    private async Task CobrarExternoAsync(CancellationToken cancellationToken)
+    {
+        var account = CuentaSeleccionada;
+        var shift = _turnoActual;
+        if (Ocupado || !Vigente() || _coordinator is null || !EsPagoExterno || !ConfirmarCobro || !ConfirmarVerificacionExterna ||
+            account is null || !Cuentas.Contains(account) || !account.Cobrable || account.Estado != "Listo" || account.Total <= 0 ||
+            account.HuellaLineas is null || shift?.Estado != "Abierto" || _store?.Read()?.Estado != "SinPendientes") return;
+        string reference;
+        try { reference = ReferenciaPago.Normalize(NormalizationForm.FormC).Trim(); }
+        catch (ArgumentException) { reference = ""; }
+        if (string.IsNullOrWhiteSpace(reference) || reference.EnumerateRunes().Count() > 100 || reference.EnumerateRunes().Any(Rune.IsControl))
+        {
+            ConfirmarCobro = false;
+            ConfirmarVerificacionExterna = false;
+            Mensaje = "Introduzca una referencia válida de 1 a 100 caracteres, sin controles.";
+            return;
+        }
+        var collision = _repeatedReference;
+        var repeated = collision is not null && collision.Account == account.IdPedido && collision.Shift == shift.IdTurnoCaja &&
+            collision.Method == MetodoPago && collision.Reference == reference && collision.Generation == _openedGeneration;
+        if (repeated && (!_reviewedShiftAfterCollision || !_reviewedAccountsAfterCollision || !ConfirmarReferenciaRepetida))
+        {
+            Mensaje = "Consulte nuevamente el turno y la cuenta y confirme expresamente la coincidencia.";
+            return;
+        }
+        var operation = Guid.NewGuid();
+        var attempt = new ExternalAttempt(operation, account.IdPedido, shift.IdTurnoCaja, MetodoPago, reference, _openedGeneration);
+        var arguments = new
+        {
+            pedidoId = account.IdPedido,
+            turnoId = shift.IdTurnoCaja,
+            totalVisto = account.Total,
+            huellaLineas = account.HuellaLineas,
+            metodo = MetodoPago,
+            efectivoRecibido = (decimal?)null,
+            referencia = reference,
+            verificacionExterna = true,
+            referenciaRepetida = repeated
+        };
+        _repeatedReference = null;
+        _externalAttempt = attempt;
+        InvalidarCuentas();
+        InvalidarTurno();
+        Ocupado = true;
+        try
+        {
+            var result = await _coordinator.BeginAsync(operation, _openedActor, "CobrarCuenta", cancellationToken, arguments);
+            if (result == CajaRecoveryOutcome.Prepared && Vigente()) result = await _coordinator.ExecuteAsync(cancellationToken);
+            if (result == CajaRecoveryOutcome.Completed && Vigente() && await _coordinator.ReconcileAsync(cancellationToken))
+            {
+                _externalAttempt = null;
+                Mensaje = "Cobro registrado y comprobante reconciliado. La mesa o grupo no se libera automáticamente.";
+            }
+            else Mensaje = "El registro no está conciliado. El pago externo pudo ocurrir; no lo repita. Consulte el diario.";
+        }
+        catch (OperationCanceledException) { Mensaje = "El registro pudo quedar pendiente. No repita el pago externo; consulte el diario."; }
+        finally { Ocupado = false; ActualizarDiario(); }
     }
 
     [RelayCommand]
@@ -176,6 +312,8 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
     {
         CuentaSeleccionada = null;
         ConfirmarCobro = false;
+        ConfirmarVerificacionExterna = false;
+        ConfirmarReferenciaRepetida = false;
         EfectivoRecibido = "";
         ReferenciaPago = "";
         MetodoPago = "Efectivo";
@@ -253,6 +391,7 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
                 return;
             }
             foreach (var account in page.Items) Cuentas.Add(account);
+            if (_repeatedReference is not null) _reviewedAccountsAfterCollision = true;
             _nextAccountsCursor = page.CursorSiguiente;
             HayMasCuentas = _nextAccountsCursor is not null;
             EstadoCuentas = Cuentas.Count == 0 ? "No hay cuentas en esta página." : "Información de consulta; la API vuelve a validar antes de cualquier cobro.";
@@ -284,6 +423,7 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
             }
             _turnoConsultadoSinAbierto = shift is null;
             _turnoActual = shift;
+            if (_repeatedReference is not null && shift?.IdTurnoCaja == _repeatedReference.Shift) _reviewedShiftAfterCollision = true;
             ResumenTurno = shift is null ? "No hay turno abierto." : DescribeTurno(shift);
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or OperationCanceledException or JsonException or SessionExpiredException or SessionPausedException or SecurityConnectionException)
@@ -475,10 +615,21 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
         InvalidarCuentas();
         InvalidarTurno();
         Ocupado = true;
+        _referenceCollisionApplied = false;
         try
         {
-            Mensaje = await _coordinator.ReconcileAsync(cancellationToken)
-                ? "Fotografía aplicada. Revise los datos antes de iniciar una nueva operación."
+            var reconciled = await _coordinator.ReconcileAsync(cancellationToken);
+            if (reconciled && _referenceCollisionApplied && _externalAttempt is { } attempt && Vigente())
+            {
+                _repeatedReference = attempt;
+                _reviewedAccountsAfterCollision = false;
+                _reviewedShiftAfterCollision = false;
+            }
+            if (reconciled) _externalAttempt = null;
+            Mensaje = reconciled
+                ? _referenceCollisionApplied
+                    ? "La referencia coincide con otra del mismo método. No implica fraude. Consulte nuevamente el turno y la cuenta y revise antes de confirmar."
+                    : "Fotografía aplicada. Revise los datos antes de iniciar una nueva operación."
                 : "No se pudo conciliar. El diario permanece bloqueado; revise la sesión y la conexión.";
         }
         finally { Ocupado = false; ActualizarDiario(); }
@@ -517,7 +668,15 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
         InvalidarCuentas();
         _turnoActual = null;
         var cash = snapshot.MetodoPago == "Efectivo" ? $" Recibido C$ {snapshot.EfectivoRecibido:N2}; vuelto C$ {snapshot.Vuelto:N2}." : "";
-        return Apply($"Comprobante interno {snapshot.NumeroComprobante} — DEMOSTRACIÓN, NO ES FACTURA FISCAL. Cuenta {snapshot.IdPedido}, total C$ {snapshot.Total:N2}, método {snapshot.MetodoPago}.{cash}", ct);
+        var lines = string.Join(Environment.NewLine, snapshot.Lineas.Select(line =>
+            $"{line.Cantidad} × {line.NombreProducto} · C$ {line.PrecioUnitario:N2} · subtotal C$ {line.Subtotal:N2}"));
+        var date = snapshot.FechaHora is { } instant
+            ? TimeZoneInfo.ConvertTime(instant, TimeZoneInfo.FindSystemTimeZoneById("America/Managua")).ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture)
+            : "Fecha no disponible";
+        var reference = snapshot.ReferenciaExterna is null ? "" : $" Referencia: {snapshot.ReferenciaExterna}.";
+        return Apply($"Comprobante interno {snapshot.NumeroComprobante} — DEMOSTRACIÓN, NO ES FACTURA FISCAL.{Environment.NewLine}" +
+            $"{date} · {snapshot.Destino ?? "Destino no disponible"} · cuenta {snapshot.IdPedido} · turno {snapshot.IdTurnoCaja} · actor {snapshot.IdUsuario}{Environment.NewLine}" +
+            $"{lines}{Environment.NewLine}Subtotal C$ {snapshot.Total:N2} · impuestos C$ 0.00 · total C$ {snapshot.Total:N2} · método {snapshot.MetodoPago}.{cash}{reference}", ct);
     }
     public Task<bool> ApplyCurrentShiftAsync(CajaTurnoSnapshot? snapshot, CancellationToken ct) => Apply(snapshot is null ? "No hay turno abierto." : $"Turno actual {snapshot.IdTurnoCaja}: {snapshot.Estado}; efectivo esperado C$ {snapshot.EfectivoEsperado:N2}.", ct);
     public Task<bool> ApplyAccountAndShiftAsync(CajaCuentaRecoverySnapshot account, CajaTurnoSnapshot shift, CancellationToken ct)
@@ -526,10 +685,20 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
         InvalidarCuentas();
         return Apply($"Cuenta {account.IdPedido}: {account.Estado}, total C$ {account.Total:N2}, {(account.Cobrable ? "cobrable" : account.Motivo)}. Turno {shift.IdTurnoCaja}: {shift.Estado}. Revise el detalle completo antes de cobrar.", ct);
     }
+    public async Task<bool> ApplyPaymentRejectionAsync(string code, CajaCuentaRecoverySnapshot account, CajaTurnoSnapshot shift, CancellationToken ct)
+    {
+        if (code != "REFERENCIA_REQUIERE_CONFIRMACION" || !await ApplyAccountAndShiftAsync(account, shift, ct)) return false;
+        _referenceCollisionApplied = _externalAttempt is { } attempt && attempt.Account == account.IdPedido && attempt.Shift == shift.IdTurnoCaja &&
+            attempt.Generation == _openedGeneration && _store?.Read()?.Operacion == attempt.Operation;
+        return true;
+    }
     public Task<bool> ApplyBarrierAsync(string attemptedType, CajaTurnoSnapshot? currentShift, CancellationToken ct)
     {
         if (ct.IsCancellationRequested || !Vigente() || !Ocupado) return Task.FromResult(false);
         InvalidarCuentas();
+        Comprobantes.Clear();
+        _nextReceiptsCursor = null;
+        HayMasComprobantes = false;
         _turnoActual = null;
         ResumenTurno = currentShift is null ? "No hay turno abierto." : DescribeTurno(currentShift);
         _turnoConsultadoSinAbierto = false;

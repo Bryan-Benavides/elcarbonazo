@@ -9,6 +9,54 @@ namespace ElCarbonazo.Desktop.Tests;
 
 public sealed class CajaRecoveryTransportTests
 {
+    [Fact]
+    public async Task Receipt_history_pages_and_validates_detail_before_application()
+    {
+        var id = Guid.NewGuid();
+        const string page = "{\"items\":[{\"idCobro\":4,\"numeroComprobante\":9,\"idPedido\":3,\"idTurnoCaja\":2,\"idUsuario\":1,\"metodoPago\":\"Efectivo\",\"total\":10,\"fechaHora\":\"2026-01-01T00:00:00Z\"}],\"cursorSiguiente\":\"abc\"}";
+        var receipt = $$"""{"leyenda":"COMPROBANTE INTERNO — DEMOSTRACIÓN — NO ES FACTURA FISCAL","fechaHora":"2026-01-01T00:00:00Z","numeroMesa":1,"idGrupo":null,"numerosMesasGrupo":[],"idCobro":4,"numeroComprobante":9,"idOperacion":"{{id}}","idPedido":3,"idTurnoCaja":2,"idUsuario":1,"total":10,"subtotal":10,"impuestos":0,"metodoPago":"Efectivo","efectivoRecibido":15,"vuelto":5,"referenciaExterna":null,"lineas":[{"orden":1,"nombreProducto":"Comida","cantidad":1,"precioUnitario":10,"subtotal":10}]}""";
+        var sink = new SnapshotSink { Accept = true };
+        var reader = new CajaRecoveryHttpTransport(new SnapshotSession(page, receipt, receipt), sink);
+        var result = await reader.ReadPageAsync(1, null, default);
+        Assert.NotNull(result);
+        Assert.Equal("abc", result.CursorSiguiente);
+        Assert.Equal(4, Assert.Single(result.Items).IdCobro);
+        Assert.True(await reader.ApplyDetailAsync(1, 4, default));
+        Assert.Equal("Mesa 1", sink.Payment!.Destino);
+        var bad = receipt.Replace("\"subtotal\":10}", "\"subtotal\":9}", StringComparison.Ordinal);
+        var rejected = new SnapshotSink { Accept = true };
+        Assert.False(await new CajaRecoveryHttpTransport(new SnapshotSession(receipt, bad), rejected).ApplyDetailAsync(1, 4, default));
+        Assert.Null(rejected.Payment);
+        Assert.Null(await new CajaRecoveryHttpTransport(new SnapshotSession(page.Replace("\"idPedido\":3,", "", StringComparison.Ordinal)))
+            .ReadPageAsync(1, null, default));
+    }
+
+    [Fact]
+    public async Task Repeated_reference_rejection_requires_matching_evidence_and_applied_snapshot()
+    {
+        var id = Guid.NewGuid();
+        const string terminal = "{\"estado\":\"Rechazada\",\"codigo\":\"REFERENCIA_REQUIERE_CONFIRMACION\"}";
+        var evidence = $$"""{"idOperacion":"{{id}}","estado":"Rechazada","tipo":"CobrarCuenta","idPedido":3,"idTurnoCaja":17,"sinIntencion":false}""";
+        const string accounts = "{\"items\":[{\"idPedido\":3,\"estado\":\"Listo\",\"total\":10,\"cobrable\":true,\"motivo\":null}],\"cursorSiguiente\":null}";
+        const string shift = "{\"idTurnoCaja\":17,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":1}";
+        var sink = new SnapshotSink { Accept = true };
+        Assert.True(await new CajaRecoveryHttpTransport(new EvidenceSession(HttpStatusCode.Conflict, terminal, evidence, accounts, shift), sink)
+            .ReconcileAsync(id, 1, "CobrarCuenta", default));
+        Assert.Equal("REFERENCIA_REQUIERE_CONFIRMACION", sink.RejectionCode);
+        var rejected = new SnapshotSink { Accept = true };
+        var wrong = evidence.Replace(id.ToString(), Guid.NewGuid().ToString(), StringComparison.Ordinal);
+        Assert.False(await new CajaRecoveryHttpTransport(new EvidenceSession(HttpStatusCode.Conflict, terminal, wrong), rejected)
+            .ReconcileAsync(id, 1, "CobrarCuenta", default));
+        Assert.Null(rejected.RejectionCode);
+        var refused = new SnapshotSink { Accept = false };
+        Assert.False(await new CajaRecoveryHttpTransport(new EvidenceSession(HttpStatusCode.Conflict, terminal, evidence, accounts, shift), refused)
+            .ReconcileAsync(id, 1, "CobrarCuenta", default));
+        var missingCode = new SnapshotSink { Accept = true };
+        Assert.False(await new CajaRecoveryHttpTransport(new EvidenceSession(HttpStatusCode.Conflict, "{\"estado\":\"Rechazada\"}", evidence, accounts, shift), missingCode)
+            .ReconcileAsync(id, 1, "CobrarCuenta", default));
+        Assert.Null(missingCode.Account);
+    }
+
     [Theory]
     [InlineData("AbrirTurno")]
     [InlineData("CerrarTurno")]
@@ -88,7 +136,7 @@ public sealed class CajaRecoveryTransportTests
         const string second = "{\"items\":[{\"idPedido\":3,\"estado\":\"Listo\",\"total\":10,\"cobrable\":true,\"motivo\":null}],\"cursorSiguiente\":null}";
         const string shift = "{\"idTurnoCaja\":17,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":1}";
         var sink = new SnapshotSink { Accept = true };
-        var session = new EvidenceSession(status, $"{{\"estado\":\"{state}\"}}", evidence, first, second, shift);
+        var session = new EvidenceSession(status, $"{{\"estado\":\"{state}\",\"codigo\":\"CUENTA_NO_COBRABLE\"}}", evidence, first, second, shift);
         Assert.True(await new CajaRecoveryHttpTransport(session, sink).ReconcileAsync(id, 1, "CobrarCuenta", default));
         Assert.Equal(3, sink.Account!.IdPedido);
         Assert.Equal(17, sink.Last!.IdTurnoCaja);
@@ -157,7 +205,7 @@ public sealed class CajaRecoveryTransportTests
         var id = Guid.NewGuid();
         var evidence = $$"""{"idOperacion":"{{id}}","estado":"{{state}}","tipo":"AbrirTurno","idPedido":null,"idTurnoCaja":null,"sinIntencion":false}""";
         var sink = new SnapshotSink { Accept = true };
-        var session = new EvidenceSession(status, $"{{\"estado\":\"{state}\"}}", evidence, current);
+        var session = new EvidenceSession(status, $"{{\"estado\":\"{state}\",\"codigo\":\"TURNO_YA_ABIERTO\"}}", evidence, current);
         Assert.True(await new CajaRecoveryHttpTransport(session, sink).ReconcileAsync(id, 1, "AbrirTurno", default));
         Assert.True(sink.CurrentApplied);
         Assert.Equal(current.Contains("null", StringComparison.Ordinal) ? null : 17, sink.Last?.IdTurnoCaja);
@@ -187,7 +235,7 @@ public sealed class CajaRecoveryTransportTests
         var evidence = $$"""{"idOperacion":"{{id}}","estado":"{{state}}","tipo":"CerrarTurno","idPedido":null,"idTurnoCaja":17,"sinIntencion":false}""";
         const string shift = "{\"idTurnoCaja\":17,\"estado\":\"Abierto\",\"fondoInicial\":10,\"totalEfectivo\":0,\"totalTarjeta\":0,\"totalTransferencia\":0,\"efectivoEsperado\":10,\"cantidadCuentasPendientes\":0}";
         var sink = new SnapshotSink { Accept = true };
-        var session = new EvidenceSession(status, $"{{\"estado\":\"{state}\"}}", evidence, shift);
+        var session = new EvidenceSession(status, $"{{\"estado\":\"{state}\",\"codigo\":\"OPERACION_NO_TERMINAL\"}}", evidence, shift);
         Assert.True(await new CajaRecoveryHttpTransport(session, sink).ReconcileAsync(id, 1, "CerrarTurno", default));
         Assert.Equal(17, sink.Last!.IdTurnoCaja);
         Assert.Equal(3, session.Calls);
@@ -272,13 +320,14 @@ public sealed class CajaRecoveryTransportTests
     {
         var id = Guid.NewGuid();
         var terminal = "{\"estado\":\"Completada\",\"codigo\":\"COBRO_REGISTRADO\",\"idCobro\":4,\"numeroComprobante\":9,\"idPedido\":3,\"idTurnoCaja\":2,\"total\":10,\"metodoPago\":\"Efectivo\",\"efectivoRecibido\":15,\"vuelto\":5}";
-        var receipt = $$"""{"idCobro":4,"numeroComprobante":9,"idOperacion":"{{id}}","idPedido":3,"idTurnoCaja":2,"idUsuario":1,"total":10,"subtotal":10,"impuestos":0,"metodoPago":"Efectivo","efectivoRecibido":15,"vuelto":5,"lineas":[{"orden":1,"nombreProducto":"Comida","cantidad":1,"precioUnitario":10,"subtotal":10}]}""";
+        var receipt = $$"""{"leyenda":"COMPROBANTE INTERNO — DEMOSTRACIÓN — NO ES FACTURA FISCAL","fechaHora":"2026-01-01T00:00:00Z","numeroMesa":1,"idGrupo":null,"numerosMesasGrupo":[],"idCobro":4,"numeroComprobante":9,"idOperacion":"{{id}}","idPedido":3,"idTurnoCaja":2,"idUsuario":1,"total":10,"subtotal":10,"impuestos":0,"metodoPago":"Efectivo","efectivoRecibido":15,"vuelto":5,"referenciaExterna":null,"lineas":[{"orden":1,"nombreProducto":"Comida","cantidad":1,"precioUnitario":10,"subtotal":10}]}""";
         var sink = new SnapshotSink { Accept = true };
         Assert.True(await new CajaRecoveryHttpTransport(new SnapshotSession(terminal, receipt), sink)
             .ReconcileAsync(id, 1, "CobrarCuenta", default));
         Assert.Equal(9, sink.Payment!.NumeroComprobante);
         Assert.Single(sink.Payment.Lineas);
         Assert.Equal(5m, sink.Payment.Vuelto);
+        Assert.Equal("Mesa 1", sink.Payment.Destino);
         var other = receipt.Replace(id.ToString(), Guid.NewGuid().ToString(), StringComparison.Ordinal);
         var rejected = new SnapshotSink { Accept = true };
         Assert.False(await new CajaRecoveryHttpTransport(new SnapshotSession(terminal, other), rejected)
@@ -290,6 +339,13 @@ public sealed class CajaRecoveryTransportTests
         var wrongChange = receipt.Replace("\"vuelto\":5", "\"vuelto\":4", StringComparison.Ordinal);
         Assert.False(await new CajaRecoveryHttpTransport(new SnapshotSession(terminal, wrongChange), rejected)
             .ReconcileAsync(id, 1, "CobrarCuenta", default));
+        foreach (var invalid in new[] {
+            receipt.Replace("\"numeroMesa\":1", "\"numeroMesa\":null", StringComparison.Ordinal),
+            receipt.Replace("2026-01-01T00:00:00Z", "invalid", StringComparison.Ordinal),
+            receipt.Replace("NO ES FACTURA FISCAL", "FACTURA", StringComparison.Ordinal),
+            receipt.Replace("\"referenciaExterna\":null", "\"referenciaExterna\":\"ref\"", StringComparison.Ordinal) })
+            Assert.False(await new CajaRecoveryHttpTransport(new SnapshotSession(terminal, invalid), rejected)
+                .ReconcileAsync(id, 1, "CobrarCuenta", default));
     }
 
     [Theory]
@@ -299,7 +355,7 @@ public sealed class CajaRecoveryTransportTests
     {
         var id = Guid.NewGuid();
         var terminal = $$"""{"estado":"Completada","codigo":"COBRO_REGISTRADO","idCobro":4,"numeroComprobante":9,"idPedido":3,"idTurnoCaja":2,"total":10,"metodoPago":"{{method}}"}""";
-        var receipt = $$"""{"idCobro":4,"numeroComprobante":9,"idOperacion":"{{id}}","idPedido":3,"idTurnoCaja":2,"idUsuario":1,"total":10,"subtotal":10,"impuestos":0,"metodoPago":"{{method}}","efectivoRecibido":null,"vuelto":null,"referenciaExterna":"REF-123","lineas":[{"orden":1,"nombreProducto":"Comida","cantidad":1,"precioUnitario":10,"subtotal":10}]}""";
+        var receipt = $$"""{"leyenda":"COMPROBANTE INTERNO — DEMOSTRACIÓN — NO ES FACTURA FISCAL","fechaHora":"2026-01-01T00:00:00Z","numeroMesa":null,"idGrupo":2,"numerosMesasGrupo":[1,2],"idCobro":4,"numeroComprobante":9,"idOperacion":"{{id}}","idPedido":3,"idTurnoCaja":2,"idUsuario":1,"total":10,"subtotal":10,"impuestos":0,"metodoPago":"{{method}}","efectivoRecibido":null,"vuelto":null,"referenciaExterna":"REF-123","lineas":[{"orden":1,"nombreProducto":"Comida","cantidad":1,"precioUnitario":10,"subtotal":10}]}""";
         var sink = new SnapshotSink { Accept = true };
         Assert.True(await new CajaRecoveryHttpTransport(new SnapshotSession(terminal, receipt), sink)
             .ReconcileAsync(id, 1, "CobrarCuenta", default));
@@ -507,13 +563,19 @@ public sealed class CajaRecoveryTransportTests
 
     private sealed class TestPolicy : ICajaRecoverySecurityPolicy { public bool IsProtected(string path) => true; }
 
-    private sealed class SnapshotSink : ICajaRecoverySnapshotSink
+    private sealed class SnapshotSink : ICajaRecoverySnapshotSink, ICajaRejectionSnapshotSink
     {
         public bool Accept { get; init; }
         public Action? OnShift { get; init; }
         public CajaTurnoSnapshot? Last { get; private set; }
         public CajaPagoSnapshot? Payment { get; private set; }
         public CajaCuentaRecoverySnapshot? Account { get; private set; }
+        public string? RejectionCode { get; private set; }
+        public Task<bool> ApplyPaymentRejectionAsync(string code, CajaCuentaRecoverySnapshot account, CajaTurnoSnapshot shift, CancellationToken cancellationToken)
+        {
+            RejectionCode = code;
+            return ApplyAccountAndShiftAsync(account, shift, cancellationToken);
+        }
         public string? BarrierType { get; private set; }
         public bool BarrierApplied { get; private set; }
         public Task<bool> ApplyBarrierAsync(string attemptedType, CajaTurnoSnapshot? currentShift, CancellationToken cancellationToken)

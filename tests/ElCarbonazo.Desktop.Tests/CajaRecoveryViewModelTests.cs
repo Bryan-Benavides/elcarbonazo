@@ -8,6 +8,129 @@ namespace ElCarbonazo.Desktop.Tests;
 
 public sealed class CajaRecoveryViewModelTests
 {
+    [Fact]
+    public async Task External_payment_session_change_during_execution_preserves_pending_operation()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"caja-session-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "journal.json");
+        var installation = Guid.NewGuid();
+        try
+        {
+            File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                version = 1,
+                instalacion = installation,
+                estado = "SinPendientes",
+                operacion = (Guid?)null,
+                propietario = (int?)null,
+                tipo = (string?)null
+            }));
+            File.WriteAllText(path + ".lock", "");
+            long generation = 1;
+            var store = new CajaRecoveryStore(path, installation, new Policy());
+            var vm = new CajaRecoveryViewModel(store, new FakeSession(), () => generation);
+            var transport = new ExternalCollisionTransport(vm) { OnExecute = () => generation++ };
+            vm.Attach(new CajaRecoveryCoordinator(store, transport, () => 1, sessionGeneration: () => generation));
+            vm.AttachShiftReader(new OpenShiftReader());
+            vm.AttachAccountsReader(new CashAccountsReader());
+            Assert.True(vm.Open(() => { }));
+            await vm.ConsultarTurnoCommand.ExecuteAsync(null);
+            await vm.ConsultarCuentasCommand.ExecuteAsync(null);
+            vm.SeleccionarCuentaCommand.Execute(vm.Cuentas[0]);
+            vm.MetodoPago = "Transferencia";
+            vm.ReferenciaPago = "DEMO";
+            vm.ConfirmarCobro = true;
+            vm.ConfirmarVerificacionExterna = true;
+            await vm.CobrarExternoCommand.ExecuteAsync(null);
+            Assert.Single(transport.Requests);
+            Assert.Equal("Pendiente", store.Read()!.Estado);
+            await vm.CobrarExternoCommand.ExecuteAsync(null);
+            Assert.Single(transport.Requests);
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(path + ".lock");
+            Directory.Delete(directory);
+        }
+    }
+
+    [Theory]
+    [InlineData("Tarjeta")]
+    [InlineData("Transferencia")]
+    public async Task External_collision_requires_reconciliation_fresh_review_and_second_confirmation(string method)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"caja-external-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "journal.json");
+        var installation = Guid.NewGuid();
+        try
+        {
+            File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                version = 1,
+                instalacion = installation,
+                estado = "SinPendientes",
+                operacion = (Guid?)null,
+                propietario = (int?)null,
+                tipo = (string?)null
+            }));
+            File.WriteAllText(path + ".lock", "");
+            var store = new CajaRecoveryStore(path, installation, new Policy());
+            var vm = new CajaRecoveryViewModel(store, new FakeSession(), () => 1);
+            var transport = new ExternalCollisionTransport(vm);
+            vm.Attach(new CajaRecoveryCoordinator(store, transport, () => 1));
+            vm.AttachShiftReader(new OpenShiftReader());
+            vm.AttachAccountsReader(new CashAccountsReader());
+            Assert.True(vm.Open(() => { }));
+            await vm.ConsultarTurnoCommand.ExecuteAsync(null);
+            await vm.ConsultarCuentasCommand.ExecuteAsync(null);
+            vm.SeleccionarCuentaCommand.Execute(vm.Cuentas[0]);
+            vm.MetodoPago = method;
+            vm.ReferenciaPago = "  cafe\u0301  ";
+            vm.ConfirmarCobro = true;
+            await vm.CobrarExternoCommand.ExecuteAsync(null);
+            Assert.Empty(transport.Requests);
+            vm.ConfirmarVerificacionExterna = true;
+            await vm.CobrarExternoCommand.ExecuteAsync(null);
+            Assert.Single(transport.Requests);
+            Assert.False(transport.Requests[0].Repeated);
+            Assert.Equal("café", transport.Requests[0].Reference);
+            Assert.Equal("TerminalPorConciliar", store.Read()!.Estado);
+            await vm.ConciliarCommand.ExecuteAsync(null);
+            Assert.Equal("SinPendientes", store.Read()!.Estado);
+            await vm.ConsultarTurnoCommand.ExecuteAsync(null);
+            await vm.ConsultarCuentasCommand.ExecuteAsync(null);
+            vm.SeleccionarCuentaCommand.Execute(vm.Cuentas[0]);
+            vm.MetodoPago = method;
+            vm.ReferenciaPago = "café";
+            vm.ConfirmarCobro = true;
+            vm.ConfirmarVerificacionExterna = true;
+            await vm.CobrarExternoCommand.ExecuteAsync(null);
+            Assert.Single(transport.Requests);
+            vm.ConfirmarReferenciaRepetida = true;
+            vm.ReferenciaPago = "café-modificado";
+            Assert.False(vm.ConfirmarReferenciaRepetida);
+            Assert.False(vm.ConfirmarVerificacionExterna);
+            vm.ReferenciaPago = "café";
+            vm.ConfirmarCobro = true;
+            vm.ConfirmarVerificacionExterna = true;
+            vm.ConfirmarReferenciaRepetida = true;
+            await vm.CobrarExternoCommand.ExecuteAsync(null);
+            Assert.Equal(2, transport.Requests.Count);
+            Assert.True(transport.Requests[1].Repeated);
+            Assert.NotEqual(transport.Requests[0].Operation, transport.Requests[1].Operation);
+            Assert.Equal("SinPendientes", store.Read()!.Estado);
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(path + ".lock");
+            Directory.Delete(directory);
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -131,7 +254,13 @@ public sealed class CajaRecoveryViewModelTests
             Assert.Equal(1, transport.Prepares);
             Assert.Equal(1, transport.Executions);
             Assert.Equal(uncertain ? "Pendiente" : reconciliationFails ? "TerminalPorConciliar" : "SinPendientes", store.Read()!.Estado);
-            if (!uncertain && !reconciliationFails) Assert.Contains("vuelto", vm.Fotografia, StringComparison.OrdinalIgnoreCase);
+            if (!uncertain && !reconciliationFails)
+            {
+                Assert.Contains("vuelto", vm.Fotografia, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("Comida", vm.Fotografia, StringComparison.Ordinal);
+                Assert.Contains("subtotal", vm.Fotografia, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("NO ES FACTURA FISCAL", vm.Fotografia, StringComparison.Ordinal);
+            }
             await vm.CobrarEfectivoCommand.ExecuteAsync(null);
             Assert.Equal(1, transport.Executions);
         }
@@ -267,6 +396,29 @@ public sealed class CajaRecoveryViewModelTests
     {
         public Task<(bool Valid, CajaTurnoSnapshot? Snapshot)> ReadCurrentShiftAsync(int actor, CancellationToken cancellationToken) =>
             Task.FromResult<(bool, CajaTurnoSnapshot?)>((true, new CajaTurnoSnapshot(17, "Abierto", 0, 0, 0, 0, 0, 0)));
+    }
+
+    private sealed class ExternalCollisionTransport(CajaRecoveryViewModel sink) : ICajaRecoveryTransport
+    {
+        public Action? OnExecute { get; init; }
+        public List<(Guid Operation, string? Reference, bool Repeated)> Requests { get; } = [];
+        public Task<CajaRecoveryOutcome> PrepareAsync(Guid operation, int actor, string type, object? arguments, CancellationToken cancellationToken)
+        {
+            using var json = JsonDocument.Parse(JsonSerializer.Serialize(arguments));
+            Assert.True(json.RootElement.GetProperty("verificacionExterna").GetBoolean());
+            Requests.Add((operation, json.RootElement.GetProperty("referencia").GetString(), json.RootElement.GetProperty("referenciaRepetida").GetBoolean()));
+            return Task.FromResult(CajaRecoveryOutcome.Prepared);
+        }
+        public Task<CajaRecoveryOutcome> ExecuteAsync(Guid operation, int actor, CancellationToken cancellationToken)
+        {
+            OnExecute?.Invoke();
+            return Task.FromResult(Requests.Count == 1 ? CajaRecoveryOutcome.Rejected : CajaRecoveryOutcome.Completed);
+        }
+        public Task<CajaRecoveryOutcome> QueryAsync(Guid operation, int actor, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<CajaRecoveryOutcome> CancelAsync(Guid operation, int actor, bool confirmaIntervencion, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> ReconcileAsync(Guid operation, int actor, string type, CancellationToken cancellationToken) => Requests.Count == 1
+            ? sink.ApplyPaymentRejectionAsync("REFERENCIA_REQUIERE_CONFIRMACION", new CajaCuentaRecoverySnapshot(3, "Listo", 10, true, null), new CajaTurnoSnapshot(17, "Abierto", 0, 0, 0, 0, 0, 0), cancellationToken)
+            : sink.ApplyPaymentAsync(new CajaPagoSnapshot(4, 8, 3, 17, 1, 10, "Tarjeta", [new CajaPagoLineaSnapshot(1, "Comida", 1, 10, 10)]), cancellationToken);
     }
 
     private sealed class ClosingTransport(ICajaRecoverySnapshotSink sink, bool uncertain) : ICajaRecoveryTransport
