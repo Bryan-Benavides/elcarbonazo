@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text;
 
 namespace ElCarbonazo.Desktop.Services;
 
@@ -8,7 +9,8 @@ public sealed record CajaTurnoSnapshot(int IdTurnoCaja, string Estado, decimal F
     decimal TotalTarjeta, decimal TotalTransferencia, decimal EfectivoEsperado, int CantidadCuentasPendientes);
 public sealed record CajaPagoLineaSnapshot(int Orden, string NombreProducto, int Cantidad, decimal PrecioUnitario, decimal Subtotal);
 public sealed record CajaPagoSnapshot(long IdCobro, long NumeroComprobante, int IdPedido, int IdTurnoCaja,
-    int IdUsuario, decimal Total, string MetodoPago, IReadOnlyList<CajaPagoLineaSnapshot> Lineas);
+    int IdUsuario, decimal Total, string MetodoPago, IReadOnlyList<CajaPagoLineaSnapshot> Lineas,
+    decimal? EfectivoRecibido = null, decimal? Vuelto = null);
 // Recovery summary is informational; it must not replace a fresh, detailed account review before charging.
 public sealed record CajaCuentaRecoverySnapshot(int IdPedido, string Estado, decimal Total, bool Cobrable, string? Motivo);
 
@@ -24,7 +26,12 @@ public interface ICajaRecoverySnapshotSink
     Task<bool> ApplyBarrierAsync(string attemptedType, CajaTurnoSnapshot? currentShift, CancellationToken cancellationToken);
 }
 
-public sealed class CajaRecoveryHttpTransport(ICajaSessionSender session, ICajaRecoverySnapshotSink? sink = null) : ICajaRecoveryTransport
+public interface ICajaTurnoActualReader
+{
+    Task<(bool Valid, CajaTurnoSnapshot? Snapshot)> ReadCurrentShiftAsync(int actor, CancellationToken cancellationToken);
+}
+
+public sealed class CajaRecoveryHttpTransport(ICajaSessionSender session, ICajaRecoverySnapshotSink? sink = null) : ICajaRecoveryTransport, ICajaTurnoActualReader
 {
     public async Task<CajaRecoveryOutcome> PrepareAsync(Guid operation, int actor, string type, object? arguments, CancellationToken cancellationToken)
     {
@@ -136,7 +143,7 @@ public sealed class CajaRecoveryHttpTransport(ICajaSessionSender session, ICajaR
         return valid && await sink.ApplyBarrierAsync(type, snapshot, ct);
     }
 
-    private async Task<(bool Valid, CajaTurnoSnapshot? Snapshot)> ReadCurrentShiftAsync(int actor, CancellationToken ct)
+    public async Task<(bool Valid, CajaTurnoSnapshot? Snapshot)> ReadCurrentShiftAsync(int actor, CancellationToken ct)
     {
         using var response = await session.SendCajaOnceAsync(actor,
             () => new HttpRequestMessage(HttpMethod.Get, "api/caja/turno/actual"), true, ct);
@@ -267,7 +274,33 @@ public sealed class CajaRecoveryHttpTransport(ICajaSessionSender session, ICajaR
             snapshots.Add(new CajaPagoLineaSnapshot(position, name, quantity, price, lineTotal));
         }
         if (sum != total) return false;
-        return await sink.ApplyPaymentAsync(new CajaPagoSnapshot(paymentId, number, orderId, shiftId, owner, total, method!, snapshots), ct);
+        decimal? cash = null, change = null;
+        if (method == "Efectivo")
+        {
+            if (!TryMoney(root, "efectivoRecibido", out var received) || !TryMoney(root, "vuelto", out var returned) ||
+                received < total || returned != received - total ||
+                !TryMoney(terminal, "efectivoRecibido", out var terminalReceived) || terminalReceived != received ||
+                !TryMoney(terminal, "vuelto", out var terminalChange) || terminalChange != returned) return false;
+            cash = received;
+            change = returned;
+        }
+        else
+        {
+            if (!IsNull(root, "efectivoRecibido") || !IsNull(root, "vuelto") ||
+                !TryString(root, "referenciaExterna", out var reference) || !ValidExternalReference(reference)) return false;
+        }
+        return await sink.ApplyPaymentAsync(new CajaPagoSnapshot(paymentId, number, orderId, shiftId, owner, total, method!, snapshots, cash, change), ct);
+    }
+
+    private static bool ValidExternalReference(string? reference)
+    {
+        if (string.IsNullOrWhiteSpace(reference)) return false;
+        try
+        {
+            return reference == reference.Normalize(NormalizationForm.FormC).Trim() &&
+                reference.EnumerateRunes().Count() <= 100 && !reference.EnumerateRunes().Any(Rune.IsControl);
+        }
+        catch (ArgumentException) { return false; }
     }
 
     private static async Task<JsonDocument?> ReadObjectAsync(HttpResponseMessage response, CancellationToken ct, int limit = 16384)

@@ -50,6 +50,8 @@ try
     Console.WriteLine("Pulse Ctrl+C aquí para cerrar la API temporal y eliminar su base de prueba.");
     if (args.Contains("--pedidos-smoke", StringComparer.Ordinal))
         await PedidosSmoke.RunAsync(client, stopping.Token);
+    else if (args.Contains("--caja-smoke", StringComparer.Ordinal))
+        await CajaSmoke.RunAsync(client, database, stopping.Token);
     else if (args.Contains("--cadencia", StringComparer.Ordinal))
         await CadenciaLocal.RunAsync(client, stopping.Token);
     else if (args.Contains("--medir", StringComparer.Ordinal))

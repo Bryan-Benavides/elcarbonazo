@@ -52,11 +52,14 @@ public partial class App : Application
                         var store = new CajaRecoveryStore(System.IO.Path.Combine(directory, "caja-journal.json"),
                             configuration.IdInstalacion, new WindowsCajaRecoverySecurityPolicy(directory, sid));
                         recoveryPanel = new CajaRecoveryViewModel(store, _sessionManager, () => _sessionManager.CajaSessionGeneration);
-                        CajaRecovery = new CajaRecoveryCoordinator(store, new CajaRecoveryHttpTransport(_sessionManager, recoveryPanel),
+                        var cajaTransport = new CajaRecoveryHttpTransport(_sessionManager, recoveryPanel);
+                        CajaRecovery = new CajaRecoveryCoordinator(store, cajaTransport,
                             () => _sessionManager.CurrentSession?.IdUsuario,
                             () => _sessionManager.CurrentSession?.Rol == "Jefa",
                             () => _sessionManager.CajaSessionGeneration);
                         recoveryPanel.Attach(CajaRecovery);
+                        recoveryPanel.AttachShiftReader(cajaTransport);
+                        recoveryPanel.AttachAccountsReader(new CajaCuentasReader(_sessionManager));
                     }
                 }
                 initialViewModel = new LoginViewModel(_sessionManager, navigation, recoveryPanel);

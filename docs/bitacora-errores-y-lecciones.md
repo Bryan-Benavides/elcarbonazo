@@ -1,5 +1,16 @@
 # Bitácora de errores y lecciones — El Carbonazo
 
+### 004: resultado JSON durable no conserva el orden textual de propiedades
+
+- **Hecho confirmado en pruebas:** PostgreSQL JSONB puede devolver un resultado reproducido con propiedades reordenadas y espacios distintos al resultado inicial, sin cambiar sus valores.
+- **Control:** comparar el contenido JSON semánticamente al verificar reproducción de una operación; no asumir igualdad textual ni alterar el resultado de negocio por diferencias de formato.
+
+### 004: listado informativo sin huella no sirve para confirmar un cobro
+
+- **Hecho confirmado por revisión:** el lector Desktop original mostraba importe y líneas, pero descartaba `huellaLineas`; por tanto, esa fotografía no podía utilizarse para construir el contrato de cobro aprobado.
+- **Control:** el lector conserva y valida la huella y exige campos esenciales del detalle para cuentas cobrables. La API sigue revalidando bajo locks; el GET no garantiza que la cuenta permanezca vigente.
+- **Evidencia y límite:** pruebas Desktop con respuestas HTTP ficticias rechazan huella o detalle incompletos; queda pendiente la integración de la pantalla con API real y la revisión visual.
+
 ### 004: identidad del actor no distingue dos sesiones
 
 - **Hecho confirmado por revisión y prueba con generación simulada:** comprobar únicamente el ID del actor permite confundir la sesión que observó una preparación con otra sesión posterior del mismo usuario.

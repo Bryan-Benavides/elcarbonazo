@@ -100,7 +100,7 @@
                         <TextBlock Text="Mesas" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" />
                     </Border>
                     <Button Classes="navegacion-cocina" Content="Cocina" Padding="12,10" IsVisible="{Binding RolPuedeCocina}" IsEnabled="{Binding PuedeAbrirCocina}" Command="{Binding AbrirCocinaCommand}" HorizontalAlignment="Stretch" />
-                    <Button Classes="navegacion-cocina" Content="Recuperación de caja" Padding="12,10" IsVisible="{Binding RolPuedeRecuperarCaja}" IsEnabled="{Binding PuedeAbrirRecuperacionCaja}" Command="{Binding AbrirRecuperacionCajaCommand}" HorizontalAlignment="Stretch" />
+                    <Button Classes="navegacion-cocina" Content="Caja y recuperación" Padding="12,10" IsVisible="{Binding RolPuedeRecuperarCaja}" IsEnabled="{Binding PuedeAbrirRecuperacionCaja}" Command="{Binding AbrirRecuperacionCajaCommand}" HorizontalAlignment="Stretch" />
                 </StackPanel>
                 <StackPanel Grid.Row="2" Spacing="6">
                     <TextBlock Text="{Binding Nombre}" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" TextTrimming="CharacterEllipsis" />

@@ -249,6 +249,93 @@ public sealed class ApiFlowTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync($"/api/caja/comprobantes/{cobroId}")).StatusCode);
     }
 
+    [Fact]
+    public async Task Caja_concurrent_external_reference_collision_records_only_one_unconfirmed_payment()
+    {
+        await using (var setup = _database.CreateContext())
+        {
+            var product = new Producto { Nombre = "Producto", Categoria = "Comida", Precio = 10m, Disponible = true };
+            setup.Productos.Add(product);
+            await setup.SaveChangesAsync();
+            foreach (var mesaId in new[] { 1, 2 })
+            {
+                (await setup.Mesas.SingleAsync(x => x.IdMesa == mesaId)).Estado = MesaStates.Ocupada;
+                var order = new Pedido
+                {
+                    IdMesa = mesaId,
+                    IdUsuario = 1,
+                    FechaHora = DateTimeOffset.UtcNow,
+                    Estado = PedidoStates.Listo,
+                    Subtotal = 10m,
+                    Total = 10m
+                };
+                setup.Pedidos.Add(order);
+                await setup.SaveChangesAsync();
+                var command = new Comanda { IdPedido = order.IdPedido, IdUsuario = 1, FechaHora = DateTimeOffset.UtcNow, Estado = "Lista" };
+                command.Detalles.Add(new DetallePedido
+                {
+                    IdProducto = product.IdProducto,
+                    NombreProducto = product.Nombre,
+                    Cantidad = 1,
+                    PrecioUnitario = 10m,
+                    Subtotal = 10m,
+                    Notas = ""
+                });
+                setup.Comandas.Add(command);
+                await setup.SaveChangesAsync();
+            }
+        }
+        var token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var opening = $"/api/caja/operaciones/{Guid.NewGuid()}";
+        Assert.Equal(HttpStatusCode.OK, (await _client.PutAsJsonAsync(opening, new { tipo = "AbrirTurno", version = 1, argumentos = new { fondoInicial = 0m, confirmado = true } })).StatusCode);
+        using var opened = await _client.PostAsJsonAsync(opening + "/ejecucion", new { });
+        Assert.Equal(HttpStatusCode.Created, opened.StatusCode);
+        var shift = (await opened.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("idTurnoCaja").GetInt32();
+        var page = await _client.GetFromJsonAsync<JsonElement>("/api/caja/cuentas");
+        var accounts = page.GetProperty("items").EnumerateArray().ToArray();
+        Assert.Equal(2, accounts.Length);
+        var urls = new List<string>();
+        foreach (var account in accounts)
+        {
+            var url = $"/api/caja/operaciones/{Guid.NewGuid()}";
+            using var prepared = await _client.PutAsJsonAsync(url, new
+            {
+                tipo = "CobrarCuenta",
+                version = 1,
+                argumentos = new
+                {
+                    pedidoId = account.GetProperty("idPedido").GetInt32(),
+                    turnoId = shift,
+                    totalVisto = 10m,
+                    huellaLineas = account.GetProperty("huellaLineas").GetString(),
+                    metodo = "Transferencia",
+                    efectivoRecibido = (decimal?)null,
+                    referencia = "ref-concurrente",
+                    verificacionExterna = true,
+                    referenciaRepetida = false
+                }
+            });
+            Assert.Equal(HttpStatusCode.OK, prepared.StatusCode);
+            urls.Add(url);
+        }
+        var responses = await Task.WhenAll(urls.Select(url => _client.PostAsJsonAsync(url + "/ejecucion", new { })));
+        try
+        {
+            Assert.Single(responses, response => response.StatusCode == HttpStatusCode.Created);
+            var conflict = Assert.Single(responses, response => response.StatusCode == HttpStatusCode.Conflict);
+            Assert.Equal("REFERENCIA_REQUIERE_CONFIRMACION", (await conflict.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("codigo").GetString());
+            await using var verify = _database.CreateContext();
+            Assert.Equal(1, await verify.Cobros.CountAsync());
+            Assert.Equal(1, await verify.Pedidos.CountAsync(x => x.Estado == PedidoStates.Pagado));
+            Assert.Equal(1, await verify.OperacionesCaja.CountAsync(x => x.Tipo == "CobrarCuenta" && x.Estado == CajaStates.OperacionRechazada));
+        }
+        finally
+        {
+            foreach (var response in responses) response.Dispose();
+        }
+    }
+
     [Theory]
     [InlineData("Tarjeta")]
     [InlineData("Transferencia")]
@@ -662,6 +749,32 @@ public sealed class ApiFlowTests : IAsyncLifetime
         await using var verify = _database.CreateContext();
         Assert.Equal(1, await verify.EventosAuditoria.CountAsync(x => x.TipoEvento == "OperacionCajaCancelada"));
         Assert.Empty(await verify.TurnosCaja.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Caja_completed_opening_survives_api_restart_and_replays_without_duplicate_mutation()
+    {
+        var url = $"/api/caja/operaciones/{Guid.NewGuid()}";
+        var token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Assert.Equal(HttpStatusCode.OK, (await _client.PutAsJsonAsync(url,
+            new { tipo = "AbrirTurno", version = 1, argumentos = new { fondoInicial = 0m, confirmado = true } })).StatusCode);
+        using (var response = await _client.PostAsJsonAsync(url + "/ejecucion", new { }))
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        _client.Dispose();
+        await _factory.DisposeAsync();
+        _factory = new TestApiFactory(_database.ConnectionString, _database.LogDirectory);
+        _client = _factory.CreateClient();
+        token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var result = await _client.GetFromJsonAsync<JsonElement>(url);
+        Assert.Equal("Completada", result.GetProperty("estado").GetString());
+        using var replay = await _client.PostAsJsonAsync(url + "/ejecucion", new { });
+        Assert.Equal(HttpStatusCode.Created, replay.StatusCode);
+        Assert.True(JsonElement.DeepEquals(result, await replay.Content.ReadFromJsonAsync<JsonElement>()));
+        await using var verify = _database.CreateContext();
+        Assert.Equal(1, await verify.TurnosCaja.CountAsync());
+        Assert.Equal(1, await verify.EventosAuditoria.CountAsync(x => x.TipoEvento == "TurnoCajaAbierto"));
     }
 
     [Fact]

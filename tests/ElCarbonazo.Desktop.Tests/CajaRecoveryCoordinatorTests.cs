@@ -6,6 +6,34 @@ namespace ElCarbonazo.Desktop.Tests;
 
 public sealed class CajaRecoveryCoordinatorTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Session_change_during_write_keeps_original_journal_until_explicit_recovery(bool execute)
+    {
+        using var fixture = new Fixture();
+        long generation = 1;
+        var transport = new FakeTransport
+        {
+            OnExecute = () => generation++,
+            OnCancel = () => generation++,
+            ExecuteResult = CajaRecoveryOutcome.Completed
+        };
+        var coordinator = new CajaRecoveryCoordinator(fixture.Store, transport, () => 1, sessionGeneration: () => generation);
+        var id = Guid.NewGuid();
+        Assert.Equal(CajaRecoveryOutcome.Prepared, await coordinator.BeginAsync(id, 1, "CobrarCuenta"));
+        var result = execute ? await coordinator.ExecuteAsync() : await coordinator.CancelAsync();
+        Assert.Equal(CajaRecoveryOutcome.Uncertain, result);
+        Assert.Equal(id, fixture.Store.Read()!.Operacion);
+        Assert.Equal("Pendiente", fixture.Store.Read()!.Estado);
+        Assert.False(await coordinator.ReconcileAsync());
+        Assert.Equal(CajaRecoveryOutcome.Uncertain, await coordinator.ExecuteAsync());
+        Assert.Equal(execute ? 1 : 0, transport.ExecuteCalls);
+        transport.QueryResult = execute ? CajaRecoveryOutcome.Completed : CajaRecoveryOutcome.Cancelled;
+        Assert.Equal(transport.QueryResult, await coordinator.RecoverAsync());
+        Assert.Equal("TerminalPorConciliar", fixture.Store.Read()!.Estado);
+    }
+
     [Fact]
     public async Task Same_actor_new_session_cannot_execute_previous_preparation_or_clear_journal()
     {
@@ -164,9 +192,12 @@ public sealed class CajaRecoveryCoordinatorTests
     {
         public bool PrepareError { get; init; }
         public Action? OnPrepare { get; init; }
+        public Action? OnExecute { get; init; }
+        public Action? OnCancel { get; init; }
         public Action? OnReconcile { get; set; }
         public CajaRecoveryOutcome PrepareResult { get; init; } = CajaRecoveryOutcome.Prepared;
         public CajaRecoveryOutcome QueryResult { get; set; }
+        public CajaRecoveryOutcome ExecuteResult { get; init; } = CajaRecoveryOutcome.Uncertain;
         public bool ReconcileResult { get; set; }
         public int PrepareCalls { get; private set; }
         public int QueryCalls { get; private set; }
@@ -189,6 +220,7 @@ public sealed class CajaRecoveryCoordinatorTests
         public Task<CajaRecoveryOutcome> CancelAsync(Guid operation, int actor, bool confirmaIntervencion, CancellationToken cancellationToken)
         {
             CancelCalls++;
+            OnCancel?.Invoke();
             LastActor = actor;
             SupervisionConfirmed = confirmaIntervencion;
             return Task.FromResult(CajaRecoveryOutcome.Cancelled);
@@ -196,7 +228,8 @@ public sealed class CajaRecoveryCoordinatorTests
         public Task<CajaRecoveryOutcome> ExecuteAsync(Guid operation, int actor, CancellationToken cancellationToken)
         {
             ExecuteCalls++;
-            return Task.FromResult(CajaRecoveryOutcome.Uncertain);
+            OnExecute?.Invoke();
+            return Task.FromResult(ExecuteResult);
         }
         public Task<bool> ReconcileAsync(Guid operation, int actor, string type, CancellationToken cancellationToken)
         {

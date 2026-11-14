@@ -49,8 +49,12 @@ public sealed class CajaRecoveryTransportTests
         {
             File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(new
             {
-                version = 1, instalacion = installation, estado = "SinPendientes", operacion = (Guid?)null,
-                propietario = (int?)null, tipo = (string?)null
+                version = 1,
+                instalacion = installation,
+                estado = "SinPendientes",
+                operacion = (Guid?)null,
+                propietario = (int?)null,
+                tipo = (string?)null
             }));
             File.WriteAllText(path + ".lock", "");
             var store = new CajaRecoveryStore(path, installation, new TestPolicy());
@@ -119,8 +123,12 @@ public sealed class CajaRecoveryTransportTests
         {
             File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(new
             {
-                version = 1, instalacion = installation, estado = "SinPendientes", operacion = (Guid?)null,
-                propietario = (int?)null, tipo = (string?)null
+                version = 1,
+                instalacion = installation,
+                estado = "SinPendientes",
+                operacion = (Guid?)null,
+                propietario = (int?)null,
+                tipo = (string?)null
             }));
             File.WriteAllText(path + ".lock", "");
             var store = new CajaRecoveryStore(path, installation, new TestPolicy());
@@ -225,8 +233,12 @@ public sealed class CajaRecoveryTransportTests
         {
             File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(new
             {
-                version = 1, instalacion = installation, estado = "SinPendientes", operacion = (Guid?)null,
-                propietario = (int?)null, tipo = (string?)null
+                version = 1,
+                instalacion = installation,
+                estado = "SinPendientes",
+                operacion = (Guid?)null,
+                propietario = (int?)null,
+                tipo = (string?)null
             }));
             File.WriteAllText(path + ".lock", "");
             var store = new CajaRecoveryStore(path, installation, new TestPolicy());
@@ -259,13 +271,14 @@ public sealed class CajaRecoveryTransportTests
     public async Task Reconcile_payment_requires_matching_operation_receipt_and_historical_lines()
     {
         var id = Guid.NewGuid();
-        var terminal = "{\"estado\":\"Completada\",\"codigo\":\"COBRO_REGISTRADO\",\"idCobro\":4,\"numeroComprobante\":9,\"idPedido\":3,\"idTurnoCaja\":2,\"total\":10,\"metodoPago\":\"Efectivo\"}";
-        var receipt = $$"""{"idCobro":4,"numeroComprobante":9,"idOperacion":"{{id}}","idPedido":3,"idTurnoCaja":2,"idUsuario":1,"total":10,"subtotal":10,"impuestos":0,"metodoPago":"Efectivo","lineas":[{"orden":1,"nombreProducto":"Comida","cantidad":1,"precioUnitario":10,"subtotal":10}]}""";
+        var terminal = "{\"estado\":\"Completada\",\"codigo\":\"COBRO_REGISTRADO\",\"idCobro\":4,\"numeroComprobante\":9,\"idPedido\":3,\"idTurnoCaja\":2,\"total\":10,\"metodoPago\":\"Efectivo\",\"efectivoRecibido\":15,\"vuelto\":5}";
+        var receipt = $$"""{"idCobro":4,"numeroComprobante":9,"idOperacion":"{{id}}","idPedido":3,"idTurnoCaja":2,"idUsuario":1,"total":10,"subtotal":10,"impuestos":0,"metodoPago":"Efectivo","efectivoRecibido":15,"vuelto":5,"lineas":[{"orden":1,"nombreProducto":"Comida","cantidad":1,"precioUnitario":10,"subtotal":10}]}""";
         var sink = new SnapshotSink { Accept = true };
         Assert.True(await new CajaRecoveryHttpTransport(new SnapshotSession(terminal, receipt), sink)
             .ReconcileAsync(id, 1, "CobrarCuenta", default));
         Assert.Equal(9, sink.Payment!.NumeroComprobante);
         Assert.Single(sink.Payment.Lineas);
+        Assert.Equal(5m, sink.Payment.Vuelto);
         var other = receipt.Replace(id.ToString(), Guid.NewGuid().ToString(), StringComparison.Ordinal);
         var rejected = new SnapshotSink { Accept = true };
         Assert.False(await new CajaRecoveryHttpTransport(new SnapshotSession(terminal, other), rejected)
@@ -274,6 +287,34 @@ public sealed class CajaRecoveryTransportTests
         var wrongTotal = receipt.Replace("\"subtotal\":10}", "\"subtotal\":9}", StringComparison.Ordinal);
         Assert.False(await new CajaRecoveryHttpTransport(new SnapshotSession(terminal, wrongTotal), rejected)
             .ReconcileAsync(id, 1, "CobrarCuenta", default));
+        var wrongChange = receipt.Replace("\"vuelto\":5", "\"vuelto\":4", StringComparison.Ordinal);
+        Assert.False(await new CajaRecoveryHttpTransport(new SnapshotSession(terminal, wrongChange), rejected)
+            .ReconcileAsync(id, 1, "CobrarCuenta", default));
+    }
+
+    [Theory]
+    [InlineData("Tarjeta")]
+    [InlineData("Transferencia")]
+    public async Task External_payment_receipt_requires_valid_reference_and_no_cash(string method)
+    {
+        var id = Guid.NewGuid();
+        var terminal = $$"""{"estado":"Completada","codigo":"COBRO_REGISTRADO","idCobro":4,"numeroComprobante":9,"idPedido":3,"idTurnoCaja":2,"total":10,"metodoPago":"{{method}}"}""";
+        var receipt = $$"""{"idCobro":4,"numeroComprobante":9,"idOperacion":"{{id}}","idPedido":3,"idTurnoCaja":2,"idUsuario":1,"total":10,"subtotal":10,"impuestos":0,"metodoPago":"{{method}}","efectivoRecibido":null,"vuelto":null,"referenciaExterna":"REF-123","lineas":[{"orden":1,"nombreProducto":"Comida","cantidad":1,"precioUnitario":10,"subtotal":10}]}""";
+        var sink = new SnapshotSink { Accept = true };
+        Assert.True(await new CajaRecoveryHttpTransport(new SnapshotSession(terminal, receipt), sink)
+            .ReconcileAsync(id, 1, "CobrarCuenta", default));
+        foreach (var invalid in new[] {
+            receipt.Replace("REF-123", "", StringComparison.Ordinal),
+            receipt.Replace("REF-123", " REF-123", StringComparison.Ordinal),
+            receipt.Replace("REF-123", "REF\\n123", StringComparison.Ordinal),
+            receipt.Replace("\"efectivoRecibido\":null", "\"efectivoRecibido\":10", StringComparison.Ordinal),
+            receipt.Replace("\"referenciaExterna\":\"REF-123\",", "", StringComparison.Ordinal) })
+        {
+            var rejected = new SnapshotSink { Accept = true };
+            Assert.False(await new CajaRecoveryHttpTransport(new SnapshotSession(terminal, invalid), rejected)
+                .ReconcileAsync(id, 1, "CobrarCuenta", default));
+            Assert.Null(rejected.Payment);
+        }
     }
 
     [Fact]
@@ -405,6 +446,62 @@ public sealed class CajaRecoveryTransportTests
             File.Delete(path);
             File.Delete(path + ".lock");
             Directory.Delete(directory);
+        }
+    }
+
+    [Theory]
+    [InlineData("{")]
+    [InlineData("{\"estado\":\"Completada\",\"estado\":\"Preparada\"}")]
+    [InlineData("{\"codigo\":\"COBRO_REGISTRADO\"}")]
+    public async Task Invalid_execution_response_keeps_journal_and_cannot_rearm_execution(string body)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"caja-invalid-response-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "journal.json");
+        var installation = Guid.NewGuid();
+        try
+        {
+            File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                version = 1,
+                instalacion = installation,
+                estado = "SinPendientes",
+                operacion = (Guid?)null,
+                propietario = (int?)null,
+                tipo = (string?)null
+            }));
+            File.WriteAllText(path + ".lock", "");
+            var store = new CajaRecoveryStore(path, installation, new TestPolicy());
+            var sender = new InvalidExecutionSession(body);
+            var coordinator = new CajaRecoveryCoordinator(store, new CajaRecoveryHttpTransport(sender), () => 1);
+            var id = Guid.NewGuid();
+            Assert.Equal(CajaRecoveryOutcome.Prepared, await coordinator.BeginAsync(id, 1, "AbrirTurno", arguments: new { fondoInicial = 0, confirmado = true }));
+            Assert.Equal(CajaRecoveryOutcome.Uncertain, await coordinator.ExecuteAsync());
+            Assert.Equal(id, store.Read()!.Operacion);
+            Assert.Equal("Pendiente", store.Read()!.Estado);
+            Assert.Equal(CajaRecoveryOutcome.Prepared, await coordinator.RecoverAsync());
+            Assert.Equal(CajaRecoveryOutcome.Uncertain, await coordinator.ExecuteAsync());
+            Assert.Equal(1, sender.Executions);
+            Assert.False(await coordinator.ReconcileAsync());
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(path + ".lock");
+            Directory.Delete(directory);
+        }
+    }
+
+    private sealed class InvalidExecutionSession(string body) : ICajaSessionSender
+    {
+        public int Executions { get; private set; }
+        public Task<HttpResponseMessage> SendCajaOnceAsync(int expectedActor, Func<HttpRequestMessage> requestFactory, bool isRead, CancellationToken cancellationToken = default)
+        {
+            using var request = requestFactory();
+            var execution = request.RequestUri!.ToString().EndsWith("/ejecucion", StringComparison.Ordinal);
+            if (execution) Executions++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            { Content = new StringContent(execution ? body : "{\"estado\":\"Preparada\"}") });
         }
     }
 
