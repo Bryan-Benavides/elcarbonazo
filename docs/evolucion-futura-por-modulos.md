@@ -86,7 +86,7 @@ La especificación 003 define recepción, orden FIFO, estados, notas, roles y co
 
 ## 8. Inventario, ingredientes y recetas
 
-**Avance 005:** persistencia y API de inventario, recetas y descuento al enviar están implementadas y probadas en bases temporales. La interfaz y aceptación integral quedan pendientes; consultar `specs/005-inventario-escandallo/tasks.md` y `docs/validacion-005.md`.
+**Avance 005:** persistencia, API e interfaz de inventario y recetas están implementadas y aceptadas para el perfil universitario local, con los límites documentados en `specs/005-inventario-escandallo/tasks.md` y `docs/validacion-005.md`.
 
 **Base de dominio:** el diccionario describe ingredientes, recetas y sus relaciones; no se declara implementada una operación completa de inventario.
 

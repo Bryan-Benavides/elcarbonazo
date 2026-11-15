@@ -1,6 +1,6 @@
 # Tareas 005 — Inventario y escandallo
 
-**Estado: C1 y C2 completados para el perfil universitario local aislado; C3–C4 pendientes.** La API aplica inventario al enviar, pero aún falta la interfaz y la aceptación integral de 005. No autoriza migraciones a bases persistentes.
+**Estado: C1–C4 completados para el perfil universitario local aislado.** El usuario confirmó que sus revisiones están bien; no detalló individualmente los escenarios examinados. No autoriza migraciones a bases persistentes.
 
 ## D0 — Especificación y decisión
 
@@ -32,18 +32,20 @@ Formato, build y 232 pruebas Desktop pasaron. Una ejecución completa de API ter
 
 ## C3 — Desktop
 
-**Avance:** Pedidos muestra faltantes validados y conserva el borrador. La vista incluye consulta y filtro de ingredientes, alertas, kardex paginado y, para Jefa, creación/edición de ingredientes, entradas/ajustes y escandallo editable con versión, selección y confirmación. El coordinador compartido conserva el bloqueo incierto al cerrar/reabrir y no usa GET para desbloquear. Pasaron formato, build y 256 pruebas Desktop. `AcceptanceHost --inventario-smoke` comprobó creación, entrada, edición, kardex y guardado de receta con ViewModel/REST y PostgreSQL temporal; usa sesión adaptada y no abre ventana. Faltan buscador de productos, ampliar pruebas de formularios/errores y revisión visual de estados reales; C3 sigue abierto.
+**Evidencia C3:** búsqueda paginada de productos, filtro de ingredientes, alertas y kardex; para Jefa, creación/edición, entradas/ajustes y escandallo con versión y confirmación. Pedidos conserva borrador ante faltantes. El coordinador compartido conserva el bloqueo incierto al cerrar/reabrir y no usa GET para desbloquear. Pruebas de búsqueda y cursor, filtros que cambian y vuelven, lecturas fallidas u obsoletas, versiones, validación, sesión e incertidumbre; no son matriz exhaustiva. La suite final pasó 141 API y 262 Desktop, formato, build y auditoría sin vulnerabilidades reportadas. `AcceptanceHost --inventario-smoke` pasó con ViewModel/REST y PostgreSQL temporal, sesión adaptada y sin render.
 
-- [ ] Clientes REST y DTOs, formularios E-04/S-05, navegación por rol y validación decimal exacta.
-- [ ] Integrar faltantes y receta ausente en Pedidos; conservar borrador y reglas de intención.
-- [ ] Coordinar sesión, lecturas obsoletas e incertidumbre; probar fakes y respuestas inválidas.
+**Revisión visual parcial del agente:** se abrió la ventana Desktop real como Jefa contra API y base temporal y se inspeccionó una captura de la sección inicial de ingredientes a 1116×728 píxeles exteriores. Se observaron búsqueda, filtro, acciones de consulta y estados textuales; el agente no revisó de forma completa formularios, teclado, foco, escalado, desconexión ni contraste compuesto. La confirmación posterior del usuario se registra en C4.
+
+- [x] Clientes REST y DTOs, formularios E-04/S-05, navegación por rol y validación decimal exacta.
+- [x] Integrar faltantes y receta ausente en Pedidos; conservar borrador y reglas de intención.
+- [x] Coordinar sesión, lecturas obsoletas e incertidumbre; probar fakes y respuestas inválidas, sin prometer recuperación durable administrativa.
 
 ## C4 — Integración y aceptación
 
-- [ ] Ejecutar pruebas esenciales API/Desktop y recorridos ficticios de mesa y grupo hasta Caja, sin doble descuento.
-- [ ] Ejecutar formato → build → tests API → tests Desktop → auditoría de paquetes; AcceptanceHost aparte si se utiliza.
-- [ ] Registrar evidencia real y limitaciones en `docs/validacion-005.md`; solicitar revisión práctica y aceptación del usuario.
-- [ ] Registrar explícitamente alcance universitario y pendientes posteriores, sin afirmar validación de producción ni LAN.
+- [x] Ejecutar pruebas esenciales API/Desktop y recorridos ficticios de mesa y grupo hasta Caja, sin doble descuento. `AcceptanceHost --caja-smoke` confirmó por REST/ViewModel dos consumos por dos envíos y ningún consumo adicional al cobrar; sesión/diario adaptados, sin ventana ni LAN.
+- [x] Ejecutar formato → build → tests API → tests Desktop → auditoría de paquetes; AcceptanceHost aparte si se utiliza. Pasaron 141 API, 262 Desktop y auditoría sin vulnerabilidades reportadas; formato/build del anfitrión y `--inventario-smoke`/`--caja-smoke` también pasaron con PostgreSQL temporal.
+- [x] Registrar evidencia real y limitaciones en `docs/validacion-005.md`; solicitar revisión práctica y aceptación del usuario. El usuario confirmó que sus revisiones están bien sin detallar cada escenario.
+- [x] Registrar explícitamente alcance universitario y pendientes posteriores, sin afirmar validación de producción ni LAN.
 
 ## Posterior, fuera de aceptación universitaria
 

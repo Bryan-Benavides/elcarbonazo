@@ -15,7 +15,7 @@
 - **Tiempo:** Backend y PostgreSQL persisten, comparan y emiten instantes en UTC; Desktop convierte únicamente para mostrar mediante la zona `America/Managua`.
 
 ## Modelo relacional de dominio (referencia; no equivale al esquema desplegado)
-> Esta lista es conceptual, no describe necesariamente el esquema desplegado. Las migraciones 003 y 004 incorporan productos, comandas, detalles y caja; 005 añade ingredientes, recetas y kardex, con API implementada pero interfaz pendiente. Factura fiscal no está implementada. Consultar entidades y migraciones antes de asumir que una tabla existe en una base concreta.
+> Esta lista es conceptual, no describe necesariamente el esquema desplegado. Las migraciones 003 y 004 incorporan productos, comandas, detalles y caja; 005 añade ingredientes, recetas y kardex, con aceptación para el perfil universitario local y límites documentados. Factura fiscal no está implementada. Consultar entidades y migraciones antes de asumir que una tabla existe en una base concreta.
 > `specs/005-inventario-escandallo/` define el modelo vigente de ingredientes, receta y kardex; ante diferencias prevalecen esa especificación y el esquema efectivo, no esta lista histórica conceptual.
 
 1. `usuario` (id_usuario [PK, SERIAL], nombre [UNIQUE], contrasena_hash, rol, email [UNIQUE], activo, intentos_fallidos, bloqueo_hasta [NULL])
