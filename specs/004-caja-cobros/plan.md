@@ -1,6 +1,6 @@
 # Plan técnico — 004 Caja, cobros y comprobante interno
 
-**Estado:** línea base técnica D0 aprobada por el usuario para iniciar implementación del perfil universitario local aislado. C1 puede comenzar; cada migración y cambio de código sigue sujeto a sus puertas y pruebas. Esta aprobación no autoriza migrar una base persistente ni usar dinero real.
+**Estado:** perfil universitario local aislado aceptado; evidencia y pendientes posteriores en `tasks.md` y `docs/validacion-004.md`. Esto no autoriza migrar otra base persistente ni usar dinero real.
 
 ## 1. Arquitectura y restricciones
 
@@ -155,22 +155,24 @@ Evento y cambio de negocio comparten transacción. Si auditoría falla, rollback
 
 ## 10. Plan de pruebas
 
+**Alcance universitario aprobado:** validar las reglas esenciales con las pruebas existentes y los recorridos locales; no exigir cada combinación posible de intercalaciones, cada punto de fallo ni un instalador empaquetado. Las pruebas ya existentes se conservan. La cobertura no realizada se documenta como pendiente posterior y no acredita seguridad de producción.
+
 ### API / PostgreSQL
 
 - Unitarias de elegibilidad, estados, importes exactos, métodos, referencia, diferencia, códigos, autorización.
 - Integración real en PostgreSQL temporal para constraints, índices, snapshots, migración y rol runtime.
-- Carrera dos aperturas; apertura/cierre; dos cobros misma cuenta; dos cuentas en un turno y cierre; cierre/cobro en ambos órdenes; envío/KDS/cobro; liberar mesa/cerrar grupo con cuenta pagada; nuevo envío a grupo pagado; mismo UUID con distinto payload/actor; repetición concurrente.
-- Pérdida de respuesta antes/después de commit, reinicio API, abortos, savepoint y rollback, excepción de auditoría, cancelación/ejecución tardía; verificar una mutación como máximo y respuesta durable congruente.
-- Concurrencia de total cambiado (nueva comanda, transición, cambio de estado), cuenta heredada y total cero; referencia duplicada con/ sin confirmación; efectivo insuficiente y vuelto; importes máximos/overflow.
+- Verificar casos esenciales de concurrencia ya implementados: apertura única, mismo UUID, cobro/cancelación y cobro/cierre; además, comprobar el índice de cuenta y el bloqueo de nuevo envío a grupo pagado. La matriz completa de cruces queda pendiente posterior.
+- Verificar al menos pérdida de respuesta posterior al commit, recuperación del mismo UUID sin repetir, resultado terminal antes de desbloquear y rollback de auditoría. No afirmar cobertura integral de caídas o reinicios.
+- Comprobar cuenta cambiada, cuenta heredada o no cobrable, referencia duplicada con/sin confirmación y efectivo insuficiente/vuelto mediante las pruebas disponibles.
 - Cierre con diferencia/motivo, cuentas pendientes, referencias y totales por método; bloquear con operación no terminal y demostrar que GET no desbloquea.
 - Comprobante snapshot histórico; no datos cliente/PAN; permisos negativos en todas las rutas; usuario/rol revocado; 401/403/404 no enumerables.
-- Migración vacía/representativa/rollback y permisos solo en PostgreSQL temporal. No probar contra Development persistente.
+- Conservar las pruebas existentes de migración y permisos en PostgreSQL temporal. No probar contra Development persistente.
 
 ### Desktop
 
 - Fakes HTTP y reloj para flujos, DTO malformado/campo ausente, elegibilidad, stale reads, conflictos, cancelación, reinicio y cambio de sesión/rol.
 - Escrituras no reintentan solas; diario local fallido impide submit; recuperación no ejecuta operación preparada; actor distinto bloquea; Jefa supervisora no aparece como autora original.
-- Visual manual completa en ratón/teclado, foco, escalado, tamaño mínimo, contraste, navegación, pantallas de turno/cobro/comprobante, desconexión, timeout, permiso, motivo y confirmación externa.
+- Revisión práctica local de interfaz y registro de limitaciones; no presentar como mediciones completas los aspectos no verificados específicamente. Ver `docs/validacion-004.md`.
 - No declarar cobertura, LAN física ni latencia visual no medidas.
 
 ## 11. Criterios de calidad y aceptación

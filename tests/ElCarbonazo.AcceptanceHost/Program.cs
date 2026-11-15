@@ -25,7 +25,8 @@ Console.CancelKeyPress += (_, e) => { e.Cancel = true; stopping.Cancel(); };
 try
 {
     await database.InitializeAsync();
-    var pedidosMode = args.Contains("--pedidos", StringComparer.Ordinal) || args.Contains("--pedidos-smoke", StringComparer.Ordinal);
+    var pedidosMode = args.Contains("--pedidos", StringComparer.Ordinal) || args.Contains("--pedidos-smoke", StringComparer.Ordinal) ||
+        args.Contains("--inventario-smoke", StringComparer.Ordinal);
     if (pedidosMode) await database.SeedDemoCatalogAsync();
     var start = new ProcessStartInfo("dotnet") { WorkingDirectory = apiDirectory, UseShellExecute = false };
     start.ArgumentList.Add(apiDll);
@@ -50,6 +51,8 @@ try
     Console.WriteLine("Pulse Ctrl+C aquí para cerrar la API temporal y eliminar su base de prueba.");
     if (args.Contains("--pedidos-smoke", StringComparer.Ordinal))
         await PedidosSmoke.RunAsync(client, stopping.Token);
+    else if (args.Contains("--inventario-smoke", StringComparer.Ordinal))
+        await InventarioSmoke.RunAsync(client, stopping.Token);
     else if (args.Contains("--caja-smoke", StringComparer.Ordinal))
         await CajaSmoke.RunAsync(client, database, stopping.Token);
     else if (args.Contains("--cadencia", StringComparer.Ordinal))

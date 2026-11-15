@@ -9,6 +9,34 @@ namespace ElCarbonazo.Desktop.Tests;
 public sealed class SessionBehaviorTests
 {
     [Fact]
+    public async Task Inventory_write_is_sent_once_without_refresh_and_requires_current_generation()
+    {
+        var api = new FakeApi(HttpStatusCode.Unauthorized) { Role = "Jefa" };
+        using var session = new SessionManager(api, new ServerClock(), new DesktopJsonLogger());
+        await session.LoginAsync("jefa", "password");
+        var generation = session.InventarioSessionGeneration;
+        using var response = await session.SendInventarioOnceAsync(1, generation,
+            () => new HttpRequestMessage(HttpMethod.Put, "api/recetas/producto/1"));
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(1, api.MutationCalls);
+        Assert.Equal(0, api.RefreshCalls);
+        await Assert.ThrowsAsync<SessionExpiredException>(() => session.SendInventarioOnceAsync(1, generation + 1,
+            () => new HttpRequestMessage(HttpMethod.Put, "api/recetas/producto/1")));
+        Assert.Equal(1, api.MutationCalls);
+    }
+
+    [Fact]
+    public async Task Inventory_write_rejects_other_roles_before_send()
+    {
+        var api = new FakeApi(HttpStatusCode.OK);
+        using var session = new SessionManager(api, new ServerClock(), new DesktopJsonLogger());
+        await session.LoginAsync("mesero", "password");
+        await Assert.ThrowsAsync<SessionExpiredException>(() => session.SendInventarioOnceAsync(1, session.InventarioSessionGeneration,
+            () => new HttpRequestMessage(HttpMethod.Put, "api/recetas/producto/1")));
+        Assert.Equal(0, api.MutationCalls);
+    }
+
+    [Fact]
     public async Task PollingDoesNotRefreshOrReportHumanActivity()
     {
         var api = new FakeApi(HttpStatusCode.OK);
@@ -96,6 +124,7 @@ public sealed class SessionBehaviorTests
         public int ActivityCalls;
         public int MutationCalls;
         public bool ActivitySuccess { get; init; }
+        public string Role { get; init; } = "Mesero";
 
         public Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, ApiRequestKind requestKind, CancellationToken cancellationToken = default)
         {
@@ -105,7 +134,7 @@ public sealed class SessionBehaviorTests
             {
                 "api/auth/login" => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = JsonContent.Create(new AuthSessionResponse("access", "refresh", now.AddMinutes(5), now.AddMinutes(15), now.AddHours(8), now, 1, "mesero", "Mesero"))
+                    Content = JsonContent.Create(new AuthSessionResponse("access", "refresh", now.AddMinutes(5), now.AddMinutes(15), now.AddHours(8), now, 1, "usuario", Role))
                 }),
                 "api/auth/refresh" => Refresh(),
                 "api/auth/activity" => Activity(),

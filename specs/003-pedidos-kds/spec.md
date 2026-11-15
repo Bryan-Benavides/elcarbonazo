@@ -122,3 +122,7 @@ Inventario/recetas, autorización administrativa y anulación enviada, gestión 
 El usuario revisó y aprobó en esta conversación la recomendación de `plan.md` para idempotencia persistida (`envioId`), límites, contratos HTTP/ProblemDetails, concurrencia/locks, sondeo y paginación. La API de catálogo, cuenta y envío está implementada y parcialmente verificada; las tareas pendientes constan en `tasks.md`. La política de no reintentar automáticamente y de no inferir éxito desde un GET permanece obligatoria.
 
 La aprobación de contratos no autoriza aplicar migraciones a bases persistentes ni implementar elementos fuera de alcance. La preparación documental no equivale a aceptación visual, pruebas de migración ni validación para operación real.
+
+### Adenda 005 — inventario al enviar
+
+`specs/005-inventario-escandallo/` integra en API receta obligatoria, comprobación y descuento de ingredientes en la misma transacción de envío, preservando `envioId` y sin descontar de nuevo en Caja. C2 se probó en bases temporales; la interfaz y aceptación integral siguen pendientes. No modifica comandas históricas ni autoriza migrar bases persistentes. Consultar `specs/005-inventario-escandallo/tasks.md` para evidencia y límites.

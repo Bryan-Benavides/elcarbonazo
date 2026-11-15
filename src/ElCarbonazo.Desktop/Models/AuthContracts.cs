@@ -20,4 +20,8 @@ public sealed record ActivityResponse(
     DateTimeOffset AbsoluteSessionExpiresAt,
     DateTimeOffset ServerTime);
 
-public sealed record ApiProblem(int? Status, string? Code, string? Title, string? Detail, string? TraceId);
+public sealed record ApiProblem(int? Status, string? Code, string? Title, string? Detail, string? TraceId,
+    IReadOnlyList<IngredienteFaltanteDto>? Ingredientes = null);
+
+public sealed record IngredienteFaltanteDto(int IdIngrediente, string? Nombre, string? UnidadMedida,
+    decimal? Requerido, decimal? Disponible, decimal? Faltante);

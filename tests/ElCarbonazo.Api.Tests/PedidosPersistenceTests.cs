@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ElCarbonazo.Api.Domain;
 using ElCarbonazo.Api.Entities;
 using ElCarbonazo.Api.Security;
 using ElCarbonazo.Api.Services;
@@ -29,6 +30,7 @@ public sealed class PedidosPersistenceTests : IAsyncLifetime
             setup.Productos.Add(product);
             await setup.SaveChangesAsync();
             productId = product.IdProducto;
+            await InventarioTestSetup.PrepararProductoAsync(setup, productId);
         }
         using var cases = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "pedido-notas.json")));
         foreach (var item in cases.RootElement.EnumerateArray())
@@ -60,6 +62,7 @@ public sealed class PedidosPersistenceTests : IAsyncLifetime
             setup.Productos.Add(product);
             await setup.SaveChangesAsync();
             id = product.IdProducto;
+            await InventarioTestSetup.PrepararProductoAsync(setup, id);
             version = await setup.Mesas.Where(x => x.IdMesa == 1).Select(x => x.Version).SingleAsync();
         }
         var key = Guid.NewGuid();
@@ -161,6 +164,7 @@ public sealed class PedidosPersistenceTests : IAsyncLifetime
             setup.Productos.Add(product);
             await setup.SaveChangesAsync();
             productId = product.IdProducto;
+            await InventarioTestSetup.PrepararProductoAsync(setup, productId);
             version = await setup.Mesas.Where(x => x.IdMesa == 1).Select(x => x.Version).SingleAsync();
         }
         var note = string.Concat(Enumerable.Repeat("😀", 150));
@@ -219,6 +223,7 @@ public sealed class PedidosPersistenceTests : IAsyncLifetime
             setup.Productos.Add(product);
             await setup.SaveChangesAsync();
             productId = product.IdProducto;
+            await InventarioTestSetup.PrepararProductoAsync(setup, productId);
             version = await setup.Mesas.Where(item => item.IdMesa == 1).Select(item => item.Version).SingleAsync();
         }
         var request = new EnvioRequest(Guid.NewGuid(), 1, null, version,
@@ -665,7 +670,22 @@ public sealed class RuntimeGrantsTests
                     has_table_privilege(@role, 'public.cobro', 'UPDATE'),
                     has_table_privilege(@role, 'public.comprobante_cobro_linea', 'INSERT'),
                     has_sequence_privilege(@role, 'public.cobro_numero_comprobante_seq', 'USAGE'),
-                    has_sequence_privilege(@role, 'public.comprobante_cobro_linea_id_comprobante_cobro_linea_seq', 'USAGE')
+                    has_sequence_privilege(@role, 'public.comprobante_cobro_linea_id_comprobante_cobro_linea_seq', 'USAGE'),
+                    has_schema_privilege(@role, 'public', 'CREATE'),
+                    has_table_privilege(@role, 'public.cobro', 'DELETE'),
+                    has_table_privilege(@role, 'public.turno_caja', 'DELETE'),
+                    (SELECT rolsuper FROM pg_roles WHERE rolname = @role),
+                    EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname = 'public' AND c.relname IN ('operacion_caja', 'turno_caja', 'cobro', 'comprobante_cobro_linea')
+                          AND pg_get_userbyid(c.relowner) = @role),
+                    has_table_privilege(@role, 'public.comprobante_cobro_linea', 'DELETE'),
+                    has_table_privilege(@role, 'public.movimiento_inventario', 'INSERT'),
+                    has_table_privilege(@role, 'public.movimiento_inventario', 'UPDATE'),
+                    has_table_privilege(@role, 'public.movimiento_inventario', 'DELETE'),
+                    has_table_privilege(@role, 'public.detalle_receta', 'DELETE'),
+                    has_column_privilege(@role, 'public.ingrediente', 'stock_actual', 'UPDATE'),
+                    has_sequence_privilege(@role, 'public.movimiento_inventario_id_movimiento_seq', 'USAGE'),
+                    has_table_privilege(@role, 'public.evento_auditoria', 'UPDATE')
                 """, connection);
             verify.Parameters.AddWithValue("role", runtimeRole);
             await using var reader = await verify.ExecuteReaderAsync();
@@ -693,6 +713,19 @@ public sealed class RuntimeGrantsTests
             Assert.True(reader.GetBoolean(20));
             Assert.True(reader.GetBoolean(21));
             Assert.True(reader.GetBoolean(22));
+            Assert.False(reader.GetBoolean(23));
+            Assert.False(reader.GetBoolean(24));
+            Assert.False(reader.GetBoolean(25));
+            Assert.False(reader.GetBoolean(26));
+            Assert.False(reader.GetBoolean(27));
+            Assert.False(reader.GetBoolean(28));
+            Assert.True(reader.GetBoolean(29));
+            Assert.False(reader.GetBoolean(30));
+            Assert.False(reader.GetBoolean(31));
+            Assert.True(reader.GetBoolean(32));
+            Assert.True(reader.GetBoolean(33));
+            Assert.True(reader.GetBoolean(34));
+            Assert.False(reader.GetBoolean(35));
             await reader.CloseAsync();
 
             await using (var seed = new NpgsqlCommand("""
@@ -701,6 +734,12 @@ public sealed class RuntimeGrantsTests
                 """, connection))
             {
                 await seed.ExecuteNonQueryAsync();
+            }
+            var setupOptions = new DbContextOptionsBuilder<ElCarbonazo.Api.Data.AppDbContext>().UseNpgsql(connection).Options;
+            await using (var inventorySetup = new ElCarbonazo.Api.Data.AppDbContext(setupOptions))
+            {
+                var productId = await inventorySetup.Productos.Select(x => x.IdProducto).SingleAsync();
+                await InventarioTestSetup.PrepararProductoAsync(inventorySetup, productId);
             }
             await using (var setRole = new NpgsqlCommand($"SET ROLE {runtimeRole}", connection))
             {
@@ -728,6 +767,76 @@ public sealed class RuntimeGrantsTests
                 var result = await kitchen.CambiarEstadoAsync(command.IdComanda,
                     new CambiarComandaEstadoRequest("En Preparación", command.Version), 1, CancellationToken.None);
                 Assert.Equal(200, result.Status);
+                var ready = await kitchen.CambiarEstadoAsync(command.IdComanda,
+                    new CambiarComandaEstadoRequest("Lista", result.Comanda!.Version), 1, CancellationToken.None);
+                Assert.Equal(200, ready.Status);
+            }
+            await using (var cashContext = new ElCarbonazo.Api.Data.AppDbContext(options))
+            {
+                var audit = new AuditRecorder(cashContext, new TestHttpContextAccessor(), TimeProvider.System);
+                var opening = new CajaOperacionesService(cashContext, audit, TimeProvider.System,
+                    new CajaAperturaExecutor(cashContext, audit, TimeProvider.System));
+                var openingId = Guid.NewGuid();
+                Assert.Equal(200, (await opening.PrepararAsync(openingId, 1, CajaOperacionCanonica.Abrir(0, true), default)).Status);
+                Assert.Equal(201, (await opening.EjecutarAsync(openingId, 1, default)).Status);
+                var shiftId = await cashContext.TurnosCaja.Select(x => x.IdTurnoCaja).SingleAsync();
+                var order = await cashContext.Pedidos.AsNoTracking()
+                    .Include(x => x.Comandas).ThenInclude(x => x.Detalles).SingleAsync();
+                var fingerprint = CajaElegibilidad.Evaluar(order).HuellaLineas;
+                Assert.NotNull(fingerprint);
+                var payment = new CajaOperacionesService(cashContext, audit, TimeProvider.System,
+                    new CajaCobroExecutor(cashContext, audit, TimeProvider.System));
+                var paymentId = Guid.NewGuid();
+                var intent = CajaOperacionCanonica.Cobrar(order.IdPedido, shiftId, order.Total, fingerprint, CajaStates.Efectivo, 10m, null, false, false);
+                Assert.Equal(200, (await payment.PrepararAsync(paymentId, 1, intent, default)).Status);
+                Assert.Equal(201, (await payment.EjecutarAsync(paymentId, 1, default)).Status);
+                Assert.Equal(PedidoStates.Pagado, await cashContext.Pedidos.AsNoTracking().Select(x => x.Estado).SingleAsync());
+                Assert.Equal(1, await cashContext.Cobros.CountAsync());
+                var closing = new CajaOperacionesService(cashContext, audit, TimeProvider.System,
+                    new CajaCierreExecutor(cashContext, audit, TimeProvider.System));
+                var closingId = Guid.NewGuid();
+                Assert.Equal(200, (await closing.PrepararAsync(closingId, 1, CajaOperacionCanonica.Cerrar(shiftId, 10m, null, true), default)).Status);
+                Assert.Equal(200, (await closing.EjecutarAsync(closingId, 1, default)).Status);
+            }
+            await using (var inventory = new NpgsqlCommand("""
+                BEGIN;
+                SELECT id_producto FROM producto ORDER BY id_producto FOR UPDATE;
+                SELECT id_ingrediente FROM ingrediente ORDER BY id_ingrediente FOR UPDATE;
+                UPDATE ingrediente SET stock_actual = stock_actual + 2.5000, version = version + 1, fecha_actualizacion_utc = now();
+                UPDATE receta SET version = version + 1, fecha_actualizacion_utc = now();
+                INSERT INTO movimiento_inventario
+                    (id_ingrediente, tipo_movimiento, cantidad_delta, stock_anterior, stock_posterior, id_usuario, fecha_utc)
+                SELECT id_ingrediente, 'EntradaCompra', 2.5000, stock_actual - 2.5000, stock_actual, 1, now() FROM ingrediente;
+                DELETE FROM detalle_receta;
+                INSERT INTO detalle_receta (id_receta, id_ingrediente, cantidad_requerida)
+                SELECT r.id_receta, i.id_ingrediente, 0.4000 FROM receta r CROSS JOIN ingrediente i;
+                COMMIT;
+                """, connection))
+            {
+                await inventory.ExecuteNonQueryAsync();
+            }
+            await using (var forbidden = new NpgsqlCommand("DELETE FROM movimiento_inventario", connection))
+            {
+                var error = await Assert.ThrowsAsync<PostgresException>(() => forbidden.ExecuteNonQueryAsync());
+                Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, error.SqlState);
+            }
+            await using (var forbidden = new NpgsqlCommand("UPDATE movimiento_inventario SET cantidad_delta = 3", connection))
+            {
+                var error = await Assert.ThrowsAsync<PostgresException>(() => forbidden.ExecuteNonQueryAsync());
+                Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, error.SqlState);
+            }
+            await using (var verifyInventory = new NpgsqlCommand("""
+                SELECT stock_actual, version, (SELECT count(*) FROM movimiento_inventario),
+                    (SELECT cantidad_requerida FROM detalle_receta)
+                FROM ingrediente
+                """, connection))
+            await using (var inventoryReader = await verifyInventory.ExecuteReaderAsync())
+            {
+                Assert.True(await inventoryReader.ReadAsync());
+                Assert.Equal(100000.5000m, inventoryReader.GetDecimal(0));
+                Assert.Equal(4L, inventoryReader.GetInt64(1));
+                Assert.Equal(3L, inventoryReader.GetInt64(2));
+                Assert.Equal(0.4000m, inventoryReader.GetDecimal(3));
             }
             await using (var resetRole = new NpgsqlCommand("RESET ROLE", connection))
             {

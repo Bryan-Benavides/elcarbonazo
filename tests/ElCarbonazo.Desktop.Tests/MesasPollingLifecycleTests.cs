@@ -24,6 +24,35 @@ public sealed class MesasPollingLifecycleTests
     [Theory]
     [InlineData("Jefa", true)]
     [InlineData("Supervisor", true)]
+    [InlineData("Personal de Cocina", true)]
+    [InlineData("Mesero", false)]
+    [InlineData("Encargado de Caja", false)]
+    public void Inventory_navigation_respects_read_roles(string role, bool expected)
+    {
+        using var viewModel = new MesasViewModel("Ana", role, new FakeSession(), new ControlledMesas(), DispatchInline);
+        Assert.Equal(expected, viewModel.RolPuedeInventario);
+        if (!expected) Assert.False(viewModel.PuedeAbrirInventario);
+    }
+
+    [Theory]
+    [InlineData("Jefa", true)]
+    [InlineData("Encargado de Caja", true)]
+    [InlineData("Supervisor", false)]
+    [InlineData("Mesero", false)]
+    [InlineData("Personal de Cocina", false)]
+    public void Cash_navigation_is_limited_to_authorized_roles_and_existing_panel(string role, bool expected)
+    {
+        using var viewModel = new MesasViewModel("Ana", role, new FakeSession(), new ControlledMesas(), DispatchInline,
+            recoveryPanel: new CajaRecoveryViewModel());
+        Assert.Equal(expected, viewModel.RolPuedeRecuperarCaja);
+        if (!expected) Assert.False(viewModel.PuedeAbrirRecuperacionCaja);
+        using var withoutPanel = new MesasViewModel("Ana", role, new FakeSession(), new ControlledMesas(), DispatchInline);
+        Assert.False(withoutPanel.RolPuedeRecuperarCaja);
+    }
+
+    [Theory]
+    [InlineData("Jefa", true)]
+    [InlineData("Supervisor", true)]
     [InlineData("Mesero", true)]
     [InlineData("Encargado de Caja", true)]
     [InlineData("Personal de Cocina", false)]

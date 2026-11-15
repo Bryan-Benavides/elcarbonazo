@@ -30,7 +30,14 @@ public interface ICajaSessionSender
         bool isRead, CancellationToken cancellationToken = default);
 }
 
-public sealed class SessionManager : ISessionManager, ICajaSessionSender, IDisposable
+public interface IInventarioSessionSender
+{
+    long InventarioSessionGeneration { get; }
+    Task<HttpResponseMessage> SendInventarioOnceAsync(int expectedActor, long expectedGeneration,
+        Func<HttpRequestMessage> requestFactory, CancellationToken cancellationToken = default);
+}
+
+public sealed class SessionManager : ISessionManager, ICajaSessionSender, IInventarioSessionSender, IDisposable
 {
     private static readonly TimeSpan RefreshMargin = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ActivityInterval = TimeSpan.FromMinutes(1);
@@ -62,6 +69,8 @@ public sealed class SessionManager : ISessionManager, ICajaSessionSender, IDispo
 
     // Changes on each login, not on token refresh. Never contains a credential.
     public long CajaSessionGeneration { get { lock (_sessionGate) return _cajaSessionGeneration; } }
+    public long InventarioSessionGeneration { get { lock (_sessionGate) return _cajaSessionGeneration; } }
+    public InventarioEscrituraCoordinator InventarioEscrituras { get; }
 
     public SessionManager(
         IApiClientService apiClient,
@@ -73,6 +82,7 @@ public sealed class SessionManager : ISessionManager, ICajaSessionSender, IDispo
         _serverClock = serverClock;
         _logger = logger;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        InventarioEscrituras = new InventarioEscrituraCoordinator(this, this);
         _apiClient.SecurityFailure += OnTransportSecurityFailure;
     }
 
@@ -197,6 +207,23 @@ public sealed class SessionManager : ISessionManager, ICajaSessionSender, IDispo
         }
         // No refresh and no retry: a failed write may already have committed.
         return await _apiClient.SendAsync(request, isRead ? ApiRequestKind.Read : ApiRequestKind.Write, cancellationToken);
+    }
+
+    public async Task<HttpResponseMessage> SendInventarioOnceAsync(int expectedActor, long expectedGeneration,
+        Func<HttpRequestMessage> requestFactory, CancellationToken cancellationToken = default)
+    {
+        EvaluateState();
+        using var request = requestFactory();
+        lock (_sessionGate)
+        {
+            if (expectedActor <= 0 || _idUsuario != expectedActor || _cajaSessionGeneration != expectedGeneration ||
+                _accessToken is null || _state is not (SessionLifecycleState.Active or SessionLifecycleState.Expiring) ||
+                _serverClock.UtcNow >= _accessTokenExpiresAt || _rol != "Jefa")
+                throw new SessionExpiredException();
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
+        }
+        // Never refresh or retry an administrative write.
+        return await _apiClient.SendAsync(request, ApiRequestKind.Write, cancellationToken);
     }
 
     public async Task<HttpResponseMessage> SendPollingAsync(
@@ -801,6 +828,7 @@ public sealed class SessionManager : ISessionManager, ICajaSessionSender, IDispo
             return;
         }
         _disposed = true;
+        InventarioEscrituras.Dispose();
         _apiClient.SecurityFailure -= OnTransportSecurityFailure;
         _lifetime.Cancel();
         _lifetime.Dispose();

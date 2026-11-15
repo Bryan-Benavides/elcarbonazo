@@ -704,6 +704,7 @@ public sealed class EnviosConcurrencyTests : IAsyncLifetime
         var product = new Producto { Nombre = "Prueba", Categoria = "Comida", Precio = 10m, Disponible = true };
         context.Productos.Add(product);
         await context.SaveChangesAsync();
+        await InventarioTestSetup.PrepararProductoAsync(context, product.IdProducto);
         return (product.IdProducto, await context.Mesas.Where(x => x.IdMesa == 1).Select(x => x.Version).SingleAsync());
     }
 

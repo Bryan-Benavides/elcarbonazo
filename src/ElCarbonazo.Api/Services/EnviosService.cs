@@ -134,6 +134,47 @@ public sealed class EnviosService(AppDbContext context, IAuditRecorder audit, Ti
                 Version = byId.GetValueOrDefault(id)?.Version
             }).ToArray());
 
+        // Product FOR SHARE is the common barrier against concurrent recipe replacement.
+        var recipes = await context.Recetas.AsNoTracking().Include(x => x.Detalles)
+            .Where(x => ids.Contains(x.IdProducto)).ToListAsync(cancellationToken);
+        if (recipes.Count != ids.Length || recipes.Any(x => !x.Activa || x.Detalles.Count is < 1 or > 50))
+        {
+            var configured = recipes.Where(x => x.Activa && x.Detalles.Count is >= 1 and <= 50)
+                .Select(x => x.IdProducto).ToHashSet();
+            return new EnvioResult(409, "RECETA_NO_DISPONIBLE",
+                Data: ids.Where(id => !configured.Contains(id)).Select(id => new { IdProducto = id, Nombre = byId[id].Nombre }).ToArray());
+        }
+        var recipesByProduct = recipes.ToDictionary(x => x.IdProducto);
+        var required = new Dictionary<int, decimal>();
+        try
+        {
+            foreach (var line in lines)
+                foreach (var detail in recipesByProduct[line.IdProducto].Detalles)
+                {
+                    var total = checked(required.GetValueOrDefault(detail.IdIngrediente) + line.Cantidad * detail.CantidadRequerida);
+                    if (total > 99999999.9999m) return new EnvioResult(400, "VALIDATION_ERROR");
+                    required[detail.IdIngrediente] = total;
+                }
+        }
+        catch (OverflowException) { return new EnvioResult(400, "VALIDATION_ERROR"); }
+        var ingredientIds = required.Keys.Order().ToArray();
+        var ingredients = await context.Ingredientes.FromSqlInterpolated($"""
+            SELECT * FROM ingrediente WHERE id_ingrediente = ANY({ingredientIds}) ORDER BY id_ingrediente FOR UPDATE
+            """).ToListAsync(cancellationToken);
+        if (ingredients.Count != ingredientIds.Length || ingredients.Any(x => !x.Activo))
+            return new EnvioResult(409, "INGREDIENTE_INACTIVO");
+        if (ingredients.Any(x => x.Version == long.MaxValue)) return new EnvioResult(409, "VERSION_CONFLICT");
+        var missing = ingredients.Where(x => x.StockActual < required[x.IdIngrediente]).Select(x => new
+        {
+            x.IdIngrediente,
+            x.Nombre,
+            x.UnidadMedida,
+            Requerido = required[x.IdIngrediente],
+            Disponible = x.StockActual,
+            Faltante = required[x.IdIngrediente] - x.StockActual
+        }).ToArray();
+        if (missing.Length > 0) return new EnvioResult(409, "STOCK_INSUFICIENTE", Data: missing);
+
         var amount = lines.Sum(line => byId[line.IdProducto].Precio * line.Cantidad);
         if (amount + (pedido?.Subtotal ?? 0m) > MaxTotal) return new EnvioResult(400, "VALIDATION_ERROR");
         var now = time.GetUtcNow();
@@ -163,6 +204,29 @@ public sealed class EnviosService(AppDbContext context, IAuditRecorder audit, Ti
         }
         context.Comandas.Add(command);
         await context.SaveChangesAsync(cancellationToken);
+        foreach (var ingredient in ingredients)
+        {
+            var previous = ingredient.StockActual;
+            var quantity = required[ingredient.IdIngrediente];
+            ingredient.StockActual -= quantity;
+            ingredient.FechaActualizacionUtc = now;
+            ingredient.Version++;
+            context.MovimientosInventario.Add(new MovimientoInventario
+            {
+                IdIngrediente = ingredient.IdIngrediente,
+                TipoMovimiento = "ConsumoPedido",
+                CantidadDelta = -quantity,
+                StockAnterior = previous,
+                StockPosterior = ingredient.StockActual,
+                IdPedido = pedido.IdPedido,
+                IdComanda = command.IdComanda,
+                IdUsuario = userId,
+                FechaUtc = now
+            });
+        }
+        audit.Record("ConsumoInventarioPorPedido", "Exitoso", userId, entityType: "comanda",
+            entityId: command.IdComanda.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            details: new Dictionary<string, object?> { ["idPedido"] = pedido.IdPedido, ["idComanda"] = command.IdComanda, ["cantidadIngredientes"] = ingredients.Count });
         audit.Record("ComandaEnviada", "Exitoso", userId, entityType: "comanda", entityId: command.IdComanda.ToString(),
             details: new Dictionary<string, object?>
             {

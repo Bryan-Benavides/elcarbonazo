@@ -42,6 +42,112 @@ public sealed class ApiFlowTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Inventory_http_supports_recipes_movements_alerts_and_stale_versions()
+    {
+        int productId;
+        await using (var context = _database.CreateContext())
+        {
+            var product = new Producto { Nombre = "Plato ficticio", Categoria = "Comida", Precio = 10, Disponible = true };
+            context.Productos.Add(product);
+            await context.SaveChangesAsync();
+            productId = product.IdProducto;
+        }
+        var token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        using var created = await _client.PostAsJsonAsync("/api/inventario/ingredientes", new { nombre = "Arroz", unidadMedida = "lb", stockMinimo = 2m });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var ingredientId = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt32();
+        using var duplicate = await _client.PostAsJsonAsync("/api/inventario/ingredientes", new { nombre = "ARROZ", unidadMedida = "lb", stockMinimo = 0m });
+        Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
+        Assert.Equal("INGREDIENTE_DUPLICADO", (await duplicate.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+        using var secondIngredient = await _client.PostAsJsonAsync("/api/inventario/ingredientes", new { nombre = "Frijoles", unidadMedida = "lb", stockMinimo = 0m });
+        Assert.Equal(HttpStatusCode.Created, secondIngredient.StatusCode);
+        var page = await _client.GetFromJsonAsync<JsonElement>("/api/inventario/ingredientes?limite=1");
+        var next = page.GetProperty("cursorSiguiente").GetString();
+        Assert.NotNull(next);
+        var pageTwo = await _client.GetFromJsonAsync<JsonElement>($"/api/inventario/ingredientes?limite=1&cursor={Uri.EscapeDataString(next)}");
+        Assert.Single(pageTwo.GetProperty("items").EnumerateArray());
+        using var wrongFilter = await _client.GetAsync($"/api/inventario/ingredientes?limite=1&estadoAlerta=Agotado&cursor={Uri.EscapeDataString(next)}");
+        Assert.Equal(HttpStatusCode.BadRequest, wrongFilter.StatusCode);
+        using var absent = await _client.GetAsync($"/api/recetas/producto/{productId}");
+        Assert.Equal(JsonValueKind.Null, (await absent.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("receta").ValueKind);
+        using var saved = await _client.PutAsJsonAsync($"/api/recetas/producto/{productId}", new
+        {
+            activa = true,
+            versionEsperada = (string?)null,
+            notasPreparacion = (string?)null,
+            lineas = new[] { new { idIngrediente = ingredientId, cantidadRequerida = 0.3500m } }
+        });
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        using var staleRecipe = await _client.PutAsJsonAsync($"/api/recetas/producto/{productId}", new
+        {
+            activa = true,
+            versionEsperada = (string?)null,
+            notasPreparacion = (string?)null,
+            lineas = new[] { new { idIngrediente = ingredientId, cantidadRequerida = 1m } }
+        });
+        Assert.Equal(HttpStatusCode.Conflict, staleRecipe.StatusCode);
+        using var movement = await _client.PostAsJsonAsync("/api/inventario/movimientos",
+            new { idIngrediente = ingredientId, tipoMovimiento = "EntradaCompra", cantidad = 1.5m, motivo = (string?)null });
+        Assert.Equal(HttpStatusCode.Created, movement.StatusCode);
+        var alerts = await _client.GetFromJsonAsync<JsonElement>("/api/inventario/alertas");
+        Assert.Equal(1, alerts.GetProperty("stockBajo").GetInt32());
+        var ledger = await _client.GetFromJsonAsync<JsonElement>($"/api/inventario/movimientos?idIngrediente={ingredientId}");
+        Assert.Single(ledger.GetProperty("items").EnumerateArray());
+        var recipe = await _client.GetFromJsonAsync<JsonElement>($"/api/recetas/producto/{productId}");
+        Assert.Equal(0.3500m, recipe.GetProperty("receta").GetProperty("lineas")[0].GetProperty("cantidadRequerida").GetDecimal());
+        using var staleIngredient = await _client.PutAsJsonAsync($"/api/inventario/ingredientes/{ingredientId}",
+            new { nombre = "Arroz", unidadMedida = "lb", stockMinimo = 2m, activo = true, version = "1" });
+        Assert.Equal(HttpStatusCode.Conflict, staleIngredient.StatusCode);
+        Assert.Equal("VERSION_CONFLICT", (await staleIngredient.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Inventory_routes_enforce_roles_and_require_explicit_recipe_version()
+    {
+        var routes = new (HttpMethod Method, string Path, bool ReadInventory)[]
+        {
+            (HttpMethod.Get, "/api/inventario/ingredientes", true),
+            (HttpMethod.Get, "/api/inventario/alertas", true),
+            (HttpMethod.Get, "/api/inventario/movimientos", true),
+            (HttpMethod.Post, "/api/inventario/ingredientes", false),
+            (HttpMethod.Put, "/api/inventario/ingredientes/1", false),
+            (HttpMethod.Post, "/api/inventario/movimientos", false),
+            (HttpMethod.Get, "/api/recetas/productos", false),
+            (HttpMethod.Get, "/api/recetas/producto/1", false),
+            (HttpMethod.Put, "/api/recetas/producto/1", false)
+        };
+        using var anonymous = await _client.GetAsync("/api/inventario/ingredientes");
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+        var owner = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", owner);
+        using var created = await _client.PostAsJsonAsync("/api/inventario/ingredientes", new { nombre = "Carne", unidadMedida = "lb", stockMinimo = 0m });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        using var list = await _client.GetAsync("/api/inventario/ingredientes");
+        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+        using var invalidCursor = await _client.GetAsync("/api/inventario/ingredientes?cursor=invalid");
+        Assert.Equal(HttpStatusCode.BadRequest, invalidCursor.StatusCode);
+        using var absentVersion = await _client.PutAsJsonAsync("/api/recetas/producto/1", new { activa = true, lineas = Array.Empty<object>() });
+        Assert.Equal(HttpStatusCode.BadRequest, absentVersion.StatusCode);
+        foreach (var role in new[] { "Supervisor", "Personal de Cocina", "Mesero", "Encargado de Caja" })
+        {
+            await using (var context = _database.CreateContext())
+                await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE usuario SET rol = {role} WHERE id_usuario = 2");
+            _client.DefaultRequestHeaders.Authorization = null;
+            var token = await LoginAsync("cocina", "kitchen password");
+            _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var canRead = role is "Supervisor" or "Personal de Cocina";
+            foreach (var route in routes)
+            {
+                using var request = new HttpRequestMessage(route.Method, route.Path);
+                if (route.Method != HttpMethod.Get) request.Content = JsonContent.Create(new { });
+                using var response = await _client.SendAsync(request);
+                Assert.Equal(canRead && route.ReadInventory ? HttpStatusCode.OK : HttpStatusCode.Forbidden, response.StatusCode);
+            }
+        }
+    }
+
+    [Fact]
     public async Task Caja_routes_enforce_role_matrix_before_processing_requests()
     {
         var operation = Guid.NewGuid();
@@ -1321,6 +1427,7 @@ public sealed class ApiFlowTests : IAsyncLifetime
             context.Productos.Add(product);
             await context.SaveChangesAsync();
             productId = product.IdProducto;
+            await InventarioTestSetup.PrepararProductoAsync(context, productId);
         }
 
         var token = await LoginAsync("jefa central", "correct horse battery staple");
@@ -1389,6 +1496,7 @@ public sealed class ApiFlowTests : IAsyncLifetime
             context.Productos.Add(product);
             await context.SaveChangesAsync();
             productId = product.IdProducto;
+            await InventarioTestSetup.PrepararProductoAsync(context, productId);
         }
         var token = await LoginAsync("jefa central", "correct horse battery staple");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -1435,6 +1543,7 @@ public sealed class ApiFlowTests : IAsyncLifetime
             context.Productos.Add(product);
             await context.SaveChangesAsync();
             productId = product.IdProducto;
+            await InventarioTestSetup.PrepararProductoAsync(context, productId);
         }
         var token = await LoginAsync("jefa central", "correct horse battery staple");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -1525,6 +1634,7 @@ public sealed class ApiFlowTests : IAsyncLifetime
             context.Productos.Add(product);
             await context.SaveChangesAsync();
             productId = product.IdProducto;
+            await InventarioTestSetup.PrepararProductoAsync(context, productId);
         }
         var token = await LoginAsync("jefa central", "correct horse battery staple");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -1576,6 +1686,7 @@ public sealed class ApiFlowTests : IAsyncLifetime
             context.Productos.Add(product);
             await context.SaveChangesAsync();
             productId = product.IdProducto;
+            await InventarioTestSetup.PrepararProductoAsync(context, productId);
         }
         var token = await LoginAsync("jefa central", "correct horse battery staple");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -1607,6 +1718,7 @@ public sealed class ApiFlowTests : IAsyncLifetime
             context.Productos.Add(product);
             await context.SaveChangesAsync();
             productId = product.IdProducto;
+            await InventarioTestSetup.PrepararProductoAsync(context, productId);
         }
         var gate = new PostCommitGate();
         await using var factory = new TestApiFactory(_database.ConnectionString, _database.LogDirectory, gate);
@@ -1646,6 +1758,7 @@ public sealed class ApiFlowTests : IAsyncLifetime
             context.Productos.Add(product);
             await context.SaveChangesAsync();
             productId = product.IdProducto;
+            await InventarioTestSetup.PrepararProductoAsync(context, productId);
         }
         var token = await LoginAsync("jefa central", "correct horse battery staple");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -1693,6 +1806,7 @@ public sealed class ApiFlowTests : IAsyncLifetime
             context.Productos.Add(product);
             await context.SaveChangesAsync();
             productId = product.IdProducto;
+            await InventarioTestSetup.PrepararProductoAsync(context, productId);
         }
         Assert.Equal(HttpStatusCode.Unauthorized, (await _client.GetAsync("/api/cocina/cola")).StatusCode);
         var owner = await LoginAsync("jefa central", "correct horse battery staple");
@@ -1833,6 +1947,7 @@ public sealed class ApiFlowTests : IAsyncLifetime
             var product = new Producto { Nombre = "Prueba", Categoria = "Comida", Precio = 1m, Disponible = true };
             context.Productos.Add(product);
             await context.SaveChangesAsync();
+            await InventarioTestSetup.PrepararProductoAsync(context, product.IdProducto);
             var version = await context.Mesas.Where(x => x.IdMesa == 2).Select(x => x.Version).SingleAsync();
             var audit = new AuditRecorder(context, new TestHttpContextAccessor(), TimeProvider.System);
             var sent = await new ElCarbonazo.Api.Services.EnviosService(context, audit, TimeProvider.System).EnviarAsync(

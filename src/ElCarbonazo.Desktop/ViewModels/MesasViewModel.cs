@@ -67,9 +67,40 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(MostrandoModulo))]
     private CocinaViewModel? _cocinaActual;
     public bool MostrandoCocina => CocinaActual is not null;
-    public bool MostrandoModulo => MostrandoPedidos || MostrandoCocina || MostrandoRecuperacionCaja;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MostrandoInventario))]
+    [NotifyPropertyChangedFor(nameof(MostrandoModulo))]
+    private InventarioLecturaViewModel? _inventarioActual;
+    public bool MostrandoInventario => InventarioActual is not null;
+    public bool RolPuedeInventario => Rol is "Jefa" or "Supervisor" or "Personal de Cocina";
+    public bool PuedeAbrirInventario => RolPuedeInventario && !_disposed && !MostrandoModulo && !Mutando && !ResultadoIncierto && !SeleccionandoGrupo && _coordinator.CanMutate;
+    public bool MostrandoModulo => MostrandoPedidos || MostrandoCocina || MostrandoRecuperacionCaja || MostrandoInventario;
     public bool RolPuedeCocina => Rol is "Jefa" or "Supervisor" or "Personal de Cocina";
     public bool PuedeAbrirCocina => RolPuedeCocina && !_disposed && !MostrandoModulo && !Mutando && !ResultadoIncierto && !SeleccionandoGrupo && _coordinator.CanMutate;
+
+    [RelayCommand]
+    private async Task AbrirInventarioAsync()
+    {
+        if (!PuedeAbrirInventario) return;
+        Mutando = true;
+        bool reserved;
+        try { reserved = await _coordinator.TryBeginMutationAsync(_lifetime.Token); }
+        catch (OperationCanceledException) { Mutando = false; return; }
+        if (!reserved) { Mutando = false; return; }
+        InventarioActual = new InventarioLecturaViewModel(new InventarioLecturaService(_session), _session, Rol == "Jefa", CerrarInventario,
+            (_session as SessionManager)?.InventarioEscrituras);
+        ActualizarAcciones();
+    }
+
+    private void CerrarInventario()
+    {
+        InventarioActual?.Dispose();
+        InventarioActual = null;
+        _coordinator.CompleteMutation(requiresReconciliation: true);
+        Mutando = false;
+        SolicitarConsulta();
+        ActualizarAcciones();
+    }
 
     [RelayCommand]
     private async Task AbrirCocinaAsync()
@@ -181,6 +212,7 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(PuedeAbrirCuenta));
         OnPropertyChanged(nameof(PuedeAbrirCocina));
         OnPropertyChanged(nameof(PuedeAbrirRecuperacionCaja));
+        OnPropertyChanged(nameof(PuedeAbrirInventario));
         ActualizarAccionesGrupo();
     }
 
@@ -500,6 +532,7 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
         _disposed = true;
         PedidosActual?.Dispose();
         CocinaActual?.Dispose();
+        InventarioActual?.Dispose();
         RecuperacionCajaActual?.Deactivate();
         _session.SessionStateChanged -= OnSessionStateChanged;
         Mesas.CollectionChanged -= AlCambiarMesas;

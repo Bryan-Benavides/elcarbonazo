@@ -35,6 +35,14 @@ GRANT UPDATE (estado, fecha_cierre, id_usuario_cierre, id_operacion_cierre,
     ON public.turno_caja TO elcarbonazo_runtime;
 GRANT SELECT, INSERT ON public.cobro, public.comprobante_cobro_linea TO elcarbonazo_runtime;
 
+-- Inventory ledger is append-only; recipe lines are replaceable current configuration.
+GRANT SELECT, INSERT ON public.ingrediente, public.receta TO elcarbonazo_runtime;
+GRANT UPDATE (nombre, nombre_clave, unidad_medida, stock_actual, stock_minimo, activo, fecha_actualizacion_utc, version)
+    ON public.ingrediente TO elcarbonazo_runtime;
+GRANT UPDATE (activa, notas_preparacion, fecha_actualizacion_utc, version) ON public.receta TO elcarbonazo_runtime;
+GRANT SELECT, INSERT, DELETE ON public.detalle_receta TO elcarbonazo_runtime;
+GRANT SELECT, INSERT ON public.movimiento_inventario TO elcarbonazo_runtime;
+
 GRANT USAGE, SELECT ON SEQUENCE public.grupo_mesa_id_grupo_seq TO elcarbonazo_runtime;
 GRANT USAGE, SELECT ON SEQUENCE public.pedido_id_pedido_seq TO elcarbonazo_runtime;
 GRANT USAGE, SELECT ON SEQUENCE public.producto_id_producto_seq TO elcarbonazo_runtime;
@@ -46,6 +54,10 @@ GRANT USAGE, SELECT ON SEQUENCE public.turno_caja_id_turno_caja_seq TO elcarbona
 GRANT USAGE, SELECT ON SEQUENCE public.cobro_id_cobro_seq TO elcarbonazo_runtime;
 GRANT USAGE, SELECT ON SEQUENCE public.cobro_numero_comprobante_seq TO elcarbonazo_runtime;
 GRANT USAGE, SELECT ON SEQUENCE public.comprobante_cobro_linea_id_comprobante_cobro_linea_seq TO elcarbonazo_runtime;
+GRANT USAGE, SELECT ON SEQUENCE public.ingrediente_id_ingrediente_seq TO elcarbonazo_runtime;
+GRANT USAGE, SELECT ON SEQUENCE public.receta_id_receta_seq TO elcarbonazo_runtime;
+GRANT USAGE, SELECT ON SEQUENCE public.detalle_receta_id_detalle_receta_seq TO elcarbonazo_runtime;
+GRANT USAGE, SELECT ON SEQUENCE public.movimiento_inventario_id_movimiento_seq TO elcarbonazo_runtime;
 
 GRANT SELECT, INSERT, UPDATE ON public.usuario TO elcarbonazo_bootstrap;
 GRANT USAGE, SELECT ON SEQUENCE public.usuario_id_usuario_seq TO elcarbonazo_bootstrap;
@@ -55,3 +67,4 @@ REVOKE ALL ON SCHEMA public FROM elcarbonazo_runtime, elcarbonazo_bootstrap;
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO elcarbonazo_runtime, elcarbonazo_bootstrap;
 REVOKE UPDATE, DELETE, TRUNCATE ON public.evento_auditoria FROM elcarbonazo_runtime, elcarbonazo_bootstrap;
+REVOKE UPDATE, DELETE, TRUNCATE ON public.movimiento_inventario FROM elcarbonazo_runtime, elcarbonazo_bootstrap;

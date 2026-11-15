@@ -46,4 +46,6 @@ Para pruebas y configuración de instalación ver `AGENTS.md`, `docs/installatio
 - `docs/` — Dominio, Constitución
 - `specs/` — Especificaciones por módulo (SDD)
 
-Pedidos y Cocina (`003`) están aceptados para la demostración local; Caja (`004`) sigue en curso. Consulta sus respectivos `tasks.md` para conocer el alcance y las tareas pendientes. La propuesta `002-operaciones-seguras` permanece separada y pospuesta.
+Pedidos y Cocina (`003`) y Caja (`004`) están aceptados para la demostración universitaria local. Consulta sus respectivos `tasks.md` para conocer el alcance y las tareas pendientes para uso real. La propuesta `002-operaciones-seguras` permanece separada y pospuesta.
+
+Inventario y escandallo (`005`) tiene persistencia y API implementadas y probadas en bases temporales; la interfaz y aceptación integral siguen pendientes. La API actual exige recetas y stock al enviar: no se ha preparado automáticamente la base persistente de demostración. Consultar `specs/005-inventario-escandallo/tasks.md`.

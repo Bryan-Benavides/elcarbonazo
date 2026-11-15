@@ -83,6 +83,37 @@ public sealed class PedidosSalonViewModelTests
         Assert.Contains("catálogo cambió", vm.Mensaje, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Stock_rejection_preserves_draft_and_only_displays_valid_shortage(bool valid)
+    {
+        var sender = new StockFailureSendFake(valid);
+        using var vm = new PedidosSalonViewModel(1, null, "Mesa 1", new CatalogFake(), new AccountFake(),
+            () => { }, sender, 7);
+        vm.AgregarCommand.Execute(Assert.Single(vm.Productos));
+        vm.SolicitarEnvioCommand.Execute(null);
+        await vm.ConfirmarEnvioCommand.ExecuteAsync(null);
+        Assert.Equal(1, sender.Count);
+        Assert.False(vm.ResultadoIncierto);
+        Assert.Single(vm.Borrador);
+        Assert.Contains("inventario insuficiente", vm.Mensaje, StringComparison.OrdinalIgnoreCase);
+        if (valid) Assert.Contains("Carne", vm.Mensaje, StringComparison.Ordinal);
+        else Assert.DoesNotContain("Carne", vm.Mensaje, StringComparison.Ordinal);
+    }
+
+    private sealed class StockFailureSendFake(bool valid) : IEnvioPedidoApiService
+    {
+        public int Count { get; private set; }
+        public Task<EnvioConfirmadoPedidoDto> EnviarAsync(IntencionPedido intencion, CancellationToken cancellationToken = default)
+        {
+            Count++;
+            var shortage = new IngredienteFaltanteDto(1, "Carne", "lb", 2m, 1m, valid ? 1m : 3m);
+            throw new ApiException(System.Net.HttpStatusCode.Conflict,
+                new ApiProblem(409, "STOCK_INSUFICIENTE", null, null, null, [shortage]));
+        }
+    }
+
     [Fact]
     public void Paused_session_never_enables_write_or_claims_an_empty_account()
     {

@@ -101,6 +101,7 @@
                     </Border>
                     <Button Classes="navegacion-cocina" Content="Cocina" Padding="12,10" IsVisible="{Binding RolPuedeCocina}" IsEnabled="{Binding PuedeAbrirCocina}" Command="{Binding AbrirCocinaCommand}" HorizontalAlignment="Stretch" />
                     <Button Classes="navegacion-cocina" Content="Caja y recuperación" Padding="12,10" IsVisible="{Binding RolPuedeRecuperarCaja}" IsEnabled="{Binding PuedeAbrirRecuperacionCaja}" Command="{Binding AbrirRecuperacionCajaCommand}" HorizontalAlignment="Stretch" />
+                    <Button Classes="navegacion-cocina" Content="Inventario (consulta)" Padding="12,10" IsVisible="{Binding RolPuedeInventario}" IsEnabled="{Binding PuedeAbrirInventario}" Command="{Binding AbrirInventarioCommand}" HorizontalAlignment="Stretch" />
                 </StackPanel>
                 <StackPanel Grid.Row="2" Spacing="6">
                     <TextBlock Text="{Binding Nombre}" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" TextTrimming="CharacterEllipsis" />
@@ -227,6 +228,11 @@
         <ContentControl Grid.ColumnSpan="3" IsVisible="{Binding MostrandoRecuperacionCaja}" Content="{Binding RecuperacionCajaActual}" ZIndex="90">
             <ContentControl.DataTemplates>
                 <DataTemplate DataType="vm:CajaRecoveryViewModel"><views:CajaRecoveryView /></DataTemplate>
+            </ContentControl.DataTemplates>
+        </ContentControl>
+        <ContentControl Grid.ColumnSpan="3" IsVisible="{Binding MostrandoInventario}" Content="{Binding InventarioActual}" ZIndex="90">
+            <ContentControl.DataTemplates>
+                <DataTemplate DataType="vm:InventarioLecturaViewModel"><views:InventarioLecturaView /></DataTemplate>
             </ContentControl.DataTemplates>
         </ContentControl>
         <Border Grid.ColumnSpan="3" Background="#B0000000" IsVisible="{Binding ConfirmarCierreGrupo}" ZIndex="110">

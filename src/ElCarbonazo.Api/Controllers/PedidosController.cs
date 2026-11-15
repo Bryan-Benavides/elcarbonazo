@@ -72,7 +72,7 @@ public sealed class PedidosController(ICuentasService cuentas, EnviosService env
                 ["solicitud"] = ["La solicitud no cumple los requisitos de envío."]
             };
         }
-        if (data is not null) problem.Extensions["productos"] = data;
+        if (data is not null) problem.Extensions[code == "STOCK_INSUFICIENTE" ? "ingredientes" : "productos"] = data;
         return new ObjectResult(problem) { StatusCode = status, ContentTypes = { "application/problem+json" } };
     }
 

@@ -24,10 +24,15 @@ public class AppDbContext : DbContext
     public DbSet<Cobro> Cobros => Set<Cobro>();
     public DbSet<ComprobanteCobroLinea> ComprobantesCobroLineas => Set<ComprobanteCobroLinea>();
     public DbSet<OperacionCaja> OperacionesCaja => Set<OperacionCaja>();
+    public DbSet<Ingrediente> Ingredientes => Set<Ingrediente>();
+    public DbSet<Receta> Recetas => Set<Receta>();
+    public DbSet<DetalleReceta> DetallesReceta => Set<DetalleReceta>();
+    public DbSet<MovimientoInventario> MovimientosInventario => Set<MovimientoInventario>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.ConfigureInventario();
 
         // Tabla usuario
         modelBuilder.Entity<Usuario>(entity =>

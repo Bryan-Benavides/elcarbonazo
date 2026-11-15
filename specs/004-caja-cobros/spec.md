@@ -1,6 +1,6 @@
 # Especificación 004 — Caja, cobros y comprobante interno
 
-**Estado:** D0 funcional y técnico aprobado por el usuario como línea base para iniciar implementación de una demostración universitaria local aislada. No es aprobación fiscal, certificación de seguridad ni autorización para operar con dinero real.
+**Estado:** aceptado para demostración universitaria local aislada según `tasks.md` y `docs/validacion-004.md`. No es aprobación fiscal, certificación de seguridad ni autorización para operar con dinero real.
 
 ## 1. Objetivo y contexto
 
@@ -145,13 +145,15 @@ La UI no es frontera de autorización. Cualquier expansión requiere decisión, 
 - Confirmaciones muestran monto/destino/método exactos antes del paso irreversible. Tarjeta/transferencia incluyen afirmación explícita de verificación externa.
 - Estados de red/sesión/sin datos/desactualizado/incertidumbre no habilitan mutaciones. No indicar “pagado” antes de commit confirmado.
 - Estados bloqueados incluyen causa y acción válida siguiente. Navegación solo a destinos implementados.
-- Revisión visual manual real de plantillas SukiUI, tamaño mínimo, escalado, accesibilidad, foco y overflow; compilación por sí sola no acepta la interfaz.
+- Revisión práctica local de la interfaz y registro honesto de sus límites; compilación por sí sola no acepta la interfaz. Las mediciones completas de foco, tamaño mínimo y contraste no se atribuyen a la revisión comunicada.
 
 ## 7. Fuera de alcance y aptitud real
 
 Esta especificación no habilita uso con dinero real. Antes de operación real se requiere, como mínimo, validación con negocio/asesoría competente de impuestos, comprobantes y obligaciones; evaluación de adquirentes y conciliación; procedimientos autorizados de anulación/reembolso/errores; privacidad y retención; roles y segregación; instalación TLS/LAN, permisos PostgreSQL, backup/restauración, monitoreo, continuidad y pruebas físicas; aceptación del restaurante. No presentar el comprobante de demostración como factura.
 
 ## 8. Criterios de aceptación documental y funcional
+
+**Perfil universitario acordado:** se conservan las reglas y protecciones siguientes y se usan las pruebas esenciales existentes o focalizadas para verificarlas. La matriz exhaustiva de intercalaciones y puntos de fallo, y el instalador empaquetado, quedan para una etapa posterior; no se consideran probados ni requisitos para cerrar esta demostración local. La revisión práctica y conformidad del usuario están registradas en `docs/validacion-004.md`.
 
 1. No se crea segundo turno abierto bajo concurrencia; logout del abridor no altera el turno.
 2. Cero inicial requiere confirmación; turno cerrado no se edita ni reabre.
@@ -169,4 +171,4 @@ Esta especificación no habilita uso con dinero real. Antes de operación real s
 
 ## 9. Decisiones cerradas / control de cambios
 
-El usuario aprobó en conversación el alcance, reglas de negocio, actores, métodos, cierre, límites del comprobante y exigencia de recuperación durable que constan aquí. El usuario aprueba `plan.md` como línea base técnica para iniciar C1. El cambio contractual respecto de 003 está registrado como adenda explícita en la especificación de ese módulo: se exige cerrar el grupo pagado antes de aceptar nuevos pedidos. No se reescribe la historia ni el estado de cuentas existentes; la implementación debe actualizar reglas autoritativas y pruebas cruzadas. El usuario aprobó reutilizar el listado paginado de cuentas existente para revisar pendientes, sin añadir otro listado al resumen de turno; se conservan el conteo, la advertencia y el bloqueo por operación incierta. Ninguna decisión documental autoriza migrar una base persistente. Cambios posteriores requieren actualizar spec/plan/tasks y aprobar antes de implementar.
+El usuario aprobó en conversación el alcance, reglas de negocio, actores, métodos, cierre, límites del comprobante y exigencia de recuperación durable que constan aquí. El usuario aprueba `plan.md` como línea base técnica para iniciar C1. El cambio contractual respecto de 003 está registrado como adenda explícita en la especificación de ese módulo: se exige cerrar el grupo pagado antes de aceptar nuevos pedidos. No se reescribe la historia ni el estado de cuentas existentes; la implementación debe actualizar reglas autoritativas y pruebas cruzadas. El usuario aprobó reutilizar el listado paginado de cuentas existente para revisar pendientes, sin añadir otro listado al resumen de turno; se conservan el conteo, la advertencia y el bloqueo por operación incierta. También aprobó aplazar la matriz exhaustiva y el instalador empaquetado para el perfil universitario, manteniendo las protecciones y pruebas esenciales. Ninguna decisión documental autoriza migrar otra base persistente. Cambios posteriores requieren actualizar spec/plan/tasks y aprobar antes de implementar.

@@ -33,11 +33,24 @@ public sealed class EnvioPedidoApiServiceTests
         Assert.Equal(1, session.Count);
     }
 
+    [Fact]
+    public async Task Stock_conflict_preserves_shortage_details_from_problem_response()
+    {
+        var session = new FakeSession("""
+            {"status":409,"code":"STOCK_INSUFICIENTE","ingredientes":[{"idIngrediente":7,"nombre":"Carne","unidadMedida":"lb","requerido":2,"disponible":1,"faltante":1}]}
+            """, HttpStatusCode.Conflict);
+        var intent = new IntencionPedido(1, null, 7, [new LineaIntencionPedido(3, 2, 2, "", "Prueba", 10m)]);
+        var error = await Assert.ThrowsAsync<ApiException>(() => new EnvioPedidoApiService(session).EnviarAsync(intent));
+        Assert.Equal("STOCK_INSUFICIENTE", error.Problem?.Code);
+        Assert.Equal("Carne", Assert.Single(error.Problem!.Ingredientes!).Nombre);
+        Assert.Equal(1, session.Count);
+    }
+
     private static string ValidResponse() => """
         {"idComanda":9,"versionMesa":8,"pedido":{"idPedido":1,"idMesa":1,"idGrupo":null,"idUsuario":1,"fechaHora":"2026-01-01T00:00:00Z","subtotal":20.20,"impuestos":0,"total":20.20,"estado":"Abierto","soloLectura":false,"motivo":null,"comandas":[{"idComanda":9,"idUsuario":1,"fechaHora":"2026-01-01T00:00:00Z","estado":"Abierta","version":1,"lineas":[{"idDetalle":5,"idProducto":3,"nombreProducto":"Prueba DEMO","cantidad":2,"precioUnitario":10.10,"subtotal":20.20,"notas":"Café"}]}]}}
         """;
 
-    private sealed class FakeSession(string json) : ISessionManager
+    private sealed class FakeSession(string json, HttpStatusCode status = HttpStatusCode.Created) : ISessionManager
     {
         public int Count { get; private set; }
         public bool IsRead { get; private set; }
@@ -52,7 +65,7 @@ public sealed class EnvioPedidoApiServiceTests
             IsRead = isRead;
             using var request = requestFactory();
             Body = await request.Content!.ReadAsStringAsync(cancellationToken);
-            var response = new HttpResponseMessage(HttpStatusCode.Created) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+            var response = new HttpResponseMessage(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
             response.Headers.Location = new Uri("/api/pedidos/activo?mesaId=1", UriKind.Relative);
             return response;
         }

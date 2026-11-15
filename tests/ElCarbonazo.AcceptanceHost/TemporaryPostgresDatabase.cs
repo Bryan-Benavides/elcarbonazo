@@ -4,6 +4,8 @@ using ElCarbonazo.Api.Data;
 using ElCarbonazo.Api.Domain;
 using ElCarbonazo.Api.Entities;
 using ElCarbonazo.Api.Security;
+using ElCarbonazo.Api.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Configuration;
@@ -64,6 +66,28 @@ internal sealed class TemporaryPostgresDatabase
             ["DemoCatalog:Enabled"] = "true"
         }).Build();
         await new DemoCatalogSeeder(context, new AcceptanceEnvironment(), settings).SeedAsync(CancellationToken.None);
+        await SeedInventoryAsync();
+    }
+
+    public async Task SeedInventoryAsync()
+    {
+        if (!_created) throw new InvalidOperationException("La base temporal todavía no fue creada.");
+        await using var context = CreateContext();
+        var productIds = await context.Productos.AsNoTracking().Where(p => !context.Recetas.Any(r => r.IdProducto == p.IdProducto))
+            .OrderBy(p => p.IdProducto).Select(p => p.IdProducto).ToArrayAsync();
+        var audit = new AuditRecorder(context, new HttpContextAccessor(), TimeProvider.System);
+        var inventory = new InventarioService(context, audit, TimeProvider.System);
+        var recipes = new RecetasService(context, audit, TimeProvider.System);
+        foreach (var productId in productIds)
+        {
+            var created = await inventory.CrearIngredienteAsync(new($"Insumo ficticio {productId}", "unidad", 0, null, null), 1, default);
+            if (created.Status != 201 || created.Id is not int ingredientId) throw new InvalidOperationException("No se pudo crear el ingrediente ficticio.");
+            var recipe = await recipes.GuardarAsync(productId, new(true, null, null, [new(ingredientId, 1m)]), 1, default);
+            if (recipe.Status != 200) throw new InvalidOperationException("No se pudo crear la receta ficticia.");
+            var movement = await inventory.RegistrarMovimientoAsync(new(ingredientId, "EntradaCompra", 1000m, null), 1, default);
+            if (movement.Status != 201) throw new InvalidOperationException("No se pudo registrar el stock ficticio.");
+            context.ChangeTracker.Clear();
+        }
     }
 
     private sealed class AcceptanceEnvironment : IHostEnvironment

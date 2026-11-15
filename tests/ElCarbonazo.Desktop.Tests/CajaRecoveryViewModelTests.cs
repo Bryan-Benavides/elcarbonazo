@@ -356,6 +356,60 @@ public sealed class CajaRecoveryViewModelTests
         Assert.Contains("No se pudieron consultar", vm.EstadoCuentas, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Opening_waits_for_account_read_and_an_active_session()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"caja-read-write-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "journal.json");
+        var installation = Guid.NewGuid();
+        try
+        {
+            File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                version = 1,
+                instalacion = installation,
+                estado = "SinPendientes",
+                operacion = (Guid?)null,
+                propietario = (int?)null,
+                tipo = (string?)null
+            }));
+            File.WriteAllText(path + ".lock", "");
+            var store = new CajaRecoveryStore(path, installation, new Policy());
+            var session = new FakeSession();
+            var vm = new CajaRecoveryViewModel(store, session, () => 1);
+            var transport = new OpeningTransport(vm, false);
+            var reader = new DelayedAccountsReader();
+            vm.Attach(new CajaRecoveryCoordinator(store, transport, () => 1));
+            vm.AttachShiftReader(new EmptyShiftReader());
+            vm.AttachAccountsReader(reader);
+            Assert.True(vm.Open(() => { }));
+            await vm.ConsultarTurnoCommand.ExecuteAsync(null);
+            vm.ConfirmarApertura = true;
+            var reading = vm.ConsultarCuentasCommand.ExecuteAsync(null);
+            Assert.True(vm.Ocupado);
+            await vm.AbrirTurnoCommand.ExecuteAsync(null);
+            Assert.Equal(0, transport.Prepares);
+            Assert.Equal("SinPendientes", store.Read()!.Estado);
+            reader.Complete();
+            await reading;
+            session.State = SessionLifecycleState.Paused;
+            await vm.AbrirTurnoCommand.ExecuteAsync(null);
+            Assert.Equal(0, transport.Prepares);
+            session.State = SessionLifecycleState.Active;
+            Assert.Equal(0, transport.Prepares);
+            await vm.AbrirTurnoCommand.ExecuteAsync(null);
+            Assert.Equal(1, transport.Prepares);
+            Assert.Equal(1, transport.Executions);
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(path + ".lock");
+            Directory.Delete(directory);
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -611,7 +665,7 @@ public sealed class CajaRecoveryViewModelTests
     {
         public event EventHandler<SessionStateChangedEventArgs>? SessionStateChanged { add { } remove { } }
         public bool HasSession => true;
-        public SessionLifecycleState State => SessionLifecycleState.Active;
+        public SessionLifecycleState State { get; set; } = SessionLifecycleState.Active;
         public SessionSnapshot? CurrentSession => new(1, "jefa", "Jefa", DateTimeOffset.MaxValue, DateTimeOffset.MaxValue, DateTimeOffset.MaxValue);
         public Task<HttpResponseMessage> SendPollingAsync(Func<HttpRequestMessage> requestFactory, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<HttpResponseMessage> SendHumanAsync(Func<HttpRequestMessage> requestFactory, bool isRead, CancellationToken cancellationToken = default) => throw new NotSupportedException();

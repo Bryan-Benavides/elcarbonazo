@@ -184,6 +184,9 @@ public partial class PedidosSalonViewModel : ViewModelBase, IDisposable
             Mensaje = ex.Problem?.Code switch
             {
                 "CATALOGO_CAMBIADO" => "El catálogo cambió. Revise precios y disponibilidad; retire y agregue nuevamente las líneas afectadas.",
+                "STOCK_INSUFICIENTE" => DescribirFaltantes(ex.Problem.Ingredientes),
+                "RECETA_NO_DISPONIBLE" => "No se envió la comanda: uno o más productos no tienen una receta activa. Solicite su configuración y revise el borrador.",
+                "INGREDIENTE_INACTIVO" => "No se envió la comanda: una receta utiliza un ingrediente inactivo. Solicite su revisión.",
                 "MESA_CONFLICTO_CONCURRENCIA" => "La mesa cambió. Vuelva al mapa y abra de nuevo la cuenta antes de enviar.",
                 "CUENTA_LEGADA_SIN_COMANDAS" => "La cuenta anterior es de solo lectura y bloquea nuevos envíos.",
                 _ => "La API rechazó el envío. Revise la cuenta antes de intentar otra acción."
@@ -204,6 +207,20 @@ public partial class PedidosSalonViewModel : ViewModelBase, IDisposable
             Enviando = false;
             ActualizarPermisos();
         }
+    }
+
+    private static string DescribirFaltantes(IReadOnlyList<IngredienteFaltanteDto>? ingredientes)
+    {
+        if (ingredientes is null || ingredientes.Count is < 1 or > 50 ||
+            ingredientes.Any(x => x is null || x.IdIngrediente <= 0 || string.IsNullOrWhiteSpace(x.Nombre) ||
+                x.Nombre.Length > 240 || x.Nombre.Any(char.IsControl) ||
+                x.UnidadMedida is not ("lb" or "kg" or "oz" or "g" or "unidad" or "ml" or "lt") ||
+                x.Requerido is null or <= 0 || x.Disponible is null or < 0 || x.Faltante is null or <= 0 ||
+                x.Requerido - x.Disponible != x.Faltante))
+            return "No se envió la comanda: inventario insuficiente. Solicite revisar los ingredientes y conserve el borrador.";
+        var detail = string.Join("; ", ingredientes.Select(x =>
+            $"{x.Nombre}: faltan {x.Faltante:0.####} {x.UnidadMedida}"));
+        return $"No se envió la comanda. Inventario insuficiente: {detail}. Revise el borrador.";
     }
 
     private void ActualizarSubtotal()

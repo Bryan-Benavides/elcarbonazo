@@ -36,6 +36,7 @@ internal static class CajaSmoke
             }
         }
 
+        await database.SeedInventoryAsync();
         client.DefaultRequestHeaders.Authorization = null;
         using var login = await client.PostAsJsonAsync("api/auth/login", new { nombre = "jefa central", contrasena = "correct horse battery staple" }, token);
         login.EnsureSuccessStatusCode();
@@ -217,6 +218,14 @@ internal static class CajaSmoke
         var product = products.GetProperty("items")[0];
         var productId = product.GetProperty("idProducto").GetInt32();
         var productVersion = product.GetProperty("version").GetInt32();
+        var recipe = await client.GetFromJsonAsync<JsonElement>($"api/recetas/producto/{productId}", token);
+        var ingredientId = recipe.GetProperty("receta").GetProperty("lineas")[0].GetProperty("idIngrediente").GetInt32();
+        async Task<int> ConsumptionCountAsync()
+        {
+            var movements = await client.GetFromJsonAsync<JsonElement>($"api/inventario/movimientos?idIngrediente={ingredientId}&limite=100", token);
+            return movements.GetProperty("items").EnumerateArray().Count(x => x.GetProperty("tipoMovimiento").GetString() == "ConsumoPedido");
+        }
+        var beforeConsumption = await ConsumptionCountAsync();
         var tables = await client.GetFromJsonAsync<JsonElement[]>("api/mesas", token) ?? throw new InvalidDataException("Faltan mesas.");
         var single = tables.Single(x => x.GetProperty("numero").GetInt32() == 9);
         var singleId = single.GetProperty("idMesa").GetInt32();
@@ -243,6 +252,7 @@ internal static class CajaSmoke
 
         var individual = await SendAsync(singleId, null, single.GetProperty("version").GetUInt32());
         var grouped = await SendAsync(null, groupId, null);
+        Require(await ConsumptionCountAsync() == beforeConsumption + 2, "Los envíos no registraron exactamente dos consumos.");
         var queue = await client.GetFromJsonAsync<JsonElement>("api/cocina/cola?limite=25", token);
         foreach (var commandId in new[] { individual.Command, grouped.Command })
         {
@@ -277,6 +287,7 @@ internal static class CajaSmoke
             await vm.CobrarEfectivoCommand.ExecuteAsync(null);
             Require(vm.Mensaje.Contains("Cobro confirmado", StringComparison.Ordinal) && vm.Fotografia.Contains("NO ES FACTURA FISCAL", StringComparison.Ordinal), "El cobro integrado no concilió su comprobante.");
         }
+        Require(await ConsumptionCountAsync() == beforeConsumption + 2, "El cobro volvió a descontar inventario.");
 
         var current = await client.GetFromJsonAsync<JsonElement[]>("api/mesas", token) ?? throw new InvalidDataException("Faltan mesas.");
         var occupied = current.Single(x => x.GetProperty("idMesa").GetInt32() == singleId);
