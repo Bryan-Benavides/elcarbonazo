@@ -46,6 +46,7 @@ public sealed class MovimientoInventario
     public decimal StockPosterior { get; set; }
     public int? IdPedido { get; set; }
     public int? IdComanda { get; set; }
+    public long? IdAnulacion { get; set; }
     public int IdUsuario { get; set; }
     public string? Motivo { get; set; }
     public DateTimeOffset FechaUtc { get; set; }

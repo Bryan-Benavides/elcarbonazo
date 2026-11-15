@@ -685,7 +685,15 @@ public sealed class RuntimeGrantsTests
                     has_table_privilege(@role, 'public.detalle_receta', 'DELETE'),
                     has_column_privilege(@role, 'public.ingrediente', 'stock_actual', 'UPDATE'),
                     has_sequence_privilege(@role, 'public.movimiento_inventario_id_movimiento_seq', 'USAGE'),
-                    has_table_privilege(@role, 'public.evento_auditoria', 'UPDATE')
+                    has_table_privilege(@role, 'public.evento_auditoria', 'UPDATE'),
+                    has_table_privilege(@role, 'public.consumo_detalle', 'INSERT'),
+                    has_table_privilege(@role, 'public.consumo_detalle', 'UPDATE'),
+                    has_table_privilege(@role, 'public.anulacion_pedido', 'DELETE'),
+                    has_column_privilege(@role, 'public.comanda', 'revision_detalles', 'UPDATE'),
+                    has_column_privilege(@role, 'public.detalle_pedido', 'cancelado', 'UPDATE'),
+                    has_column_privilege(@role, 'public.autorizacion_anulacion', 'hash_token', 'UPDATE'),
+                    has_column_privilege(@role, 'public.autorizacion_anulacion', 'fecha_consumo_utc', 'UPDATE'),
+                    has_column_privilege(@role, 'public.alerta_anulacion', 'fecha_acuse_utc', 'UPDATE')
                 """, connection);
             verify.Parameters.AddWithValue("role", runtimeRole);
             await using var reader = await verify.ExecuteReaderAsync();
@@ -726,6 +734,14 @@ public sealed class RuntimeGrantsTests
             Assert.True(reader.GetBoolean(33));
             Assert.True(reader.GetBoolean(34));
             Assert.False(reader.GetBoolean(35));
+            Assert.True(reader.GetBoolean(36));
+            Assert.False(reader.GetBoolean(37));
+            Assert.False(reader.GetBoolean(38));
+            Assert.True(reader.GetBoolean(39));
+            Assert.True(reader.GetBoolean(40));
+            Assert.False(reader.GetBoolean(41));
+            Assert.True(reader.GetBoolean(42));
+            Assert.True(reader.GetBoolean(43));
             await reader.CloseAsync();
 
             await using (var seed = new NpgsqlCommand("""
@@ -815,6 +831,58 @@ public sealed class RuntimeGrantsTests
             {
                 await inventory.ExecuteNonQueryAsync();
             }
+            // Persistence permissions only: this does not execute or authorize a business cancellation.
+            await using (var cancellationPersistence = new NpgsqlCommand("""
+                INSERT INTO consumo_detalle (id_detalle, id_ingrediente, cantidad)
+                SELECT d.id_detalle, i.id_ingrediente, 0.4 FROM detalle_pedido d CROSS JOIN ingrediente i;
+                INSERT INTO anulacion_pedido
+                    (id_pedido, id_comanda, id_detalle, cantidad_anulada, monto_revertido,
+                     estado_comanda_previo, id_usuario_solicita, id_usuario_autoriza, motivo, inventario_revertido, fecha_utc)
+                SELECT p.id_pedido, c.id_comanda, d.id_detalle, 1, 10, 'Lista', 1, 1, 'Prueba ficticia', true, now()
+                FROM pedido p JOIN comanda c ON c.id_pedido = p.id_pedido JOIN detalle_pedido d ON d.id_comanda = c.id_comanda;
+                INSERT INTO alerta_anulacion (id_anulacion)
+                SELECT id_anulacion FROM anulacion_pedido;
+                UPDATE alerta_anulacion SET fecha_acuse_utc = now(), id_usuario_acuse = 1;
+                INSERT INTO movimiento_inventario
+                    (id_ingrediente, tipo_movimiento, cantidad_delta, stock_anterior, stock_posterior,
+                     id_pedido, id_comanda, id_anulacion, id_usuario, motivo, fecha_utc)
+                SELECT i.id_ingrediente, 'ReversionCancelacion', 0.4, i.stock_actual, i.stock_actual + 0.4,
+                    a.id_pedido, a.id_comanda, a.id_anulacion, 1, 'Prueba ficticia', now()
+                FROM ingrediente i CROSS JOIN anulacion_pedido a;
+                UPDATE ingrediente SET stock_actual = stock_actual + 0.4, version = version + 1, fecha_actualizacion_utc = now();
+                UPDATE comanda SET revision_detalles = revision_detalles + 1;
+                UPDATE detalle_pedido SET cancelado = true;
+                """, connection))
+            {
+                await cancellationPersistence.ExecuteNonQueryAsync();
+            }
+            await using (var duplicate = new NpgsqlCommand("""
+                INSERT INTO movimiento_inventario
+                    (id_ingrediente, tipo_movimiento, cantidad_delta, stock_anterior, stock_posterior,
+                     id_pedido, id_comanda, id_anulacion, id_usuario, motivo, fecha_utc)
+                SELECT id_ingrediente, tipo_movimiento, cantidad_delta, stock_anterior, stock_posterior,
+                    id_pedido, id_comanda, id_anulacion, id_usuario, motivo, now()
+                FROM movimiento_inventario WHERE tipo_movimiento = 'ReversionCancelacion'
+                """, connection))
+            {
+                var error = await Assert.ThrowsAsync<PostgresException>(() => duplicate.ExecuteNonQueryAsync());
+                Assert.Equal(PostgresErrorCodes.UniqueViolation, error.SqlState);
+            }
+            await using (var duplicateSnapshot = new NpgsqlCommand("""
+                INSERT INTO consumo_detalle (id_detalle, id_ingrediente, cantidad)
+                SELECT id_detalle, id_ingrediente, cantidad FROM consumo_detalle
+                """, connection))
+            {
+                var error = await Assert.ThrowsAsync<PostgresException>(() => duplicateSnapshot.ExecuteNonQueryAsync());
+                Assert.Equal(PostgresErrorCodes.UniqueViolation, error.SqlState);
+            }
+            foreach (var sql in new[] { "UPDATE consumo_detalle SET cantidad = 2", "DELETE FROM anulacion_pedido",
+                         "UPDATE evento_auditoria SET resultado = 'Alterado'", "DELETE FROM evento_auditoria" })
+            {
+                await using var forbiddenEvidence = new NpgsqlCommand(sql, connection);
+                var error = await Assert.ThrowsAsync<PostgresException>(() => forbiddenEvidence.ExecuteNonQueryAsync());
+                Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, error.SqlState);
+            }
             await using (var forbidden = new NpgsqlCommand("DELETE FROM movimiento_inventario", connection))
             {
                 var error = await Assert.ThrowsAsync<PostgresException>(() => forbidden.ExecuteNonQueryAsync());
@@ -833,9 +901,9 @@ public sealed class RuntimeGrantsTests
             await using (var inventoryReader = await verifyInventory.ExecuteReaderAsync())
             {
                 Assert.True(await inventoryReader.ReadAsync());
-                Assert.Equal(100000.5000m, inventoryReader.GetDecimal(0));
-                Assert.Equal(4L, inventoryReader.GetInt64(1));
-                Assert.Equal(3L, inventoryReader.GetInt64(2));
+                Assert.Equal(100000.9000m, inventoryReader.GetDecimal(0));
+                Assert.Equal(5L, inventoryReader.GetInt64(1));
+                Assert.Equal(4L, inventoryReader.GetInt64(2));
                 Assert.Equal(0.4000m, inventoryReader.GetDecimal(3));
             }
             await using (var resetRole = new NpgsqlCommand("RESET ROLE", connection))

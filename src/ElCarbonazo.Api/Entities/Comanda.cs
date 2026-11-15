@@ -8,6 +8,7 @@ public sealed class Comanda
     public DateTimeOffset FechaHora { get; set; }
     public string Estado { get; set; } = null!;
     public uint Version { get; set; }
+    public long RevisionDetalles { get; set; } = 1;
 
     public Pedido Pedido { get; set; } = null!;
     public Usuario Usuario { get; set; } = null!;

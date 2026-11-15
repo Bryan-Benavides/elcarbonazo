@@ -34,6 +34,8 @@
 14. `evento_auditoria` (id_evento [PK, BIGSERIAL], fecha_hora, tipo_evento, resultado, id_usuario [FK, NULL], id_sesion [FK, NULL], direccion_ip [NULL], id_instalacion [UUID, NULL], tipo_entidad [NULL], id_entidad [NULL], trace_id, detalles [JSONB])
 
 ## Reglas de Auditoría y Logs
+
+> **006 aprobado para implementación, aún no implementado:** cancelaciones autorizadas de líneas completas o comandas y devolución de consumo solo con evidencia histórica suficiente están especificadas en `specs/006-auditoria-cancelaciones-seguridad/`. No sustituye las reglas vigentes de 003–005 hasta su implementación ni autoriza migraciones persistentes.
 - Los eventos funcionales y de seguridad críticos se conservan en una tabla de auditoría PostgreSQL dedicada.
 - Se auditan resultados de login, bloqueo de cuenta, refresh, logout, revocación por nuevo login, bootstrap, cambios de estado de mesa y creación/cierre de grupos.
 - Del rate limit de login se conserva únicamente el primer rechazo por IP y ventana de un minuto como `LoginRateLimitActivado`; los demás no crean filas adicionales.

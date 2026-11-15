@@ -10,6 +10,7 @@ public sealed class DetallePedido
     public decimal PrecioUnitario { get; set; }
     public decimal Subtotal { get; set; }
     public string Notas { get; set; } = string.Empty;
+    public bool Cancelado { get; set; }
 
     public Comanda Comanda { get; set; } = null!;
     public Producto Producto { get; set; } = null!;

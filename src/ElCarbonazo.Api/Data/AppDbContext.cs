@@ -28,11 +28,18 @@ public class AppDbContext : DbContext
     public DbSet<Receta> Recetas => Set<Receta>();
     public DbSet<DetalleReceta> DetallesReceta => Set<DetalleReceta>();
     public DbSet<MovimientoInventario> MovimientosInventario => Set<MovimientoInventario>();
+    public DbSet<ConsumoDetalle> ConsumosDetalle => Set<ConsumoDetalle>();
+    public DbSet<AnulacionPedido> AnulacionesPedido => Set<AnulacionPedido>();
+    public DbSet<OperacionAnulacion> OperacionesAnulacion => Set<OperacionAnulacion>();
+    public DbSet<AutorizacionAnulacion> AutorizacionesAnulacion => Set<AutorizacionAnulacion>();
+    public DbSet<AlertaAnulacion> AlertasAnulacion => Set<AlertaAnulacion>();
+    public DbSet<LimiteAutorizacion> LimitesAutorizacion => Set<LimiteAutorizacion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ConfigureInventario();
+        modelBuilder.ConfigureCancelaciones();
 
         // Tabla usuario
         modelBuilder.Entity<Usuario>(entity =>
@@ -334,7 +341,8 @@ public class AppDbContext : DbContext
             {
                 table.HasCheckConstraint(
                     "CK_comanda_estado",
-                    "estado IN ('Abierta', 'En Preparación', 'Lista')");
+                    "estado IN ('Abierta', 'En Preparación', 'Lista', 'Cancelada')");
+                table.HasCheckConstraint("CK_comanda_revision_detalles", "revision_detalles > 0");
             });
             entity.HasKey(comanda => comanda.IdComanda);
             entity.Property(comanda => comanda.IdComanda)
@@ -355,6 +363,7 @@ public class AppDbContext : DbContext
                 .IsRequired();
             entity.Property(comanda => comanda.Version)
                 .IsRowVersion();
+            entity.Property(comanda => comanda.RevisionDetalles).HasColumnName("revision_detalles").HasDefaultValue(1L);
             entity.HasIndex(comanda => new { comanda.Estado, comanda.FechaHora, comanda.IdComanda })
                 .HasDatabaseName("IX_comanda_estado_fecha_hora_id_comanda");
             entity.HasIndex(comanda => new { comanda.IdPedido, comanda.IdComanda })
@@ -390,6 +399,7 @@ public class AppDbContext : DbContext
                     "char_length(notas) <= 150 AND notas = normalize(notas, NFC)");
             });
             entity.HasKey(detalle => detalle.IdDetalle);
+            entity.Property(detalle => detalle.Cancelado).HasColumnName("cancelado").HasDefaultValue(false);
             entity.Property(detalle => detalle.IdDetalle)
                 .HasColumnName("id_detalle")
                 .ValueGeneratedOnAdd();

@@ -97,7 +97,7 @@ public sealed class InventarioPersistenceTests
         try
         {
             await database.InitializeAsync(CajaMigration);
-            await using var context = database.CreateContext();
+            await using var context = new PedidosHistoricalContext(database.ConnectionString);
             await context.Database.ExecuteSqlRawAsync("""
                 INSERT INTO producto (nombre, categoria, precio, disponible)
                 VALUES ('Producto histórico', 'Comida', 10, true)
@@ -169,7 +169,8 @@ public sealed class InventarioPersistenceTests
             var beforePayment = await context.Cobros.AsNoTracking().Select(x => new { x.IdCobro, x.IdPedido, x.IdTurnoCaja, x.Total }).SingleAsync();
             var beforeReceipt = await context.ComprobantesCobroLineas.AsNoTracking().CountAsync();
             Assert.True(beforeReceipt > 0);
-            await context.Database.MigrateAsync();
+            await using (var migrationContext = database.CreateContext())
+                await migrationContext.Database.MigrateAsync();
             context.ChangeTracker.Clear();
             Assert.Equal(beforeOrder, await context.Pedidos.AsNoTracking().Select(x => new { x.IdPedido, x.Estado, x.Total }).SingleAsync());
             Assert.Equal(beforeCommand, await context.Comandas.AsNoTracking().Select(x => new { x.IdComanda, x.IdPedido, x.Estado }).SingleAsync());
@@ -197,4 +198,5 @@ public sealed class InventarioPersistenceTests
         }
         finally { await database.DisposeAsync(); }
     }
+
 }

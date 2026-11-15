@@ -1,5 +1,10 @@
 # Bitácora de errores y lecciones — El Carbonazo
 
+### 006: modelo EF actual contra migración histórica
+
+- **Hecho confirmado:** al añadir columnas de 006, dos pruebas que poblaban esquemas anteriores a 006 mediante el modelo EF actual fallaron porque `comanda.revision_detalles` aún no existía en esos esquemas.
+- **Control:** construir los datos previos con un contexto de prueba que ignore las propiedades posteriores y usar el contexto normal para aplicar migraciones; conservar la comparación de históricos. Las pruebas focalizadas pasaron después de ese cambio. No editar migraciones antiguas para adaptar las pruebas.
+
 ### 004: historial de caja con esquema ausente
 
 - **Hecho observado en registros locales:** una consulta de `CajaComprobantesController` falló con PostgreSQL `42P01` porque faltaba la relación `cobro`. El registro demuestra el error en esa ejecución, no el estado actual de cualquier otra base o instancia HTTPS.

@@ -43,6 +43,19 @@ GRANT UPDATE (activa, notas_preparacion, fecha_actualizacion_utc, version) ON pu
 GRANT SELECT, INSERT, DELETE ON public.detalle_receta TO elcarbonazo_runtime;
 GRANT SELECT, INSERT ON public.movimiento_inventario TO elcarbonazo_runtime;
 
+-- 006: immutable evidence, limited state transitions and expiring authorization counters.
+GRANT SELECT, INSERT ON public.consumo_detalle, public.anulacion_pedido TO elcarbonazo_runtime;
+GRANT UPDATE (revision_detalles) ON public.comanda TO elcarbonazo_runtime;
+GRANT UPDATE (cancelado) ON public.detalle_pedido TO elcarbonazo_runtime;
+GRANT SELECT, INSERT ON public.operacion_anulacion, public.autorizacion_anulacion, public.alerta_anulacion TO elcarbonazo_runtime;
+GRANT UPDATE (estado, fecha_terminal_utc, status_resultado, codigo_resultado, resultado_json)
+    ON public.operacion_anulacion TO elcarbonazo_runtime;
+GRANT UPDATE (fecha_consumo_utc) ON public.autorizacion_anulacion TO elcarbonazo_runtime;
+GRANT UPDATE (fecha_acuse_utc, id_usuario_acuse) ON public.alerta_anulacion TO elcarbonazo_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.limite_autorizacion TO elcarbonazo_runtime;
+GRANT USAGE, SELECT ON SEQUENCE public.anulacion_pedido_id_anulacion_seq TO elcarbonazo_runtime;
+GRANT USAGE, SELECT ON SEQUENCE public.autorizacion_anulacion_id_autorizacion_seq TO elcarbonazo_runtime;
+
 GRANT USAGE, SELECT ON SEQUENCE public.grupo_mesa_id_grupo_seq TO elcarbonazo_runtime;
 GRANT USAGE, SELECT ON SEQUENCE public.pedido_id_pedido_seq TO elcarbonazo_runtime;
 GRANT USAGE, SELECT ON SEQUENCE public.producto_id_producto_seq TO elcarbonazo_runtime;
@@ -68,3 +81,4 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO elcarbonazo_runtime, elcarbonazo_bootstrap;
 REVOKE UPDATE, DELETE, TRUNCATE ON public.evento_auditoria FROM elcarbonazo_runtime, elcarbonazo_bootstrap;
 REVOKE UPDATE, DELETE, TRUNCATE ON public.movimiento_inventario FROM elcarbonazo_runtime, elcarbonazo_bootstrap;
+REVOKE UPDATE, DELETE, TRUNCATE ON public.consumo_detalle, public.anulacion_pedido FROM elcarbonazo_runtime, elcarbonazo_bootstrap;

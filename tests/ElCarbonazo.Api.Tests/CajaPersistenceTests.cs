@@ -18,7 +18,7 @@ public sealed class CajaPersistenceTests
         try
         {
             await database.InitializeAsync(PedidosMigration);
-            await using var context = database.CreateContext();
+            await using var context = new PedidosHistoricalContext(database.ConnectionString);
             var now = new DateTimeOffset(2026, 11, 9, 12, 0, 0, TimeSpan.Zero);
             var group = new GrupoMesa { IdUsuarioCreacion = 1, FechaCreacion = now, Activo = true };
             var product = new Producto { Nombre = "Producto histórico", Categoria = "Comida", Precio = 10m, Disponible = true };
@@ -69,7 +69,8 @@ public sealed class CajaPersistenceTests
             var membersBefore = await context.GruposMesaMiembros.AsNoTracking().OrderBy(x => x.IdMesa)
                 .Select(x => new { x.IdGrupo, x.IdMesa, x.FechaAsignacion }).ToArrayAsync();
 
-            await context.Database.MigrateAsync();
+            await using (var migrationContext = database.CreateContext())
+                await migrationContext.Database.MigrateAsync();
             context.ChangeTracker.Clear();
             Assert.Equal(ordersBefore, await context.Pedidos.AsNoTracking().OrderBy(x => x.IdPedido)
                 .Select(x => new { x.IdPedido, x.IdMesa, x.IdGrupo, x.IdUsuario, x.FechaHora, x.Subtotal, x.Impuestos, x.Total, x.Estado }).ToArrayAsync());
