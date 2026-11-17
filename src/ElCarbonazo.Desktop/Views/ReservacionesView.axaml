@@ -1,0 +1,109 @@
+<UserControl x:Class="ElCarbonazo.Desktop.Views.ReservacionesView"
+             x:Name="Root"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ElCarbonazo.Desktop.ViewModels"
+             xmlns:models="using:ElCarbonazo.Desktop.Models"
+             x:DataType="vm:ReservacionesViewModel"
+             x:CompileBindings="True"
+             Background="{StaticResource FondoPrincipalBrush}">
+    <Grid>
+    <Grid RowDefinitions="Auto,Auto,*" Margin="24" RowSpacing="14">
+        <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="4">
+                <TextBlock Text="Reservaciones" FontSize="26" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                <TextBlock Text="Una mesa por horario · hora local de Managua · máximo 8 horas" Foreground="{StaticResource TextoSecundarioBrush}" />
+            </StackPanel>
+            <Button Grid.Column="1" Content="Volver al mapa" Command="{Binding CerrarCommand}" VerticalAlignment="Top" />
+        </Grid>
+        <Border Grid.Row="1" Padding="16" CornerRadius="8" Background="{StaticResource FondoPanelBrush}"
+                BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1">
+            <Grid ColumnDefinitions="*,*,*,*,Auto,Auto" ColumnSpacing="10" RowDefinitions="Auto,Auto">
+                <StackPanel Spacing="5">
+                    <TextBlock Text="Desde · Managua" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBox Text="{Binding DesdeLocal}" PlaceholderText="AAAA-MM-DD HH:mm" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="5">
+                    <TextBlock Text="Hasta · Managua" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBox Text="{Binding HastaLocal}" PlaceholderText="AAAA-MM-DD HH:mm" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Spacing="5">
+                    <TextBlock Text="Personas" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBox Text="{Binding CantidadPersonas}" />
+                </StackPanel>
+                <StackPanel Grid.Column="3" Spacing="5">
+                    <TextBlock Text="Alias" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBox Text="{Binding NombreReferencia}" MaxLength="60" PlaceholderText="Nombre de referencia" />
+                </StackPanel>
+                <Button Grid.Column="4" Content="Consultar" Command="{Binding ConsultarCommand}" IsEnabled="{Binding !Ocupado}" VerticalAlignment="Bottom" />
+                <Button Grid.Column="5" Content="Reservar mesa" Classes="primario" Command="{Binding CrearCommand}"
+                        IsEnabled="{Binding PuedeEscribir}" VerticalAlignment="Bottom" />
+                <TextBlock Grid.Row="1" Grid.ColumnSpan="6" Margin="0,10,0,0" Text="{Binding Mensaje}"
+                           Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+            </Grid>
+        </Border>
+        <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="14">
+            <Border Padding="14" CornerRadius="8" Background="{StaticResource FondoPanelBrush}"
+                    BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1">
+                <Grid RowDefinitions="Auto,*" RowSpacing="10">
+                    <TextBlock Text="Mesas disponibles (seleccione una)" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <ListBox Grid.Row="1" ItemsSource="{Binding Disponibles}" SelectedItem="{Binding MesaDisponible}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:DisponibilidadMesaDto">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="{Binding Numero, StringFormat='Mesa {0:00}'}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                    <TextBlock Text="{Binding Capacidad, StringFormat='capacidad {0}'}" Foreground="{StaticResource TextoSecundarioBrush}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+            <Border Grid.Column="1" Padding="14" CornerRadius="8" Background="{StaticResource FondoPanelBrush}"
+                    BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1">
+                <Grid RowDefinitions="Auto,*" RowSpacing="10">
+                    <TextBlock Text="Reservas activas del próximo año (máximo 500)" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <ListBox Grid.Row="1" ItemsSource="{Binding Reservaciones}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:ReservacionDto">
+                                <Grid ColumnDefinitions="*,Auto" Margin="4">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="{Binding NombreReferencia}" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="{Binding NumeroMesa, StringFormat='Mesa {0:00}'}" Foreground="{StaticResource TextoSecundarioBrush}" />
+                                            <TextBlock Text="{Binding CantidadPersonas, StringFormat='{}{0} personas'}" Foreground="{StaticResource TextoSecundarioBrush}" />
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding InicioLocalTexto, StringFormat='Inicio · Managua: {0}'}"
+                                                   Foreground="{StaticResource TextoSecundarioBrush}" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Content="Cancelar"
+                                            Command="{Binding #Root.DataContext.CancelarCommand}" CommandParameter="{Binding}" VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+    <Border Grid.RowSpan="3" Background="#B0000000" IsVisible="{Binding ConfirmarCancelacion}" ZIndex="100">
+        <Border Width="420" MaxWidth="420" Padding="24" CornerRadius="10"
+                Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}"
+                BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <StackPanel Spacing="14">
+                <TextBlock Text="¿Cancelar esta reserva?" FontSize="20" FontWeight="Bold"
+                           Foreground="{StaticResource TextoPrincipalBrush}" />
+                <TextBlock Text="{Binding ReservacionParaCancelar.NombreReferencia}"
+                           Foreground="{StaticResource TextoPrincipalBrush}" />
+                <TextBlock Text="La mesa volverá a aparecer disponible para ese intervalo."
+                           TextWrapping="Wrap" Foreground="{StaticResource TextoSecundarioBrush}" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                    <Button Content="Volver" Command="{Binding CerrarConfirmacionCancelacionCommand}" />
+                    <Button Classes="primario" Content="Confirmar cancelación"
+                            Command="{Binding ConfirmarCancelarCommand}" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Border>
+    </Grid>
+</UserControl>

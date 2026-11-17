@@ -45,6 +45,8 @@ GRANT SELECT, INSERT ON public.movimiento_inventario TO elcarbonazo_runtime;
 
 -- 006: immutable evidence, limited state transitions and expiring authorization counters.
 GRANT SELECT, INSERT ON public.consumo_detalle, public.anulacion_pedido TO elcarbonazo_runtime;
+GRANT SELECT, INSERT ON public.reservacion TO elcarbonazo_runtime;
+GRANT UPDATE (estado, cancelada_utc) ON public.reservacion TO elcarbonazo_runtime;
 GRANT UPDATE (revision_detalles) ON public.comanda TO elcarbonazo_runtime;
 GRANT UPDATE (cancelado) ON public.detalle_pedido TO elcarbonazo_runtime;
 GRANT SELECT, INSERT ON public.operacion_anulacion, public.autorizacion_anulacion, public.alerta_anulacion TO elcarbonazo_runtime;
@@ -53,7 +55,11 @@ GRANT UPDATE (estado, fecha_terminal_utc, status_resultado, codigo_resultado, re
 GRANT UPDATE (fecha_consumo_utc) ON public.autorizacion_anulacion TO elcarbonazo_runtime;
 GRANT UPDATE (fecha_acuse_utc, id_usuario_acuse) ON public.alerta_anulacion TO elcarbonazo_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.limite_autorizacion TO elcarbonazo_runtime;
+-- Runtime may record a key change but cannot provision, recreate or delete the singleton.
+GRANT SELECT ON public.estado_hmac_autorizacion TO elcarbonazo_runtime;
+GRANT UPDATE (huella, espera_hasta_utc) ON public.estado_hmac_autorizacion TO elcarbonazo_runtime;
 GRANT USAGE, SELECT ON SEQUENCE public.anulacion_pedido_id_anulacion_seq TO elcarbonazo_runtime;
+GRANT USAGE, SELECT ON SEQUENCE public.reservacion_id_reservacion_seq TO elcarbonazo_runtime;
 GRANT USAGE, SELECT ON SEQUENCE public.autorizacion_anulacion_id_autorizacion_seq TO elcarbonazo_runtime;
 
 GRANT USAGE, SELECT ON SEQUENCE public.grupo_mesa_id_grupo_seq TO elcarbonazo_runtime;

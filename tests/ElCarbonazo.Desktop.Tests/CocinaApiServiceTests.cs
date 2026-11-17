@@ -46,21 +46,51 @@ public sealed class CocinaApiServiceTests
         await Assert.ThrowsAsync<InvalidDataException>(() => invalid.ConsultarAsync());
     }
 
-    private sealed class FakeSession(string json) : ISessionManager
+    [Fact]
+    public async Task Alert_polling_and_ack_use_separate_read_and_single_emission_write()
     {
+        const string alert = """{"idAnulacion":9,"idPedido":2,"idComanda":3,"idMesa":4,"idGrupo":null,"texto":"ANULADO — NO PREPARAR","motivo":"Motivo válido","fechaUtc":"2026-01-01T00:00:00Z","fechaAcuseUtc":null}""";
+        var polling = new FakeSession($$"""{"items":[{{alert}}],"cursorSiguiente":null}""");
+        var service = new CocinaApiService(polling);
+        var page = await service.ConsultarAnulacionesAsync();
+        Assert.Equal("api/cocina/alertas-cancelacion?limite=25", polling.Path);
+        Assert.Equal("ANULADO — NO PREPARAR", Assert.Single(page.Items).Texto);
+        Assert.False(polling.SingleEmission);
+
+        polling.NextJson = """{"estado":"OK"}""";
+        await service.AcusarAnulacionAsync(9);
+        Assert.Equal("api/cocina/anulaciones/9/acuse", polling.Path);
+        Assert.True(polling.SingleEmission);
+        Assert.Equal(2, polling.Calls);
+    }
+
+    private sealed class FakeSession(string json) : ISessionManager, IAnulacionSessionSender
+    {
+        public string NextJson { get; set; } = json;
         public string? Path { get; private set; }
         public string Body { get; private set; } = "";
         public bool Human { get; private set; }
+        public bool SingleEmission { get; private set; }
         public int Calls { get; private set; }
         public event EventHandler<SessionStateChangedEventArgs>? SessionStateChanged { add { } remove { } }
         public bool HasSession => true;
         public SessionLifecycleState State => SessionLifecycleState.Active;
-        public SessionSnapshot? CurrentSession => null;
+        public SessionSnapshot? CurrentSession => new(1, "Cocina", "Personal de Cocina", DateTimeOffset.UtcNow.AddMinutes(5),
+            DateTimeOffset.UtcNow.AddMinutes(10), DateTimeOffset.UtcNow.AddHours(1));
+        public long AnulacionSessionGeneration => 7;
         public Task<HttpResponseMessage> SendPollingAsync(Func<HttpRequestMessage> requestFactory, CancellationToken cancellationToken = default) => Send(requestFactory);
         public Task<HttpResponseMessage> SendHumanAsync(Func<HttpRequestMessage> requestFactory, bool isRead, CancellationToken cancellationToken = default)
         {
             Human = true;
             Assert.False(isRead);
+            return Send(requestFactory);
+        }
+        public Task<HttpResponseMessage> SendAnulacionOnceAsync(int expectedActor, long expectedGeneration,
+            Func<HttpRequestMessage> requestFactory, CancellationToken cancellationToken = default)
+        {
+            Assert.Equal(1, expectedActor);
+            Assert.Equal(7, expectedGeneration);
+            SingleEmission = true;
             return Send(requestFactory);
         }
         private async Task<HttpResponseMessage> Send(Func<HttpRequestMessage> factory)
@@ -69,7 +99,7 @@ public sealed class CocinaApiServiceTests
             using var request = factory();
             Path = request.RequestUri?.ToString();
             if (request.Content is not null) Body = await request.Content.ReadAsStringAsync();
-            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(NextJson, Encoding.UTF8, "application/json") };
         }
         public Task<AuthSessionResponse> LoginAsync(string nombre, string contrasena, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task NotifyHumanInteractionAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;

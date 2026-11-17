@@ -102,6 +102,8 @@
                     <Button Classes="navegacion-cocina" Content="Cocina" Padding="12,10" IsVisible="{Binding RolPuedeCocina}" IsEnabled="{Binding PuedeAbrirCocina}" Command="{Binding AbrirCocinaCommand}" HorizontalAlignment="Stretch" />
                     <Button Classes="navegacion-cocina" Content="Caja y recuperación" Padding="12,10" IsVisible="{Binding RolPuedeRecuperarCaja}" IsEnabled="{Binding PuedeAbrirRecuperacionCaja}" Command="{Binding AbrirRecuperacionCajaCommand}" HorizontalAlignment="Stretch" />
                     <Button Classes="navegacion-cocina" Content="Inventario (consulta)" Padding="12,10" IsVisible="{Binding RolPuedeInventario}" IsEnabled="{Binding PuedeAbrirInventario}" Command="{Binding AbrirInventarioCommand}" HorizontalAlignment="Stretch" />
+                    <Button Classes="navegacion-cocina" Content="Reservaciones" Padding="12,10" IsVisible="{Binding RolPuedeReservaciones}" IsEnabled="{Binding PuedeAbrirReservaciones}" Command="{Binding AbrirReservacionesCommand}" HorizontalAlignment="Stretch" />
+                    <Button Classes="navegacion-cocina" Content="Reporte de ventas" Padding="12,10" IsVisible="{Binding RolPuedeReporteVentas}" IsEnabled="{Binding PuedeAbrirReporteVentas}" Command="{Binding AbrirReporteVentasCommand}" HorizontalAlignment="Stretch" />
                 </StackPanel>
                 <StackPanel Grid.Row="2" Spacing="6">
                     <TextBlock Text="{Binding Nombre}" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" TextTrimming="CharacterEllipsis" />
@@ -184,6 +186,9 @@
                                         <TextBlock Text="{Binding Capacidad, StringFormat='Capacidad: {0} personas'}" Foreground="{StaticResource TextoSecundarioBrush}" />
                                         <TextBlock Text="{Binding Estado, StringFormat='Estado: {0}'}" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" />
                                         <TextBlock Text="{Binding GrupoTexto}" FontSize="12" Foreground="{StaticResource TextoSecundarioBrush}" />
+                                        <TextBlock Text="{Binding ProximaReservacion.InicioLocalTexto, StringFormat='Reserva: {0} · hora Managua'}"
+                                                   IsVisible="{Binding ProximaReservacion}" FontSize="12" FontWeight="SemiBold"
+                                                   Foreground="#FFBF36" TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Grid>
                             </Border>
@@ -202,7 +207,9 @@
                     <TextBlock Text="{Binding DetalleTitulo}" Foreground="{StaticResource TextoPrincipalBrush}" FontSize="21" FontWeight="Bold" />
                     <TextBlock Text="{Binding DetalleCapacidad}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding DetalleEstado}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
-                      <TextBlock Text="{Binding DetalleGrupo}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                                         <TextBlock Text="{Binding DetalleGrupo}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding MesaSeleccionada.ProximaReservacion.InicioLocalTexto, StringFormat='Próxima reserva: {0} · Managua'}"
+                               IsVisible="{Binding MesaSeleccionada.ProximaReservacion}" Foreground="#FFBF36" TextWrapping="Wrap" />
                       <TextBlock Text="{Binding AyudaAcciones}" Foreground="{StaticResource TextoSecundarioBrush}" TextWrapping="Wrap" FontSize="12" />
                      <Button Classes="primario" Content="Ver cuenta y borrador" IsEnabled="{Binding PuedeAbrirCuenta}" Command="{Binding AbrirCuentaCommand}" HorizontalAlignment="Stretch" />
                      <Button Content="Reservar" IsEnabled="{Binding PuedeReservar}" Command="{Binding ReservarCommand}" HorizontalAlignment="Stretch" />
@@ -233,6 +240,16 @@
         <ContentControl Grid.ColumnSpan="3" IsVisible="{Binding MostrandoInventario}" Content="{Binding InventarioActual}" ZIndex="90">
             <ContentControl.DataTemplates>
                 <DataTemplate DataType="vm:InventarioLecturaViewModel"><views:InventarioLecturaView /></DataTemplate>
+            </ContentControl.DataTemplates>
+        </ContentControl>
+        <ContentControl Grid.ColumnSpan="3" IsVisible="{Binding MostrandoReservaciones}" Content="{Binding ReservacionesActual}" ZIndex="90">
+            <ContentControl.DataTemplates>
+                <DataTemplate DataType="vm:ReservacionesViewModel"><views:ReservacionesView /></DataTemplate>
+            </ContentControl.DataTemplates>
+        </ContentControl>
+        <ContentControl Grid.ColumnSpan="3" IsVisible="{Binding MostrandoReporteVentas}" Content="{Binding ReporteVentasActual}" ZIndex="90">
+            <ContentControl.DataTemplates>
+                <DataTemplate DataType="vm:ReporteVentasViewModel"><views:ReporteVentasView /></DataTemplate>
             </ContentControl.DataTemplates>
         </ContentControl>
         <Border Grid.ColumnSpan="3" Background="#B0000000" IsVisible="{Binding ConfirmarCierreGrupo}" ZIndex="110">

@@ -77,7 +77,8 @@ public sealed class CajaCobroExecutor(AppDbContext context, IAuditRecorder audit
             FechaHora = now
         };
         var position = 0;
-        foreach (var detail in order.Comandas.OrderBy(x => x.IdComanda).SelectMany(x => x.Detalles.OrderBy(d => d.IdDetalle)))
+        foreach (var detail in order.Comandas.Where(x => x.Estado != "Cancelada").OrderBy(x => x.IdComanda)
+                     .SelectMany(x => x.Detalles.Where(d => !d.Cancelado).OrderBy(d => d.IdDetalle)))
             payment.Lineas.Add(new ComprobanteCobroLinea
             {
                 Orden = ++position,

@@ -27,6 +27,7 @@ public partial class CocinaViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private bool _hayMas;
 
     public ObservableCollection<CocinaComandaDto> Comandas { get; } = [];
+    public ObservableCollection<AnulacionKdsDto> AnulacionesPendientes { get; } = [];
     public bool ColaVacia => Conectado && Comandas.Count == 0;
     public bool PuedeOperar => !_disposed && Conectado && !Mutando && !ResultadoIncierto && SesionActiva;
     public bool PuedeVolver => !Mutando && !ResultadoIncierto;
@@ -111,6 +112,49 @@ public partial class CocinaViewModel : ViewModelBase, IDisposable
         }
     }
 
+    [RelayCommand]
+    private async Task AcusarAnulacionAsync(AnulacionKdsDto? alerta)
+    {
+        if (!PuedeOperar || alerta is null || !AnulacionesPendientes.Contains(alerta)) return;
+        Mutando = true;
+        var acquired = false;
+        var generation = _session is SessionManager manager ? manager.CajaSessionGeneration : 0;
+        try
+        {
+            await _operacion.WaitAsync(_lifetime.Token);
+            acquired = true;
+            if (!SesionActiva || !AnulacionesPendientes.Contains(alerta) ||
+                generation != 0 && _session is SessionManager current && current.CajaSessionGeneration != generation)
+            {
+                Mensaje = "La sesión o alerta cambió antes del acuse. Revise nuevamente.";
+                return;
+            }
+            await _api.AcusarAnulacionAsync(alerta.IdAnulacion, _lifetime.Token);
+            if (_lifetime.IsCancellationRequested || !SesionActiva) return;
+            AnulacionesPendientes.Remove(alerta);
+            Mensaje = "Alerta acusada. El acuse aplica únicamente a este evento.";
+        }
+        catch (ApiException ex) when ((int)ex.StatusCode < 500)
+        {
+            Mensaje = "La API rechazó el acuse. Revise la sesión y la alerta.";
+        }
+        catch (SessionPausedException) { Mensaje = "Sesión en pausa; no se envió el acuse."; }
+        catch (SessionExpiredException) { Conectado = false; }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (Exception)
+        {
+            ResultadoIncierto = true;
+            Conectado = false;
+            Mensaje = "El acuse tiene resultado incierto. No se reintentó; solicite revisión humana.";
+        }
+        finally
+        {
+            if (acquired) _operacion.Release();
+            Mutando = false;
+            ActualizarPermisos();
+        }
+    }
+
     private async Task ConsultarPeriodicamenteAsync(CancellationToken token)
     {
         var fallos = 0;
@@ -149,12 +193,25 @@ public partial class CocinaViewModel : ViewModelBase, IDisposable
                                 cursor = pagina.CursorSiguiente;
                                 if (cursor is not null && !cursors.Add(cursor)) throw new InvalidDataException("Cursor repetido.");
                             } while (cursor is not null && items.Count < 100);
+                            var alerts = new List<AnulacionKdsDto>();
+                            var alertCursors = new HashSet<string>(StringComparer.Ordinal);
+                            string? alertCursor = null;
+                            do
+                            {
+                                var page = await _api.ConsultarAnulacionesAsync(alertCursor, token);
+                                alerts.AddRange(page.Items);
+                                alertCursor = page.CursorSiguiente;
+                                if (alertCursor is not null && !alertCursors.Add(alertCursor))
+                                    throw new InvalidDataException("Cursor repetido en alertas.");
+                            } while (alertCursor is not null && alerts.Count < 100);
                             token.ThrowIfCancellationRequested();
                             await _dispatch(() =>
                             {
                                 if (token.IsCancellationRequested || !SesionActiva) return;
                                 Comandas.Clear();
                                 foreach (var item in items) Comandas.Add(item);
+                                AnulacionesPendientes.Clear();
+                                foreach (var alert in alerts) AnulacionesPendientes.Add(alert);
                                 HayMas = cursor is not null;
                                 Conectado = true;
                                 EstadoConexion = "Cola actualizada · consulta local";

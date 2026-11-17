@@ -12,6 +12,34 @@ namespace ElCarbonazo.Api.Tests;
 public sealed class InventarioEnviosTests
 {
     [Fact]
+    public async Task Repeated_lines_capture_exact_consumption_and_replay_does_not_duplicate()
+    {
+        var db = new TemporaryPostgresDatabase();
+        try
+        {
+            await db.InitializeAsync();
+            await using var context = db.CreateContext();
+            await context.Database.ExecuteSqlRawAsync("INSERT INTO producto (nombre, categoria, precio, disponible) VALUES ('Plato', 'Comida', 10, true)");
+            var product = await context.Productos.AsNoTracking().SingleAsync();
+            await InventarioTestSetup.PrepararProductoAsync(context, product.IdProducto);
+            var table = await context.Mesas.AsNoTracking().SingleAsync(x => x.IdMesa == 1);
+            var request = new EnvioRequest(Guid.NewGuid(), 1, null, table.Version,
+                [new(product.IdProducto, product.Version, 2, ""), new(product.IdProducto, product.Version, 3, "")]);
+            var service = new EnviosService(context, new AuditRecorder(context, new TestHttpContextAccessor(), TimeProvider.System), TimeProvider.System);
+            Assert.Equal(201, (await service.EnviarAsync(request, 1, default)).Status);
+            context.ChangeTracker.Clear();
+            Assert.Equal(201, (await service.EnviarAsync(request, 1, default)).Status);
+            context.ChangeTracker.Clear();
+            var snapshots = await context.ConsumosDetalle.OrderBy(x => x.IdDetalle).ToListAsync();
+            Assert.Equal(2, snapshots.Count);
+            Assert.Equal(new[] { 2m, 3m }, snapshots.Select(x => x.Cantidad).Order().ToArray());
+            Assert.Equal(2, snapshots.Select(x => x.IdDetalle).Distinct().Count());
+            Assert.Equal(-5m, (await context.MovimientosInventario.SingleAsync(x => x.TipoMovimiento == "ConsumoPedido")).CantidadDelta);
+        }
+        finally { await db.DisposeAsync(); }
+    }
+
+    [Fact]
     public async Task Deactivation_waits_for_send_and_rejects_stale_ingredient_version()
     {
         var db = new TemporaryPostgresDatabase();
@@ -153,6 +181,7 @@ public sealed class InventarioEnviosTests
             setup.ChangeTracker.Clear();
             var consumed = await setup.MovimientosInventario.SingleAsync(x => x.TipoMovimiento == "ConsumoPedido");
             Assert.Equal(recipeFirst ? -2m : -1m, consumed.CantidadDelta);
+            Assert.Equal(-consumed.CantidadDelta, (await setup.ConsumosDetalle.SingleAsync()).Cantidad);
             Assert.Equal(recipeFirst ? 99997m : 99998m, (await setup.Ingredientes.SingleAsync()).StockActual);
         }
         finally { await db.DisposeAsync(); }
@@ -179,6 +208,7 @@ public sealed class InventarioEnviosTests
             Assert.Empty(await context.Pedidos.ToListAsync());
             Assert.Empty(await context.Comandas.ToListAsync());
             Assert.Empty(await context.EnviosPedido.ToListAsync());
+            Assert.Empty(await context.ConsumosDetalle.ToListAsync());
             Assert.Equal(99999m, (await context.Ingredientes.SingleAsync()).StockActual);
             Assert.Equal(0, await context.MovimientosInventario.CountAsync(x => x.TipoMovimiento == "ConsumoPedido"));
             Assert.Equal("Libre", (await context.Mesas.AsNoTracking().SingleAsync(x => x.IdMesa == 1)).Estado);

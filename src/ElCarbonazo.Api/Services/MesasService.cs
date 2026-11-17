@@ -7,10 +7,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ElCarbonazo.Api.Services;
 
-public sealed class MesasService(AppDbContext context, IAuditRecorder auditRecorder) : IMesasService
+public sealed class MesasService(AppDbContext context, IAuditRecorder auditRecorder, TimeProvider? time = null) : IMesasService
 {
     public async Task<IReadOnlyList<MesaDto>> GetAllAsync(CancellationToken cancellationToken)
     {
+        var now = (time ?? TimeProvider.System).GetUtcNow();
         return await context.Mesas
             .AsNoTracking()
             .OrderBy(mesa => mesa.Numero)
@@ -20,7 +21,13 @@ public sealed class MesasService(AppDbContext context, IAuditRecorder auditRecor
                 mesa.Numero,
                 mesa.Capacidad,
                 mesa.Estado,
-                mesa.Version))
+                mesa.Version,
+                mesa.Reservaciones
+                    .Where(reserva => reserva.Estado == "Activa" && reserva.InicioUtc >= now)
+                    .OrderBy(reserva => reserva.InicioUtc)
+                    .Select(reserva => new ProximaReservacionDto(
+                        reserva.InicioUtc, reserva.FinUtc, reserva.CantidadPersonas))
+                    .FirstOrDefault()))
             .ToListAsync(cancellationToken);
     }
 

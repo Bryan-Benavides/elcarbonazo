@@ -14,6 +14,9 @@ public sealed class CocinaDesignViewModel : CocinaViewModel
             Task.FromResult(new CocinaPaginaDto([new CocinaComandaDto(1, 1, 4, 4, null, 1, DateTimeOffset.UtcNow,
                 "Abierta", 1, [new CocinaLineaDto(1, "Producto DEMO", 2, "Sin sal")])], null));
         public Task<CocinaComandaDto> CambiarEstadoAsync(CocinaComandaDto comanda, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<AnulacionKdsPage> ConsultarAnulacionesAsync(string? cursor = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new AnulacionKdsPage([], null));
+        public Task AcusarAnulacionAsync(long idAnulacion, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class DesignSession : ISessionManager

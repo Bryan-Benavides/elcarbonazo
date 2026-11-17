@@ -10,8 +10,11 @@ using Microsoft.EntityFrameworkCore;
 namespace ElCarbonazo.Api.Services;
 
 public sealed record CocinaResult(int Status, string? Code = null, CocinaPaginaDto? Pagina = null, CocinaComandaDto? Comanda = null);
+public sealed record CocinaAlertasAnulacionPagina(IReadOnlyList<CocinaAlertaAnulacionDto> Items, string? CursorSiguiente);
+public sealed record CocinaAlertaAnulacionDto(long IdAnulacion, int IdPedido, int IdComanda, int? IdMesa, int? IdGrupo,
+    string Texto, string Motivo, DateTimeOffset FechaUtc, DateTimeOffset? FechaAcuseUtc);
 
-public sealed class CocinaService(AppDbContext context, IAuditRecorder audit)
+public sealed class CocinaService(AppDbContext context, IAuditRecorder audit, TimeProvider? time = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -55,6 +58,85 @@ public sealed class CocinaService(AppDbContext context, IAuditRecorder audit)
                 new Cursor("cola-v1", items[^1].FechaHora, items[^1].IdComanda), JsonOptions))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_') : null;
         return new CocinaResult(200, Pagina: new CocinaPaginaDto(items.Select(ToDto).ToArray(), next));
+    }
+
+    public async Task<(int Status, string? Code, CocinaAlertasAnulacionPagina? Pagina)> AlertasAnulacionAsync(
+        string? cursor, int limite, CancellationToken ct, int? actorId = null, Guid? sessionId = null)
+    {
+        if (limite is < 1 or > 100) return (400, "VALIDATION_ERROR", null);
+        if (actorId.HasValue || sessionId.HasValue)
+        {
+            if (actorId is null || sessionId is null ||
+                !await SesionCocinaAutorizadaAsync(actorId.Value, sessionId.Value, ct))
+                return (401, "AUTH_SESION_EXPIRADA", null);
+        }
+        long? lastId = null;
+        if (cursor is not null)
+        {
+            try
+            {
+                if (cursor.Length is 0 or > 256 || cursor.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not '-' and not '_'))
+                    return (400, "VALIDATION_ERROR", null);
+                var encoded = cursor.Replace('-', '+').Replace('_', '/');
+                encoded = encoded.PadRight(encoded.Length + (4 - encoded.Length % 4) % 4, '=');
+                var parsed = JsonSerializer.Deserialize<AlertaCursor>(Convert.FromBase64String(encoded), JsonOptions);
+                if (parsed is not { Version: 1, Id: > 0 }) return (400, "VALIDATION_ERROR", null);
+                lastId = parsed.Id;
+            }
+            catch (Exception exception) when (exception is FormatException or JsonException or ArgumentException)
+            {
+                return (400, "VALIDATION_ERROR", null);
+            }
+        }
+        var query = from alert in context.AlertasAnulacion.AsNoTracking()
+                    join cancel in context.AnulacionesPedido.AsNoTracking() on alert.IdAnulacion equals cancel.IdAnulacion
+                    join order in context.Pedidos.AsNoTracking() on cancel.IdPedido equals order.IdPedido
+                    where alert.FechaAcuseUtc == null
+                    select new { Alert = alert, Cancel = cancel, Order = order };
+        if (lastId is long id) query = query.Where(x => x.Alert.IdAnulacion > id);
+        var rows = await query.OrderBy(x => x.Alert.IdAnulacion).Take(limite + 1).ToListAsync(ct);
+        var more = rows.Count > limite;
+        if (more) rows.RemoveAt(rows.Count - 1);
+        var items = rows.Select(x => new CocinaAlertaAnulacionDto(
+            x.Alert.IdAnulacion, x.Cancel.IdPedido, x.Cancel.IdComanda,
+            x.Order.IdMesa, x.Order.IdGrupo, "ANULADO — NO PREPARAR", x.Cancel.Motivo,
+            x.Cancel.FechaUtc, x.Alert.FechaAcuseUtc)).ToArray();
+        var next = more ? Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(
+            new AlertaCursor(1, items[^1].IdAnulacion), JsonOptions)).TrimEnd('=').Replace('+', '-').Replace('/', '_') : null;
+        return (200, null, new(items, next));
+    }
+
+    public async Task<(int Status, string? Code)> AcusarAnulacionAsync(
+        long id, int userId, CancellationToken ct, Guid? sessionId = null)
+    {
+        if (id <= 0 || userId <= 0) return (400, "VALIDATION_ERROR");
+        await using var tx = await context.Database.BeginTransactionAsync(ct);
+        if (sessionId is Guid currentSession && !await SesionCocinaAutorizadaAsync(userId, currentSession, ct))
+            return (401, "AUTH_SESION_EXPIRADA");
+        var alert = await context.AlertasAnulacion.FromSqlInterpolated($"""
+            SELECT * FROM alerta_anulacion WHERE id_anulacion = {id} FOR UPDATE
+        """).SingleOrDefaultAsync(ct);
+        if (sessionId is Guid revalidatedSession && !await SesionCocinaAutorizadaAsync(userId, revalidatedSession, ct))
+            return (401, "AUTH_SESION_EXPIRADA");
+        if (alert is null) return (404, "RECURSO_NO_ENCONTRADO");
+        if (alert.FechaAcuseUtc is null)
+        {
+            var now = (time ?? TimeProvider.System).GetUtcNow();
+            alert.FechaAcuseUtc = now;
+            alert.IdUsuarioAcuse = userId;
+            audit.Record("AlertaAnulacionAcusada", "Exitoso", userId, entityType: "anulacion", entityId: id.ToString());
+            await context.SaveChangesAsync(ct);
+        }
+        await tx.CommitAsync(ct);
+        return (200, "OK");
+    }
+
+    private async Task<bool> SesionCocinaAutorizadaAsync(int userId, Guid sessionId, CancellationToken ct)
+    {
+        if (!await CajaSesion.VigenteAsync(context, sessionId, userId, (time ?? TimeProvider.System).GetUtcNow(), ct))
+            return false;
+        return await context.Usuarios.AsNoTracking().AnyAsync(x => x.IdUsuario == userId && x.Activo &&
+            (x.Rol == UserRoles.Jefa || x.Rol == UserRoles.Supervisor || x.Rol == UserRoles.PersonalCocina), ct);
     }
 
     public async Task<CocinaResult> CambiarEstadoAsync(int id, CambiarComandaEstadoRequest request, int userId, CancellationToken cancellationToken)
@@ -111,9 +193,12 @@ public sealed class CocinaService(AppDbContext context, IAuditRecorder audit)
         var previous = command.Estado;
         command.Estado = request.Estado;
         await context.SaveChangesAsync(cancellationToken);
-        var states = await context.Comandas.AsNoTracking().Where(item => item.IdPedido == pedido.IdPedido)
-            .Select(item => item.Estado).ToListAsync(cancellationToken);
-        pedido.Estado = states.Contains(ComandaStates.Abierta) ? PedidoStates.Abierto :
+        var commandsForOrder = await context.Comandas.AsNoTracking().Include(item => item.Detalles)
+            .Where(item => item.IdPedido == pedido.IdPedido).ToListAsync(cancellationToken);
+        var states = commandsForOrder.Where(item => item.Detalles.Any(detail => !detail.Cancelado))
+            .Select(item => item.Estado).ToList();
+        pedido.Estado = states.Count == 0 ? PedidoStates.Cancelado :
+            states.Contains(ComandaStates.Abierta) ? PedidoStates.Abierto :
             states.Contains(ComandaStates.EnPreparacion) ? PedidoStates.EnPreparacion : PedidoStates.Listo;
         audit.Record("ComandaEstadoCambiado", "Exitoso", userId, entityType: "comanda", entityId: id.ToString(),
             details: new Dictionary<string, object?>
@@ -136,7 +221,9 @@ public sealed class CocinaService(AppDbContext context, IAuditRecorder audit)
         command.IdComanda, command.IdPedido, command.Pedido.IdMesa, command.Pedido.Mesa?.Numero,
         command.Pedido.IdGrupo, command.IdUsuario, command.FechaHora, command.Estado, command.Version,
         command.Detalles.OrderBy(item => item.IdDetalle)
+            .Where(item => !item.Cancelado)
             .Select(item => new CocinaLineaDto(item.IdDetalle, item.NombreProducto, item.Cantidad, item.Notas)).ToArray());
 
     private sealed record Cursor(string Tipo, DateTimeOffset Fecha, int Id);
+    private sealed record AlertaCursor(int Version, long Id);
 }

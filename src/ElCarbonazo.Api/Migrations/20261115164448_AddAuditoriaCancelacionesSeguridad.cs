@@ -65,9 +65,9 @@ namespace ElCarbonazo.Api.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_anulacion_pedido", x => x.id_anulacion);
-                    table.CheckConstraint("CK_anulacion_cantidad_monto", "cantidad_anulada > 0 AND monto_revertido >= 0");
+                    table.CheckConstraint("CK_anulacion_cantidad_monto", "cantidad_anulada > 0 AND monto_revertido >= 0 AND monto_revertido <> 'NaN'::numeric");
                     table.CheckConstraint("CK_anulacion_estado", "estado_comanda_previo IN ('Abierta', 'En Preparación', 'Lista')");
-                    table.CheckConstraint("CK_anulacion_motivo", "char_length(motivo) BETWEEN 5 AND 250 AND motivo = btrim(motivo) AND motivo = normalize(motivo, NFC)");
+                    table.CheckConstraint("CK_anulacion_motivo", "char_length(motivo) BETWEEN 5 AND 250 AND motivo = btrim(motivo) AND motivo = normalize(motivo, NFC) AND motivo !~ '[[:cntrl:]]'");
                     table.ForeignKey(
                         name: "FK_anulacion_pedido_comanda_id_comanda",
                         column: x => x.id_comanda,
@@ -111,7 +111,7 @@ namespace ElCarbonazo.Api.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_consumo_detalle", x => new { x.id_detalle, x.id_ingrediente });
-                    table.CheckConstraint("CK_consumo_detalle_cantidad", "cantidad > 0");
+                    table.CheckConstraint("CK_consumo_detalle_cantidad", "cantidad > 0 AND cantidad <> 'NaN'::numeric");
                     table.ForeignKey(
                         name: "FK_consumo_detalle_detalle_pedido_id_detalle",
                         column: x => x.id_detalle,
@@ -168,7 +168,7 @@ namespace ElCarbonazo.Api.Migrations
                     table.PrimaryKey("PK_operacion_anulacion", x => x.id_operacion);
                     table.CheckConstraint("CK_operacion_anulacion_estado", "estado IN ('Autorizada', 'Completada', 'Rechazada', 'Cancelada')");
                     table.CheckConstraint("CK_operacion_anulacion_hash", "hash_intencion IS NULL OR hash_intencion ~ '^[0-9a-f]{64}$'");
-                    table.CheckConstraint("CK_operacion_anulacion_resultado", "(estado = 'Autorizada' AND hash_intencion IS NOT NULL AND fecha_terminal_utc IS NULL AND status_resultado IS NULL AND codigo_resultado IS NULL AND resultado_json IS NULL) OR (estado IN ('Completada', 'Rechazada', 'Cancelada') AND fecha_terminal_utc IS NOT NULL AND status_resultado IS NOT NULL AND codigo_resultado IS NOT NULL AND resultado_json IS NOT NULL AND (hash_intencion IS NOT NULL OR estado = 'Cancelada'))");
+                    table.CheckConstraint("CK_operacion_anulacion_resultado", "(estado = 'Autorizada' AND hash_intencion IS NOT NULL AND fecha_terminal_utc IS NULL AND status_resultado IS NULL AND codigo_resultado IS NULL AND resultado_json IS NULL) OR (estado IN ('Completada', 'Rechazada', 'Cancelada') AND fecha_terminal_utc IS NOT NULL AND fecha_terminal_utc >= fecha_creacion_utc AND status_resultado IS NOT NULL AND ((estado IN ('Completada', 'Cancelada') AND status_resultado BETWEEN 200 AND 299) OR (estado = 'Rechazada' AND status_resultado BETWEEN 400 AND 499)) AND codigo_resultado IS NOT NULL AND char_length(btrim(codigo_resultado)) > 0 AND resultado_json IS NOT NULL AND jsonb_typeof(resultado_json) = 'object' AND (hash_intencion IS NOT NULL OR estado = 'Cancelada'))");
                     table.ForeignKey(
                         name: "FK_operacion_anulacion_usuario_id_usuario_propietario",
                         column: x => x.id_usuario_propietario,
@@ -337,6 +337,61 @@ namespace ElCarbonazo.Api.Migrations
                 principalTable: "anulacion_pedido",
                 principalColumn: "id_anulacion",
                 onDelete: ReferentialAction.Restrict);
+
+            migrationBuilder.Sql("""
+                ALTER TABLE comanda ADD CONSTRAINT uq_006_comanda_pedido UNIQUE (id_comanda, id_pedido);
+                ALTER TABLE detalle_pedido ADD CONSTRAINT uq_006_detalle_comanda UNIQUE (id_detalle, id_comanda);
+                ALTER TABLE anulacion_pedido ADD CONSTRAINT uq_006_anulacion_destino UNIQUE (id_anulacion, id_pedido, id_comanda);
+                ALTER TABLE anulacion_pedido ADD CONSTRAINT fk_006_anulacion_comanda_pedido
+                    FOREIGN KEY (id_comanda, id_pedido) REFERENCES comanda (id_comanda, id_pedido) ON DELETE RESTRICT;
+                ALTER TABLE anulacion_pedido ADD CONSTRAINT fk_006_anulacion_detalle_comanda
+                    FOREIGN KEY (id_detalle, id_comanda) REFERENCES detalle_pedido (id_detalle, id_comanda) ON DELETE RESTRICT;
+                ALTER TABLE movimiento_inventario ADD CONSTRAINT fk_006_movimiento_anulacion_destino
+                    FOREIGN KEY (id_anulacion, id_pedido, id_comanda)
+                    REFERENCES anulacion_pedido (id_anulacion, id_pedido, id_comanda) ON DELETE RESTRICT;
+
+                CREATE TABLE estado_hmac_autorizacion (
+                    id smallint PRIMARY KEY CHECK (id = 1),
+                    provisionado boolean NOT NULL DEFAULT false,
+                    huella varchar(64),
+                    espera_hasta_utc timestamptz,
+                    CONSTRAINT ck_estado_hmac_integridad CHECK (
+                        (NOT provisionado AND huella IS NULL AND espera_hasta_utc IS NULL)
+                        OR (provisionado AND huella IS NOT NULL AND huella ~ '^[0-9a-f]{64}$')
+                    )
+                );
+                INSERT INTO estado_hmac_autorizacion (id) VALUES (1);
+
+                CREATE FUNCTION ec_006_proteger_operacion() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN
+                    IF OLD.estado <> 'Autorizada' OR NEW.estado NOT IN ('Completada', 'Rechazada', 'Cancelada') THEN
+                        RAISE EXCEPTION 'Transición de operación de anulación inválida' USING ERRCODE = '23514';
+                    END IF;
+                    RETURN NEW;
+                END $$;
+                CREATE TRIGGER tr_006_proteger_operacion BEFORE UPDATE ON operacion_anulacion
+                    FOR EACH ROW EXECUTE FUNCTION ec_006_proteger_operacion();
+
+                CREATE FUNCTION ec_006_proteger_consumo_autorizacion() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN
+                    IF OLD.fecha_consumo_utc IS NOT NULL OR NEW.fecha_consumo_utc IS NULL THEN
+                        RAISE EXCEPTION 'Consumo de autorización inválido' USING ERRCODE = '23514';
+                    END IF;
+                    RETURN NEW;
+                END $$;
+                CREATE TRIGGER tr_006_proteger_consumo BEFORE UPDATE ON autorizacion_anulacion
+                    FOR EACH ROW EXECUTE FUNCTION ec_006_proteger_consumo_autorizacion();
+
+                CREATE FUNCTION ec_006_proteger_acuse() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN
+                    IF OLD.fecha_acuse_utc IS NOT NULL OR NEW.fecha_acuse_utc IS NULL OR NEW.id_usuario_acuse IS NULL THEN
+                        RAISE EXCEPTION 'Acuse de anulación inválido' USING ERRCODE = '23514';
+                    END IF;
+                    RETURN NEW;
+                END $$;
+                CREATE TRIGGER tr_006_proteger_acuse BEFORE UPDATE ON alerta_anulacion
+                    FOR EACH ROW EXECUTE FUNCTION ec_006_proteger_acuse();
+                """);
         }
 
         /// <inheritdoc />

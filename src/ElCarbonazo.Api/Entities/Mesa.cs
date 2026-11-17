@@ -12,4 +12,5 @@ public class Mesa
     public GrupoMesa? GrupoActivo { get; set; }
     public ICollection<GrupoMesaMiembro> HistorialGrupos { get; set; } = [];
     public ICollection<Pedido> Pedidos { get; set; } = [];
+    public ICollection<Reservacion> Reservaciones { get; set; } = [];
 }

@@ -191,6 +191,8 @@ builder.Services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IMesasService, MesasService>();
 builder.Services.AddScoped<IGruposMesaService, GruposMesaService>();
+builder.Services.AddScoped<ReservacionesService>();
+builder.Services.AddScoped<ReporteVentasService>();
 builder.Services.AddScoped<IProductosService, ProductosService>();
 builder.Services.AddScoped<ICuentasService, CuentasService>();
 builder.Services.AddScoped<EnviosService>();
@@ -198,6 +200,10 @@ builder.Services.AddScoped<InventarioService>();
 builder.Services.AddScoped<InventarioConsultasService>();
 builder.Services.AddScoped<RecetasService>();
 builder.Services.AddScoped<CocinaService>();
+builder.Services.AddScoped<AnulacionAutorizacionService>();
+builder.Services.AddScoped<AnulacionEjecucionService>();
+builder.Services.AddScoped<AnulacionRecuperacionService>();
+builder.Services.AddScoped<AnulacionesConsultasService>();
 builder.Services.AddScoped<CajaOperacionesService>();
 builder.Services.AddScoped<CajaCancelacionService>();
 builder.Services.AddScoped<CajaCuentasService>();
@@ -312,6 +318,13 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 
+var commandModes = new[] { "--bootstrap-admin", "--seed-demo-catalog", "--provisionar-hmac-autorizacion", "--recuperar-hmac-autorizacion" };
+if (commandModes.Count(mode => args.Contains(mode, StringComparer.Ordinal)) > 1)
+{
+    Console.Error.WriteLine("Seleccione únicamente una acción administrativa.");
+    return 1;
+}
+
 if (args.Contains("--bootstrap-admin", StringComparer.Ordinal))
 {
     await using var scope = app.Services.CreateAsyncScope();
@@ -326,6 +339,19 @@ if (args.Contains("--seed-demo-catalog", StringComparer.Ordinal))
     return await DemoCatalogCommand.RunAsync(
         scope.ServiceProvider.GetRequiredService<DemoCatalogSeeder>(),
         CancellationToken.None);
+}
+
+if (args.Contains("--provisionar-hmac-autorizacion", StringComparer.Ordinal) ||
+    args.Contains("--recuperar-hmac-autorizacion", StringComparer.Ordinal))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    return await HmacProvisionCommand.RunAsync(
+        scope.ServiceProvider.GetRequiredService<AppDbContext>(),
+        scope.ServiceProvider.GetRequiredService<IAuditRecorder>(),
+        builder.Configuration["AutorizacionSuperior:ClaveHmac"],
+        scope.ServiceProvider.GetRequiredService<IOptions<JwtSettings>>().Value.Key,
+        Console.In, Console.Out, CancellationToken.None,
+        args.Contains("--recuperar-hmac-autorizacion", StringComparer.Ordinal));
 }
 
 if (app.Environment.IsDevelopment())

@@ -30,20 +30,41 @@
             <TextBlock Text="No hay comandas pendientes." IsVisible="{Binding ColaVacia}" Foreground="{StaticResource TextoPrincipalBrush}" />
         </StackPanel>
         <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <ItemsControl ItemsSource="{Binding Comandas}">
-                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate><DataTemplate x:DataType="models:CocinaComandaDto">
-                    <Border Width="300" Margin="0,0,12,12" Padding="16" Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1" CornerRadius="8">
-                        <StackPanel Spacing="10">
-                            <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding Destino}" FontSize="22" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" /><TextBlock Grid.Column="1" Text="{Binding IdComanda, StringFormat='Comanda #{0}'}" Foreground="{StaticResource TextoPrincipalBrush}" /></Grid>
-                            <TextBlock Text="{Binding Hora, StringFormat='Recibida: {0}'}" Foreground="{StaticResource TextoSecundarioBrush}" />
-                            <TextBlock Text="{Binding Estado}" FontWeight="Bold" Foreground="#FFB488" />
-                            <ItemsControl ItemsSource="{Binding Lineas}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="models:CocinaLineaDto"><Border BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="0,0,0,1" Padding="0,8"><StackPanel Spacing="4"><TextBlock Text="{Binding NombreProducto}" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" /><TextBlock Text="{Binding Cantidad, StringFormat='Cantidad: {0}'}" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" /><TextBlock Text="{Binding Notas, StringFormat='Nota: {0}'}" Foreground="#FFB488" TextWrapping="Wrap" /></StackPanel></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-                            <Button Content="{Binding Accion}" IsEnabled="{Binding #Root.((vm:CocinaViewModel)DataContext).PuedeOperar}" Command="{Binding #Root.((vm:CocinaViewModel)DataContext).AvanzarCommand}" CommandParameter="{Binding}" HorizontalAlignment="Stretch" />
-                        </StackPanel>
-                    </Border>
-                </DataTemplate></ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <StackPanel Spacing="12">
+                <TextBlock Text="Alertas de anulación · revisar antes de preparar" FontSize="18" FontWeight="Bold"
+                           Foreground="{StaticResource TextoPrincipalBrush}" />
+                <ItemsControl ItemsSource="{Binding AnulacionesPendientes}">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate><DataTemplate x:DataType="models:AnulacionKdsDto">
+                        <Border Width="360" Margin="0,0,12,12" Padding="16" Background="{StaticResource FondoPanelBrush}"
+                                BorderBrush="#FF784E" BorderThickness="2" CornerRadius="8">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="{Binding Texto}" FontSize="20" FontWeight="Bold" Foreground="#FFB488" />
+                                <TextBlock Text="{Binding IdComanda, StringFormat='Comanda #{0}'}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                <TextBlock Text="{Binding Motivo, StringFormat='Motivo: {0}'}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                                <Button Content="Acusar esta alerta" IsEnabled="{Binding #Root.((vm:CocinaViewModel)DataContext).PuedeOperar}"
+                                        Command="{Binding #Root.((vm:CocinaViewModel)DataContext).AcusarAnulacionCommand}"
+                                        CommandParameter="{Binding}" HorizontalAlignment="Stretch" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate></ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="Comandas pendientes" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                <ItemsControl ItemsSource="{Binding Comandas}">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate><DataTemplate x:DataType="models:CocinaComandaDto">
+                        <Border Width="300" Margin="0,0,12,12" Padding="16" Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1" CornerRadius="8">
+                            <StackPanel Spacing="10">
+                                <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding Destino}" FontSize="22" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" /><TextBlock Grid.Column="1" Text="{Binding IdComanda, StringFormat='Comanda #{0}'}" Foreground="{StaticResource TextoPrincipalBrush}" /></Grid>
+                                <TextBlock Text="{Binding Hora, StringFormat='Recibida: {0}'}" Foreground="{StaticResource TextoSecundarioBrush}" />
+                                <TextBlock Text="{Binding Estado}" FontWeight="Bold" Foreground="#FFB488" />
+                                <ItemsControl ItemsSource="{Binding Lineas}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="models:CocinaLineaDto"><Border BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="0,0,0,1" Padding="0,8"><StackPanel Spacing="4"><TextBlock Text="{Binding NombreProducto}" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" /><TextBlock Text="{Binding Cantidad, StringFormat='Cantidad: {0}'}" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" /><TextBlock Text="{Binding Notas, StringFormat='Nota: {0}'}" Foreground="#FFB488" TextWrapping="Wrap" /></StackPanel></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                                <Button Content="{Binding Accion}" IsEnabled="{Binding #Root.((vm:CocinaViewModel)DataContext).PuedeOperar}" Command="{Binding #Root.((vm:CocinaViewModel)DataContext).AvanzarCommand}" CommandParameter="{Binding}" HorizontalAlignment="Stretch" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate></ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
         </ScrollViewer>
     </Grid>
 </UserControl>

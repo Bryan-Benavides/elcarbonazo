@@ -1,6 +1,6 @@
 # Especificación propuesta 006 — Auditoría, cancelaciones y seguridad
 
-**Estado: línea base D0 aprobada por el usuario para comenzar C1.** Corresponde al módulo de auditoría, cancelaciones y seguridad del plan maestro, no al módulo 005 de esta estructura. Depende de 001, 003, 004 y 005; 002 continúa pospuesto. El alcance es demostración universitaria local aislada, offline-first, sin dinero real ni aptitud para operar el restaurante. No autoriza migraciones ni cambios de datos persistentes.
+**Estado: PAUSADO por decisión del usuario; fuera del alcance de la defensa actual.** Este trabajo local corresponde al diseño original de auditoría, cancelaciones y seguridad 006. No se debe continuar ni presentar como aceptado. Se conserva como trabajo local/histórico y no se elimina. La nueva especificación numerada 006 de reservas es `specs/006-reservaciones-mesas/`; las reglas anteriores de impuestos y Caja siguen vigentes.
 
 ## 1. Objetivo y límites
 
@@ -9,6 +9,10 @@ Permitir cancelar justificadamente líneas completas o comandas enviadas, con au
 **Decisiones expresas del usuario:** solo se anula una línea completa o una comanda completa; una línea histórica sin desglose exacto de consumo se rechaza. Una comanda histórica podrá anularse íntegramente solo si hay evidencia suficiente para devolver exactamente lo no revertido. La mera existencia de movimientos agregados no demuestra que estén completos. No se inventan consumos de comandas anteriores a 005; si no se puede demostrar la devolución, rechazarla y solicitar revisión.
 
 El usuario también eligió exigir la contraseña de Jefa aun cuando ella misma solicita la anulación; bloqueo superior separado del login, con cinco fallos por cinco minutos por par solicitante/autorizador; y cierre explícito del grupo antes de otra cuenta tras cancelación total. El diseño del bloqueo en `plan.md` no demuestra protección contra ataques distribuidos.
+
+El usuario aprobó que un cambio no coordinado de clave HMAC para el límite superior produzca bloqueo durable de nuevas autorizaciones durante 24 horas; login permanece independiente. La instalación inicial y recuperación ante metadatos ausentes no se presuponen seguras y requieren un procedimiento explícito.
+
+El usuario aprobó recuperar explícitamente una fila HMAC ausente con permisos administrativos, auditoría y espera mínima de 24 horas, conservando operaciones y contadores. Una fila existente no se reemplaza mediante este procedimiento; otras corrupciones siguen bloqueadas para revisión. La recuperación no autoriza ninguna operación de negocio ni modifica automáticamente una base persistente.
 
 **Precisión conservadora aprobada:** en la primera entrega se bloquea también la anulación de comandas completas anteriores a 006 sin snapshot de consumo verificable. La existencia de movimientos agregados, sin prueba de su completitud, no autoriza una devolución automática. La posibilidad de resolverlas queda fuera de esta entrega y exige otra especificación; no se hace ajuste silencioso.
 

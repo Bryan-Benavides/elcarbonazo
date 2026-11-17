@@ -96,6 +96,9 @@ public sealed class EnviosService(AppDbContext context, IAuditRecorder audit, Ti
                 """).ToListAsync(cancellationToken);
             if (members.Count < 2 || members.Any(item => item.Estado != MesaStates.Agrupada))
                 return new EnvioResult(409, "DESTINO_STATE_CONFLICT");
+            if (await context.Pedidos.AsNoTracking().AnyAsync(item =>
+                    item.IdGrupo == groupId && item.Estado == PedidoStates.Cancelado, cancellationToken))
+                return new EnvioResult(409, "GRUPO_CANCELADO_REQUIERE_CIERRE");
             if (await context.Pedidos.AsNoTracking().AnyAsync(item => item.IdGrupo == groupId && item.Estado == PedidoStates.Pagado, cancellationToken))
                 return new EnvioResult(409, "GRUPO_PAGADO_REQUIERE_CIERRE");
         }
@@ -189,10 +192,11 @@ public sealed class EnviosService(AppDbContext context, IAuditRecorder audit, Ti
         pedido.Total = pedido.Subtotal;
         pedido.Estado = PedidoStates.Abierto;
         var command = new Comanda { Pedido = pedido, IdUsuario = userId, FechaHora = now, Estado = ComandaStates.Abierta };
+        var lineSnapshots = new List<(DetallePedido Detalle, EnvioLineaRequest Linea)>();
         foreach (var line in lines)
         {
             var product = byId[line.IdProducto];
-            command.Detalles.Add(new DetallePedido
+            var detail = new DetallePedido
             {
                 IdProducto = product.IdProducto,
                 NombreProducto = product.Nombre,
@@ -200,10 +204,20 @@ public sealed class EnviosService(AppDbContext context, IAuditRecorder audit, Ti
                 PrecioUnitario = product.Precio,
                 Subtotal = product.Precio * line.Cantidad,
                 Notas = line.Notas!
-            });
+            };
+            command.Detalles.Add(detail);
+            lineSnapshots.Add((detail, line));
         }
         context.Comandas.Add(command);
         await context.SaveChangesAsync(cancellationToken);
+        foreach (var (detail, line) in lineSnapshots)
+            foreach (var recipeDetail in recipesByProduct[line.IdProducto].Detalles)
+                context.ConsumosDetalle.Add(new ConsumoDetalle
+                {
+                    IdDetalle = detail.IdDetalle,
+                    IdIngrediente = recipeDetail.IdIngrediente,
+                    Cantidad = line.Cantidad * recipeDetail.CantidadRequerida
+                });
         foreach (var ingredient in ingredients)
         {
             var previous = ingredient.StockActual;

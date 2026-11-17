@@ -128,6 +128,9 @@ public sealed class CocinaViewModelTests
             Writes++;
             return Task.FromResult(comanda);
         }
+        public Task<AnulacionKdsPage> ConsultarAnulacionesAsync(string? cursor = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new AnulacionKdsPage([], null));
+        public Task AcusarAnulacionAsync(long idAnulacion, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class FakeApi : ICocinaApiService
@@ -148,6 +151,13 @@ public sealed class CocinaViewModelTests
             Writes++;
             if (Failure is not null) throw Failure;
             return Task.FromResult(comanda with { Estado = comanda.Estado == "Abierta" ? "En Preparación" : "Lista" });
+        }
+        public Task<AnulacionKdsPage> ConsultarAnulacionesAsync(string? cursor = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new AnulacionKdsPage([], null));
+        public Task AcusarAnulacionAsync(long idAnulacion, CancellationToken cancellationToken = default)
+        {
+            if (Failure is not null) throw Failure;
+            return Task.CompletedTask;
         }
     }
 

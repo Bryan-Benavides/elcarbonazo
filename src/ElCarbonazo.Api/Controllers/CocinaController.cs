@@ -21,6 +21,33 @@ public sealed class CocinaController(CocinaService cocina) : ControllerBase
         return result.Status == 200 ? Ok(result.Pagina) : Error(result);
     }
 
+    [HttpGet("alertas-cancelacion")]
+    public async Task<IActionResult> AlertasAnulacion([FromQuery] string? cursor, [FromQuery] int limite = 25,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryActorSession(out var actor, out var session)) return Error(new CocinaResult(401, "AUTH_NO_AUTENTICADO"));
+        var result = await cocina.AlertasAnulacionAsync(cursor, limite, cancellationToken, actor, session);
+        if (result.Status != 200) return Error(new CocinaResult(result.Status, result.Code));
+        return Ok(result.Pagina);
+    }
+
+    [HttpPost("anulaciones/{id:long}/acuse")]
+    public async Task<IActionResult> AcusarAnulacion(long id, CancellationToken cancellationToken)
+    {
+        if (!TryActorSession(out var userId, out var session))
+            return Error(new CocinaResult(401, "AUTH_NO_AUTENTICADO"));
+        var result = await cocina.AcusarAnulacionAsync(id, userId, cancellationToken, session);
+        return result.Status == 200 ? Ok(new { estado = result.Code }) : Error(new CocinaResult(result.Status, result.Code));
+    }
+
+    private bool TryActorSession(out int actor, out Guid session)
+    {
+        actor = 0;
+        session = Guid.Empty;
+        return int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub"), out actor) &&
+            Guid.TryParse(User.FindFirstValue("sid"), out session);
+    }
+
     [HttpPut("comandas/{id:int}/estado")]
     public async Task<IActionResult> CambiarEstado(int id, CambiarComandaEstadoRequest request,
         CancellationToken cancellationToken)

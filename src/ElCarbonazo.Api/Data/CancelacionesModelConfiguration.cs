@@ -9,7 +9,7 @@ internal static class CancelacionesModelConfiguration
     {
         modelBuilder.Entity<ConsumoDetalle>(entity =>
         {
-            entity.ToTable("consumo_detalle", table => table.HasCheckConstraint("CK_consumo_detalle_cantidad", "cantidad > 0"));
+            entity.ToTable("consumo_detalle", table => table.HasCheckConstraint("CK_consumo_detalle_cantidad", "cantidad > 0 AND cantidad <> 'NaN'::numeric"));
             entity.HasKey(x => new { x.IdDetalle, x.IdIngrediente });
             entity.Property(x => x.IdDetalle).HasColumnName("id_detalle");
             entity.Property(x => x.IdIngrediente).HasColumnName("id_ingrediente");
@@ -22,9 +22,9 @@ internal static class CancelacionesModelConfiguration
         {
             entity.ToTable("anulacion_pedido", table =>
             {
-                table.HasCheckConstraint("CK_anulacion_cantidad_monto", "cantidad_anulada > 0 AND monto_revertido >= 0");
+                table.HasCheckConstraint("CK_anulacion_cantidad_monto", "cantidad_anulada > 0 AND monto_revertido >= 0 AND monto_revertido <> 'NaN'::numeric");
                 table.HasCheckConstraint("CK_anulacion_estado", "estado_comanda_previo IN ('Abierta', 'En Preparación', 'Lista')");
-                table.HasCheckConstraint("CK_anulacion_motivo", "char_length(motivo) BETWEEN 5 AND 250 AND motivo = btrim(motivo) AND motivo = normalize(motivo, NFC)");
+                table.HasCheckConstraint("CK_anulacion_motivo", "char_length(motivo) BETWEEN 5 AND 250 AND motivo = btrim(motivo) AND motivo = normalize(motivo, NFC) AND motivo !~ '[[:cntrl:]]'");
             });
             entity.HasKey(x => x.IdAnulacion);
             entity.Property(x => x.IdAnulacion).HasColumnName("id_anulacion").ValueGeneratedOnAdd();
@@ -51,7 +51,7 @@ internal static class CancelacionesModelConfiguration
             entity.ToTable("operacion_anulacion", table =>
             {
                 table.HasCheckConstraint("CK_operacion_anulacion_estado", "estado IN ('Autorizada', 'Completada', 'Rechazada', 'Cancelada')");
-                table.HasCheckConstraint("CK_operacion_anulacion_resultado", "(estado = 'Autorizada' AND hash_intencion IS NOT NULL AND fecha_terminal_utc IS NULL AND status_resultado IS NULL AND codigo_resultado IS NULL AND resultado_json IS NULL) OR (estado IN ('Completada', 'Rechazada', 'Cancelada') AND fecha_terminal_utc IS NOT NULL AND status_resultado IS NOT NULL AND codigo_resultado IS NOT NULL AND resultado_json IS NOT NULL AND (hash_intencion IS NOT NULL OR estado = 'Cancelada'))");
+                table.HasCheckConstraint("CK_operacion_anulacion_resultado", "(estado = 'Autorizada' AND hash_intencion IS NOT NULL AND fecha_terminal_utc IS NULL AND status_resultado IS NULL AND codigo_resultado IS NULL AND resultado_json IS NULL) OR (estado IN ('Completada', 'Rechazada', 'Cancelada') AND fecha_terminal_utc IS NOT NULL AND fecha_terminal_utc >= fecha_creacion_utc AND status_resultado IS NOT NULL AND ((estado IN ('Completada', 'Cancelada') AND status_resultado BETWEEN 200 AND 299) OR (estado = 'Rechazada' AND status_resultado BETWEEN 400 AND 499)) AND codigo_resultado IS NOT NULL AND char_length(btrim(codigo_resultado)) > 0 AND resultado_json IS NOT NULL AND jsonb_typeof(resultado_json) = 'object' AND (hash_intencion IS NOT NULL OR estado = 'Cancelada'))");
                 table.HasCheckConstraint("CK_operacion_anulacion_hash", "hash_intencion IS NULL OR hash_intencion ~ '^[0-9a-f]{64}$'");
             });
             entity.HasKey(x => x.IdOperacion);

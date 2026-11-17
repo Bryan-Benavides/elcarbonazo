@@ -122,11 +122,11 @@ namespace ElCarbonazo.Api.Migrations
 
                     b.ToTable("anulacion_pedido", null, t =>
                         {
-                            t.HasCheckConstraint("CK_anulacion_cantidad_monto", "cantidad_anulada > 0 AND monto_revertido >= 0");
+                            t.HasCheckConstraint("CK_anulacion_cantidad_monto", "cantidad_anulada > 0 AND monto_revertido >= 0 AND monto_revertido <> 'NaN'::numeric");
 
                             t.HasCheckConstraint("CK_anulacion_estado", "estado_comanda_previo IN ('Abierta', 'En Preparación', 'Lista')");
 
-                            t.HasCheckConstraint("CK_anulacion_motivo", "char_length(motivo) BETWEEN 5 AND 250 AND motivo = btrim(motivo) AND motivo = normalize(motivo, NFC)");
+                            t.HasCheckConstraint("CK_anulacion_motivo", "char_length(motivo) BETWEEN 5 AND 250 AND motivo = btrim(motivo) AND motivo = normalize(motivo, NFC) AND motivo !~ '[[:cntrl:]]'");
                         });
                 });
 
@@ -445,7 +445,7 @@ namespace ElCarbonazo.Api.Migrations
 
                     b.ToTable("consumo_detalle", null, t =>
                         {
-                            t.HasCheckConstraint("CK_consumo_detalle_cantidad", "cantidad > 0");
+                            t.HasCheckConstraint("CK_consumo_detalle_cantidad", "cantidad > 0 AND cantidad <> 'NaN'::numeric");
                         });
                 });
 
@@ -1189,7 +1189,7 @@ namespace ElCarbonazo.Api.Migrations
 
                             t.HasCheckConstraint("CK_operacion_anulacion_hash", "hash_intencion IS NULL OR hash_intencion ~ '^[0-9a-f]{64}$'");
 
-                            t.HasCheckConstraint("CK_operacion_anulacion_resultado", "(estado = 'Autorizada' AND hash_intencion IS NOT NULL AND fecha_terminal_utc IS NULL AND status_resultado IS NULL AND codigo_resultado IS NULL AND resultado_json IS NULL) OR (estado IN ('Completada', 'Rechazada', 'Cancelada') AND fecha_terminal_utc IS NOT NULL AND status_resultado IS NOT NULL AND codigo_resultado IS NOT NULL AND resultado_json IS NOT NULL AND (hash_intencion IS NOT NULL OR estado = 'Cancelada'))");
+                            t.HasCheckConstraint("CK_operacion_anulacion_resultado", "(estado = 'Autorizada' AND hash_intencion IS NOT NULL AND fecha_terminal_utc IS NULL AND status_resultado IS NULL AND codigo_resultado IS NULL AND resultado_json IS NULL) OR (estado IN ('Completada', 'Rechazada', 'Cancelada') AND fecha_terminal_utc IS NOT NULL AND fecha_terminal_utc >= fecha_creacion_utc AND status_resultado IS NOT NULL AND ((estado IN ('Completada', 'Cancelada') AND status_resultado BETWEEN 200 AND 299) OR (estado = 'Rechazada' AND status_resultado BETWEEN 400 AND 499)) AND codigo_resultado IS NOT NULL AND char_length(btrim(codigo_resultado)) > 0 AND resultado_json IS NOT NULL AND jsonb_typeof(resultado_json) = 'object' AND (hash_intencion IS NOT NULL OR estado = 'Cancelada'))");
                         });
                 });
 

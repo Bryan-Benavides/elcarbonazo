@@ -34,12 +34,14 @@ public class AppDbContext : DbContext
     public DbSet<AutorizacionAnulacion> AutorizacionesAnulacion => Set<AutorizacionAnulacion>();
     public DbSet<AlertaAnulacion> AlertasAnulacion => Set<AlertaAnulacion>();
     public DbSet<LimiteAutorizacion> LimitesAutorizacion => Set<LimiteAutorizacion>();
+    public DbSet<Reservacion> Reservaciones => Set<Reservacion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ConfigureInventario();
         modelBuilder.ConfigureCancelaciones();
+        modelBuilder.ConfigureReservaciones();
 
         // Tabla usuario
         modelBuilder.Entity<Usuario>(entity =>

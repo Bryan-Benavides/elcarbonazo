@@ -1,5 +1,26 @@
 # Bitácora de errores y lecciones — El Carbonazo
 
+### Reservaciones: historial cancelado en la agenda
+
+- **Hecho observado por el usuario:** tras cancelar, la agenda seguía mostrando la reserva con el botón «Cancelar», aunque el registro había cambiado de estado y la mesa estaba disponible.
+- **Control:** listar únicamente reservas activas antes del límite de 500, conservando los registros cancelados y su auditoría en PostgreSQL; Desktop también filtra por estado.
+
+### Reservaciones: notificación y resultado incierto
+
+- **Hecho confirmado:** los botones dependían de `PuedeEscribir`, pero los cambios de ocupación e incertidumbre no notificaban esa propiedad. La consulta de agenda posterior a un rechazo también reemplazaba su mensaje.
+- **Control:** notificar el cambio, conservar el mensaje de la operación y bloquear nuevas escrituras ante un resultado incierto. Una consulta no demuestra que la escritura anterior haya terminado. El bloqueo de esta pantalla es solo de la sesión: no garantiza recuperación tras reinicio, otro usuario o terminal.
+- **Evidencia:** pruebas ViewModel simulan desconexión y comprueban un único envío y el bloqueo; no sustituyen revisión visual.
+
+### 006: `numeric` y comparación positiva con NaN
+
+- **Hecho confirmado en PostgreSQL temporal:** `'NaN'::numeric > 0` devuelve verdadero, de modo que el CHECK original `cantidad > 0` no excluía ese valor especial.
+- **Control:** los nuevos CHECK de cantidad de snapshot e importe de anulación rechazan explícitamente `NaN`; las pruebas ejercitan el rechazo con FKs existentes. Esto no acredita que todas las columnas numéricas anteriores estén protegidas frente a valores especiales.
+
+### 006: CHECK de resultado terminal insuficiente
+
+- **Hecho confirmado por revisión:** el CHECK inicial de `operacion_anulacion` exigía un JSON no nulo y un status presente, pero admitía JSON `null` o escalar y status incompatibles con el estado terminal.
+- **Control:** la migración 006 en desarrollo y el modelo exigen objeto JSON, código no vacío, fecha terminal coherente y rangos HTTP por estado. Las pruebas PostgreSQL rechazan esos casos; las transiciones terminales y el acuse/consumo único se protegen además con triggers. Esto no sustituye las validaciones y pruebas transaccionales de C2.
+
 ### 006: modelo EF actual contra migración histórica
 
 - **Hecho confirmado:** al añadir columnas de 006, dos pruebas que poblaban esquemas anteriores a 006 mediante el modelo EF actual fallaron porque `comanda.revision_detalles` aún no existía en esos esquemas.

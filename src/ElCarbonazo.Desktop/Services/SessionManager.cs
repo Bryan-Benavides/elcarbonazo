@@ -37,7 +37,22 @@ public interface IInventarioSessionSender
         Func<HttpRequestMessage> requestFactory, CancellationToken cancellationToken = default);
 }
 
-public sealed class SessionManager : ISessionManager, ICajaSessionSender, IInventarioSessionSender, IDisposable
+public interface IAnulacionSessionSender
+{
+    long AnulacionSessionGeneration { get; }
+    Task<HttpResponseMessage> SendAnulacionOnceAsync(int expectedActor, long expectedGeneration,
+        Func<HttpRequestMessage> requestFactory, CancellationToken cancellationToken = default);
+}
+
+public interface IReservacionesSessionSender
+{
+    long ReservacionesSessionGeneration { get; }
+    Task<HttpResponseMessage> SendReservacionOnceAsync(int expectedActor, long expectedGeneration,
+        Func<HttpRequestMessage> requestFactory, CancellationToken cancellationToken = default);
+}
+
+public sealed class SessionManager : ISessionManager, ICajaSessionSender, IInventarioSessionSender, IAnulacionSessionSender,
+    IReservacionesSessionSender, IDisposable
 {
     private static readonly TimeSpan RefreshMargin = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ActivityInterval = TimeSpan.FromMinutes(1);
@@ -70,6 +85,8 @@ public sealed class SessionManager : ISessionManager, ICajaSessionSender, IInven
     // Changes on each login, not on token refresh. Never contains a credential.
     public long CajaSessionGeneration { get { lock (_sessionGate) return _cajaSessionGeneration; } }
     public long InventarioSessionGeneration { get { lock (_sessionGate) return _cajaSessionGeneration; } }
+    public long AnulacionSessionGeneration { get { lock (_sessionGate) return _cajaSessionGeneration; } }
+    public long ReservacionesSessionGeneration { get { lock (_sessionGate) return _cajaSessionGeneration; } }
     public InventarioEscrituraCoordinator InventarioEscrituras { get; }
 
     public SessionManager(
@@ -223,6 +240,42 @@ public sealed class SessionManager : ISessionManager, ICajaSessionSender, IInven
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
         }
         // Never refresh or retry an administrative write.
+        return await _apiClient.SendAsync(request, ApiRequestKind.Write, cancellationToken);
+    }
+
+    public async Task<HttpResponseMessage> SendAnulacionOnceAsync(int expectedActor, long expectedGeneration,
+        Func<HttpRequestMessage> requestFactory, CancellationToken cancellationToken = default)
+    {
+        EvaluateState();
+        using var request = requestFactory();
+        lock (_sessionGate)
+        {
+            if (expectedActor <= 0 || _idUsuario != expectedActor || _cajaSessionGeneration != expectedGeneration ||
+                _accessToken is null || _state is not (SessionLifecycleState.Active or SessionLifecycleState.Expiring) ||
+                _serverClock.UtcNow >= _accessTokenExpiresAt ||
+                _rol is not ("Jefa" or "Supervisor" or "Mesero" or "Encargado de Caja" or "Personal de Cocina"))
+                throw new SessionExpiredException();
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
+        }
+        // Anulación, autorización superior y acuse son escrituras de emisión única.
+        return await _apiClient.SendAsync(request, ApiRequestKind.Write, cancellationToken);
+    }
+
+    public async Task<HttpResponseMessage> SendReservacionOnceAsync(int expectedActor, long expectedGeneration,
+        Func<HttpRequestMessage> requestFactory, CancellationToken cancellationToken = default)
+    {
+        EvaluateState();
+        using var request = requestFactory();
+        lock (_sessionGate)
+        {
+            if (expectedActor <= 0 || _idUsuario != expectedActor || _cajaSessionGeneration != expectedGeneration ||
+                _accessToken is null || _state is not (SessionLifecycleState.Active or SessionLifecycleState.Expiring) ||
+                _serverClock.UtcNow >= _accessTokenExpiresAt ||
+                _rol is not ("Jefa" or "Supervisor" or "Mesero" or "Encargado de Caja"))
+                throw new SessionExpiredException();
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
+        }
+        // Booking and cancellation writes are sent once; uncertainty is surfaced to the operator.
         return await _apiClient.SendAsync(request, ApiRequestKind.Write, cancellationToken);
     }
 

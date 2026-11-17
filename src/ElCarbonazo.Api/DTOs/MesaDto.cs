@@ -6,4 +6,5 @@ public sealed record MesaDto(
     int Numero,
     int Capacidad,
     string Estado,
-    uint Version);
+    uint Version,
+    ProximaReservacionDto? ProximaReservacion = null);

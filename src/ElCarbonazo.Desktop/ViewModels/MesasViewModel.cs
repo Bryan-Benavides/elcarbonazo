@@ -72,9 +72,24 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(MostrandoModulo))]
     private InventarioLecturaViewModel? _inventarioActual;
     public bool MostrandoInventario => InventarioActual is not null;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MostrandoReservaciones))]
+    [NotifyPropertyChangedFor(nameof(MostrandoModulo))]
+    private ReservacionesViewModel? _reservacionesActual;
+    public bool MostrandoReservaciones => ReservacionesActual is not null;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MostrandoReporteVentas))]
+    [NotifyPropertyChangedFor(nameof(MostrandoModulo))]
+    private ReporteVentasViewModel? _reporteVentasActual;
+    public bool MostrandoReporteVentas => ReporteVentasActual is not null;
     public bool RolPuedeInventario => Rol is "Jefa" or "Supervisor" or "Personal de Cocina";
     public bool PuedeAbrirInventario => RolPuedeInventario && !_disposed && !MostrandoModulo && !Mutando && !ResultadoIncierto && !SeleccionandoGrupo && _coordinator.CanMutate;
-    public bool MostrandoModulo => MostrandoPedidos || MostrandoCocina || MostrandoRecuperacionCaja || MostrandoInventario;
+    public bool RolPuedeReservaciones => Rol is "Jefa" or "Supervisor" or "Mesero" or "Encargado de Caja" or "Personal de Cocina";
+    public bool PuedeAbrirReservaciones => RolPuedeReservaciones && !_disposed && !MostrandoModulo && !Mutando && !ResultadoIncierto && !SeleccionandoGrupo && _coordinator.CanMutate;
+    public bool RolPuedeReporteVentas => Rol is "Jefa" or "Supervisor";
+    public bool PuedeAbrirReporteVentas => RolPuedeReporteVentas && !_disposed && !MostrandoModulo && !Mutando && !ResultadoIncierto && !SeleccionandoGrupo && _coordinator.CanMutate;
+    public bool MostrandoModulo => MostrandoPedidos || MostrandoCocina || MostrandoRecuperacionCaja ||
+        MostrandoInventario || MostrandoReservaciones || MostrandoReporteVentas;
     public bool RolPuedeCocina => Rol is "Jefa" or "Supervisor" or "Personal de Cocina";
     public bool PuedeAbrirCocina => RolPuedeCocina && !_disposed && !MostrandoModulo && !Mutando && !ResultadoIncierto && !SeleccionandoGrupo && _coordinator.CanMutate;
 
@@ -96,6 +111,52 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     {
         InventarioActual?.Dispose();
         InventarioActual = null;
+        _coordinator.CompleteMutation(requiresReconciliation: true);
+        Mutando = false;
+        SolicitarConsulta();
+        ActualizarAcciones();
+    }
+
+    [RelayCommand]
+    private async Task AbrirReservacionesAsync()
+    {
+        if (!PuedeAbrirReservaciones) return;
+        Mutando = true;
+        bool reserved;
+        try { reserved = await _coordinator.TryBeginMutationAsync(_lifetime.Token); }
+        catch (OperationCanceledException) { Mutando = false; return; }
+        if (!reserved) { Mutando = false; return; }
+        ReservacionesActual = new ReservacionesViewModel(_session, new ServerClock(), CerrarReservaciones,
+            SolicitarConsulta);
+        ActualizarAcciones();
+    }
+
+    private void CerrarReservaciones()
+    {
+        ReservacionesActual?.Dispose();
+        ReservacionesActual = null;
+        _coordinator.CompleteMutation(requiresReconciliation: true);
+        Mutando = false;
+        SolicitarConsulta();
+        ActualizarAcciones();
+    }
+
+    [RelayCommand]
+    private async Task AbrirReporteVentasAsync()
+    {
+        if (!PuedeAbrirReporteVentas) return;
+        Mutando = true;
+        bool reserved;
+        try { reserved = await _coordinator.TryBeginMutationAsync(_lifetime.Token); }
+        catch (OperationCanceledException) { Mutando = false; return; }
+        if (!reserved) { Mutando = false; return; }
+        ReporteVentasActual = new ReporteVentasViewModel(_session, new ServerClock(), CerrarReporteVentas);
+        ActualizarAcciones();
+    }
+
+    private void CerrarReporteVentas()
+    {
+        ReporteVentasActual = null;
         _coordinator.CompleteMutation(requiresReconciliation: true);
         Mutando = false;
         SolicitarConsulta();
@@ -213,6 +274,8 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(PuedeAbrirCocina));
         OnPropertyChanged(nameof(PuedeAbrirRecuperacionCaja));
         OnPropertyChanged(nameof(PuedeAbrirInventario));
+        OnPropertyChanged(nameof(PuedeAbrirReservaciones));
+        OnPropertyChanged(nameof(PuedeAbrirReporteVentas));
         ActualizarAccionesGrupo();
     }
 
@@ -533,6 +596,7 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
         PedidosActual?.Dispose();
         CocinaActual?.Dispose();
         InventarioActual?.Dispose();
+        ReservacionesActual?.Dispose();
         RecuperacionCajaActual?.Deactivate();
         _session.SessionStateChanged -= OnSessionStateChanged;
         Mesas.CollectionChanged -= AlCambiarMesas;

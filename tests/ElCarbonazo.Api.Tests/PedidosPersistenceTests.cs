@@ -761,8 +761,35 @@ public sealed class RuntimeGrantsTests
             {
                 await setRole.ExecuteNonQueryAsync();
             }
+            foreach (var sql in new[]
+            {
+                "UPDATE estado_hmac_autorizacion SET provisionado = true WHERE id = 1",
+                "DELETE FROM estado_hmac_autorizacion WHERE id = 1",
+                "INSERT INTO estado_hmac_autorizacion (id) VALUES (1)"
+            })
+            {
+                await using var forbiddenProvisioning = new NpgsqlCommand(sql, connection);
+                var error = await Assert.ThrowsAsync<PostgresException>(() => forbiddenProvisioning.ExecuteNonQueryAsync());
+                Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, error.SqlState);
+            }
             var options = new DbContextOptionsBuilder<ElCarbonazo.Api.Data.AppDbContext>()
                 .UseNpgsql(connection).Options;
+            await using (var hmacContext = new ElCarbonazo.Api.Data.AppDbContext(options))
+            {
+                var guard = new HmacAutorizacionGuard(hmacContext, TimeProvider.System);
+                var called = false;
+                var state = await guard.EjecutarAsync(new byte[32], _ => { called = true; return Task.CompletedTask; }, default);
+                Assert.Equal(EstadoHmacAutorizacion.NoProvisionado, state);
+                Assert.False(called);
+                var provisioner = new HmacAutorizacionProvisioner(hmacContext,
+                    new AuditRecorder(hmacContext, new TestHttpContextAccessor(), TimeProvider.System));
+                var error = await Assert.ThrowsAsync<PostgresException>(() => provisioner.ProvisionarInicialAsync(new byte[32], default));
+                Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, error.SqlState);
+                var recovery = new HmacAutorizacionRecovery(hmacContext,
+                    new AuditRecorder(hmacContext, new TestHttpContextAccessor(), TimeProvider.System), TimeProvider.System);
+                error = await Assert.ThrowsAsync<PostgresException>(() => recovery.RecuperarAusenteAsync(new byte[32], default));
+                Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, error.SqlState);
+            }
             await using (var context = new ElCarbonazo.Api.Data.AppDbContext(options))
             {
                 var product = await context.Productos.SingleAsync();
@@ -834,7 +861,8 @@ public sealed class RuntimeGrantsTests
             // Persistence permissions only: this does not execute or authorize a business cancellation.
             await using (var cancellationPersistence = new NpgsqlCommand("""
                 INSERT INTO consumo_detalle (id_detalle, id_ingrediente, cantidad)
-                SELECT d.id_detalle, i.id_ingrediente, 0.4 FROM detalle_pedido d CROSS JOIN ingrediente i;
+                SELECT d.id_detalle, i.id_ingrediente, 0.4 FROM detalle_pedido d CROSS JOIN ingrediente i
+                ON CONFLICT (id_detalle, id_ingrediente) DO NOTHING;
                 INSERT INTO anulacion_pedido
                     (id_pedido, id_comanda, id_detalle, cantidad_anulada, monto_revertido,
                      estado_comanda_previo, id_usuario_solicita, id_usuario_autoriza, motivo, inventario_revertido, fecha_utc)
@@ -855,6 +883,22 @@ public sealed class RuntimeGrantsTests
                 """, connection))
             {
                 await cancellationPersistence.ExecuteNonQueryAsync();
+            }
+            await using (var secondAck = new NpgsqlCommand("UPDATE alerta_anulacion SET fecha_acuse_utc = now()", connection))
+            {
+                var error = await Assert.ThrowsAsync<PostgresException>(() => secondAck.ExecuteNonQueryAsync());
+                Assert.Equal(PostgresErrorCodes.CheckViolation, error.SqlState);
+            }
+            await using (var invalidReason = new NpgsqlCommand("""
+                INSERT INTO anulacion_pedido
+                    (id_pedido, id_comanda, id_detalle, cantidad_anulada, monto_revertido,
+                     estado_comanda_previo, id_usuario_solicita, id_usuario_autoriza, motivo, inventario_revertido, fecha_utc)
+                SELECT id_pedido, id_comanda, id_detalle, 1, 10, 'Lista', 1, 1,
+                    E'No\tpermitido', true, now() FROM anulacion_pedido
+                """, connection))
+            {
+                var error = await Assert.ThrowsAsync<PostgresException>(() => invalidReason.ExecuteNonQueryAsync());
+                Assert.Equal(PostgresErrorCodes.CheckViolation, error.SqlState);
             }
             await using (var duplicate = new NpgsqlCommand("""
                 INSERT INTO movimiento_inventario

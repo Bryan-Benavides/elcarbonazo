@@ -1,0 +1,65 @@
+<UserControl x:Class="ElCarbonazo.Desktop.Views.ReporteVentasView"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ElCarbonazo.Desktop.ViewModels"
+             xmlns:models="using:ElCarbonazo.Desktop.Models"
+             x:DataType="vm:ReporteVentasViewModel"
+             x:CompileBindings="True"
+             Background="{StaticResource FondoPrincipalBrush}">
+    <Grid RowDefinitions="Auto,Auto,*" Margin="24" RowSpacing="16">
+        <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="4">
+                <TextBlock Text="Reporte de ventas" FontSize="26" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                <TextBlock Text="Cobros confirmados y snapshots del comprobante interno · no fiscal" Foreground="{StaticResource TextoSecundarioBrush}" />
+            </StackPanel>
+            <Button Grid.Column="1" Content="Volver al mapa" Command="{Binding CerrarCommand}" VerticalAlignment="Top" />
+        </Grid>
+        <Border Grid.Row="1" Padding="14" CornerRadius="8" Background="{StaticResource FondoPanelBrush}"
+                BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1">
+            <Grid ColumnDefinitions="*,*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="12">
+                <StackPanel Spacing="5">
+                    <TextBlock Text="Desde · Managua" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBox Text="{Binding DesdeLocal}" PlaceholderText="AAAA-MM-DD HH:mm" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="5">
+                    <TextBlock Text="Hasta · Managua" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBox Text="{Binding HastaLocal}" PlaceholderText="AAAA-MM-DD HH:mm" />
+                </StackPanel>
+                <Button Grid.Column="2" Content="Consultar" Command="{Binding ConsultarCommand}" IsEnabled="{Binding !Ocupado}" VerticalAlignment="Bottom" />
+                <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Margin="0,10,0,0" Text="{Binding Mensaje}"
+                           Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+            </Grid>
+        </Border>
+        <Grid Grid.Row="2" RowDefinitions="Auto,*" RowSpacing="14">
+            <UniformGrid Columns="4" ColumnSpacing="12">
+                <Border Padding="16" CornerRadius="8" Background="{StaticResource FondoPanelBrush}">
+                    <StackPanel Spacing="6"><TextBlock Text="Cobros" Foreground="{StaticResource TextoSecundarioBrush}" /><TextBlock Text="{Binding CantidadCobros}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" /></StackPanel>
+                </Border>
+                <Border Padding="16" CornerRadius="8" Background="{StaticResource FondoPanelBrush}">
+                    <StackPanel Spacing="6"><TextBlock Text="Total cobrado" Foreground="{StaticResource TextoSecundarioBrush}" /><TextBlock Text="{Binding TotalCobrado, StringFormat='C$ {0:N2}'}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" /></StackPanel>
+                </Border>
+                <Border Padding="16" CornerRadius="8" Background="{StaticResource FondoPanelBrush}">
+                    <StackPanel Spacing="6"><TextBlock Text="Ticket promedio" Foreground="{StaticResource TextoSecundarioBrush}" /><TextBlock Text="{Binding TicketPromedio, StringFormat='C$ {0:N2}'}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" /></StackPanel>
+                </Border>
+                <Border Padding="16" CornerRadius="8" Background="{StaticResource FondoPanelBrush}">
+                    <StackPanel Spacing="6"><TextBlock Text="Impuestos registrados · demo" Foreground="{StaticResource TextoSecundarioBrush}" /><TextBlock Text="{Binding ImpuestosRegistrados, StringFormat='C$ {0:N2}'}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" /></StackPanel>
+                </Border>
+            </UniformGrid>
+            <Border Grid.Row="1" Padding="14" CornerRadius="8" Background="{StaticResource FondoPanelBrush}"
+                    BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1">
+                <Grid RowDefinitions="Auto,*" RowSpacing="10">
+                    <TextBlock Text="Productos más vendidos · por unidades" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding Productos}" AutoGenerateColumns="False"
+                              IsReadOnly="True" CanUserSortColumns="False" GridLinesVisibility="Horizontal"
+                              Background="Transparent" Foreground="{StaticResource TextoPrincipalBrush}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Producto (snapshot)" Binding="{Binding NombreProducto}" Width="*" />
+                            <DataGridTextColumn Header="Unidades" Binding="{Binding UnidadesVendidas}" Width="120" />
+                            <DataGridTextColumn Header="Total vendido" Binding="{Binding TotalVendido, StringFormat='C$ {0:N2}'}" Width="180" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

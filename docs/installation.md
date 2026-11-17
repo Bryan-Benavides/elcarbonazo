@@ -43,6 +43,18 @@ Para ejecutar pedidos 003 en una base local, la API también debe tener aplicado
 
 ## Provisión prevista para operaciones recuperables
 
+### 006: primera provisión HMAC — solo instalación autorizada
+
+El comando `--provisionar-hmac-autorizacion` realiza únicamente la primera provisión del registro HMAC de 006. No aplica migraciones ni se ejecuta al iniciar la API. Se probó su ejecución como proceso separado contra PostgreSQL temporal; la autorización superior completa de 006 aún no está implementada.
+
+Antes de usarlo en una base persistente, confirmar expresamente el destino y obtener autorización. Aprovisionar una clave aleatoria independiente de JWT, de al menos 32 bytes, desde una fuente segura externa a Git; configurar su Base64 mediante `AutorizacionSuperior__ClaveHmac` y mantenerlo protegido y estable entre reinicios. No imprimirlo, escribirlo en archivos versionados ni pasarlo como argumento de línea de comandos. La longitud no demuestra por sí sola que una clave sea aleatoria. Configurar también la conexión administrativa y la clave JWT existente mediante sus fuentes protegidas.
+
+Desde la raíz ejecutar `dotnet run --project src/ElCarbonazo.Api -- --provisionar-hmac-autorizacion`. El comando muestra la base, dirección y puerto efectivos de PostgreSQL y exige escribir exactamente la confirmación indicada. Si difieren del destino autorizado, cancelar; no reutilizar una confirmación de otra instancia. La provisión solo acepta la fila inicial existente, sin operaciones/autorizaciones/contadores 006 previos, y audita el cambio. Repetirla no reemplaza la clave ni omite la espera de rotación. Retirar después las credenciales administrativas del entorno y ejecutar la API con rol runtime.
+
+Si falta la fila HMAC, no crear ni sobrescribir el registro manualmente. El usuario aprobó un comando administrativo explícito para ese caso: tras confirmar la base y respaldar/preservar evidencia, `dotnet run --project src/ElCarbonazo.Api -- --recuperar-hmac-autorizacion` exige la confirmación específica mostrada, registra auditoría y bloquea autorizaciones durante 24 horas sin borrar contadores ni operaciones. Requiere la misma configuración protegida de clave y conexión. No ejecutar contra base persistente sin autorización y destino confirmados. Todas las instancias que usen esa base deben estar detenidas o usar una versión que respete la misma barrera HMAC; no se ha validado una actualización mixta.
+
+Si la fila existe, está dañada de otra forma, hay un fallo o el resultado de recuperación es incierto, no repetir ni reparar con SQL manual: conservar evidencia y mantener la autorización bloqueada hasta revisión. El comando para fila ausente no constituye una restauración integral ni resuelve otros daños; no se ha validado una restauración de respaldo ni relojes de múltiples equipos.
+
 **Pendiente de implementación y verificación:** al desplegar el módulo 002, el instalador deberá crear el diario inicial `recovery\journal.json` bajo `%ProgramData%\ElCarbonazo`, con estado `SinPendientes` e identificador de instalación coincidente. En actualización no sobrescribirá un diario existente. Si falta o está corrupto, no se debe crear uno vacío para desbloquear la terminal; se requiere recuperación administrativa segura. Las ACL y el reemplazo atómico se verificarán con las cuentas Windows de operación. El procedimiento detallado y los permisos de las nuevas tablas se publicarán junto con la implementación, no se consideran disponibles todavía.
 
 ### Caja 004: primera instalación manual de demostración

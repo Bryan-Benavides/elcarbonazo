@@ -42,6 +42,74 @@ public sealed class ApiFlowTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Reservations_and_sales_report_endpoints_enforce_contracts_and_roles()
+    {
+        var token = await LoginAsync("jefa central", "correct horse battery staple");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var start = DateTimeOffset.UtcNow.AddDays(3);
+        using var created = await _client.PostAsJsonAsync("/api/reservaciones", new
+        {
+            idMesa = 1,
+            nombreReferencia = "Defensa",
+            cantidadPersonas = 2,
+            inicioUtc = start,
+            finUtc = start.AddHours(2)
+        });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var reservation = await created.Content.ReadFromJsonAsync<JsonElement>();
+        var reservationId = reservation.GetProperty("idReservacion").GetInt32();
+
+        using var conflict = await _client.PostAsJsonAsync("/api/reservaciones", new
+        {
+            idMesa = 1,
+            nombreReferencia = "Otra reserva",
+            cantidadPersonas = 2,
+            inicioUtc = start.AddHours(1),
+            finUtc = start.AddHours(3)
+        });
+        Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
+
+        using var availability = await _client.GetAsync(
+            $"/api/reservaciones/disponibilidad?desdeUtc={Uri.EscapeDataString(start.ToString("O"))}" +
+            $"&hastaUtc={Uri.EscapeDataString(start.AddHours(2).ToString("O"))}&personas=2");
+        Assert.Equal(HttpStatusCode.OK, availability.StatusCode);
+
+        using var report = await _client.GetAsync(
+            $"/api/reportes/ventas?desdeUtc={Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(-1).ToString("O"))}" +
+            $"&hastaUtc={Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(1).ToString("O"))}");
+        Assert.Equal(HttpStatusCode.OK, report.StatusCode);
+        var reportDto = await report.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(0, reportDto.GetProperty("cantidadCobros").GetInt32());
+        Assert.Equal(0m, reportDto.GetProperty("impuestosRegistrados").GetDecimal());
+        Assert.Empty(reportDto.GetProperty("productos").EnumerateArray());
+
+        using var cancelled = await _client.PostAsync($"/api/reservaciones/{reservationId}/cancelar", null);
+        Assert.Equal(HttpStatusCode.OK, cancelled.StatusCode);
+        Assert.Equal("Cancelada", (await cancelled.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("estado").GetString());
+
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer",
+            await LoginAsync("cocina", "kitchen password"));
+        using var kitchenList = await _client.GetAsync(
+            $"/api/reservaciones?desdeUtc={Uri.EscapeDataString(start.AddDays(-1).ToString("O"))}" +
+            $"&hastaUtc={Uri.EscapeDataString(start.AddDays(1).ToString("O"))}");
+        Assert.Equal(HttpStatusCode.OK, kitchenList.StatusCode);
+        using var kitchenWrite = await _client.PostAsJsonAsync("/api/reservaciones", new
+        {
+            idMesa = 1,
+            nombreReferencia = "No autorizado",
+            cantidadPersonas = 2,
+            inicioUtc = start,
+            finUtc = start.AddHours(2)
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, kitchenWrite.StatusCode);
+        using var forbiddenReport = await _client.GetAsync(
+            $"/api/reportes/ventas?desdeUtc={Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(-1).ToString("O"))}" +
+            $"&hastaUtc={Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(1).ToString("O"))}");
+        Assert.Equal(HttpStatusCode.Forbidden, forbiddenReport.StatusCode);
+    }
+
+    [Fact]
     public async Task Inventory_http_supports_recipes_movements_alerts_and_stale_versions()
     {
         int productId;

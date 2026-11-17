@@ -43,6 +43,26 @@ internal static class CajaSmoke
         var auth = await login.Content.ReadFromJsonAsync<AuthSessionResponse>(cancellationToken: token)
             ?? throw new InvalidDataException("No se recibió la sesión temporal.");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
+        var reservationStart = DateTimeOffset.UtcNow.AddDays(2);
+        using (var reservation = await client.PostAsJsonAsync("api/reservaciones", new
+        {
+            idMesa = 15,
+            nombreReferencia = "Reserva ficticia defensa",
+            cantidadPersonas = 2,
+            inicioUtc = reservationStart,
+            finUtc = reservationStart.AddHours(2)
+        }, token))
+        {
+            reservation.EnsureSuccessStatusCode();
+            var created = await reservation.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: token);
+            var tables = await client.GetFromJsonAsync<JsonElement[]>("api/mesas", token)
+                ?? throw new InvalidDataException("No se recibió el mapa.");
+            Require(tables.Single(x => x.GetProperty("idMesa").GetInt32() == 15)
+                .GetProperty("proximaReservacion").ValueKind == JsonValueKind.Object, "La reserva no apareció en el mapa.");
+            using var cancel = await client.PostAsync(
+                $"api/reservaciones/{created.GetProperty("idReservacion").GetInt32()}/cancelar", null, token);
+            cancel.EnsureSuccessStatusCode();
+        }
         var session = new LoopbackSession(client, auth);
         var tempRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Temp", "opencode");
         if (!Directory.Exists(tempRoot)) tempRoot = Path.GetTempPath();
@@ -194,6 +214,19 @@ internal static class CajaSmoke
             var shift = await verify.TurnosCaja.AsNoTracking().SingleAsync(token);
             Require(shift.Estado == CajaStates.TurnoCerrado && shift.EfectivoEsperado == 20m && shift.EfectivoContado == 20m && shift.TotalTarjeta == 20m && shift.TotalTransferencia == 10m && shift.CantidadCuentasPendientes == 2, "El cierre persistido no coincide.");
             await RunIntegratedOrdersAsync(client, vm, token);
+            var from = DateTimeOffset.UtcNow.AddDays(-1);
+            var until = DateTimeOffset.UtcNow.AddDays(1);
+            var report = await client.GetFromJsonAsync<JsonElement>(
+                $"api/reportes/ventas?desdeUtc={Uri.EscapeDataString(from.ToString("O", CultureInfo.InvariantCulture))}" +
+                $"&hastaUtc={Uri.EscapeDataString(until.ToString("O", CultureInfo.InvariantCulture))}", token);
+            var persistedPayments = await verify.Cobros.AsNoTracking()
+                .Where(x => x.FechaHora >= from && x.FechaHora < until).ToListAsync(token);
+            Require(report.GetProperty("cantidadCobros").GetInt32() == persistedPayments.Count &&
+                report.GetProperty("totalCobrado").GetDecimal() == persistedPayments.Sum(x => x.Total) &&
+                report.GetProperty("impuestosRegistrados").GetDecimal() == persistedPayments.Sum(x => x.Impuestos),
+                "El reporte no coincide con los cobros del recorrido.");
+            Require(report.GetProperty("productos").GetArrayLength() > 0, "El reporte no mostró productos cobrados.");
+            Console.WriteLine("RESERVAS Y REPORTE: reserva, mapa, cancelación y agregados de cobros reales de prueba verificados por REST.");
             Console.WriteLine("CAJA SMOKE: barreras, preparación, consultas, cobro confirmado no reversible, recuperación y cierre con datos ficticios.");
             Console.WriteLine("Sin ventana ni render; sesión adaptada y política del diario solo de prueba, no valida ACL ni LAN.");
         }
