@@ -1,0 +1,91 @@
+numero,nombre,categoria,precio_nio
+1,Gallo Pinto Tradicional,Comida,60.00
+2,Nacatamal Tradicional de Cerdo,Comida,90.00
+3,Vigorón Granadino,Comida,100.00
+4,Indio Viejo,Comida,130.00
+5,Quesillo Tradicional,Comida,45.00
+6,Vaho (Baho) Nica,Comida,150.00
+7,Cerdo a la Plancha (Menú Ejecutivo),Comida,130.00
+8,Jalapeño de Pollo (Menú Ejecutivo),Comida,140.00
+9,Jalapeño de Res (Menú Ejecutivo),Comida,150.00
+10,Pollo Rostizado (Menú Ejecutivo),Comida,120.00
+11,Chop Suey (Menú Ejecutivo),Comida,135.00
+12,Torta de Carne (Menú Ejecutivo),Comida,125.00
+13,Cardo Tapado (Menú Ejecutivo),Comida,140.00
+14,Chuleta de Pescado (Menú Ejecutivo),Comida,160.00
+15,Salpicón (Menú Ejecutivo),Comida,110.00
+16,Cardo Frito (Menú Ejecutivo),Comida,145.00
+17,Bistec de Res (Menú Ejecutivo),Comida,140.00
+18,Churrasco de Res (Menú Ejecutivo),Comida,220.00
+19,Ceviche de Pescado,Comida,150.00
+20,Tacos Dorados de Res,Comida,90.00
+21,Enchiladas Nicaragüenses,Comida,60.00
+22,Güirilas con Cuajada,Comida,70.00
+23,Tamuga Masaya,Comida,85.00
+24,Fritanga Mixta,Comida,160.00
+25,Plátanos Maduros Fritos con Queso,Comida,55.00
+26,Tostones con Queso,Comida,50.00
+27,Tajadas con Queso,Comida,50.00
+28,Sopa de Res con Espinazo,Comida,130.00
+29,Arroz a la Valenciana Nica,Comida,125.00
+30,Frijoles Fritos con Cuajada,Comida,45.00
+31,Huevos Mentirosos,Comida,60.00
+32,Sopa de Gallina India,Comida,150.00
+33,Tortilla con Queso Fundido,Comida,40.00
+34,Quesadilla Nica,Comida,40.00
+35,Tres Leches Casero,Comida,60.00
+36,Pío Quinto Nicaragüense,Comida,65.00
+37,Buñuelos de Yuca con Miel,Comida,45.00
+38,Cajeta de Leche,Comida,30.00
+39,Cajeta de Coco,Comida,30.00
+40,Rosquillas Somoteñas (Porción),Comida,35.00
+41,Alitas de Pollo Fritanga Style,Comida,115.00
+42,Costillitas de Cerdo BBQ Nica,Comida,170.00
+43,Bistec Encebollado,Comida,130.00
+44,Filete de Pescado a la Plancha,Comida,160.00
+45,Camarones al Ajillo Criollo,Comida,200.00
+46,Arroz con Camarones,Comida,185.00
+47,Sopa de Mariscos Mixtos,Comida,210.00
+48,Lomo Relleno Estilo Nica,Comida,195.00
+49,Pollo Desmenuzado en Salsa,Comida,100.00
+50,Torta de Elote Horneada,Comida,40.00
+51,Pan de Coco Caribeño,Comida,35.00
+52,Patí Costeño,Comida,50.00
+53,Rondón Caribeño,Comida,220.00
+54,Papas Fritas Caseras,Comida,45.00
+55,Ensalada Fresca de la Casa,Comida,40.00
+56,Pinolillo Tradicional,Bebida,30.00
+57,Tiste de Maíz y Cacao,Bebida,30.00
+58,Refresco de Cacao,Bebida,30.00
+59,Refresco de Cebada,Bebida,25.00
+60,Refresco de Semilla de Jícaro,Bebida,30.00
+61,Chicha de Maíz (Refresco),Bebida,25.00
+62,Jugo Natural de Naranja,Bebida,40.00
+63,Limonada Tradicional,Bebida,30.00
+64,Limonada con Hierbabuena,Bebida,35.00
+65,Refresco de Maracuyá (Calala),Bebida,30.00
+66,Refresco de Piña Natural,Bebida,30.00
+67,Refresco de Jamaica,Bebida,30.00
+68,Café Negro Tradicional (Taza),Bebida,20.00
+69,Café con Leche,Bebida,25.00
+70,Café con Crema,Bebida,25.00
+71,Agua Embotellada Fuente Pura (500 ml),Bebida,20.00
+72,Agua Luna (600 ml),Bebida,20.00
+73,Agua con Gas,Bebida,45.00
+74,Gaseosa Coca-Cola (Lata 350 ml),Bebida,30.00
+75,Gaseosa Pepsi (Lata 350 ml),Bebida,30.00
+76,Gaseosa Sprite (Lata 350 ml),Bebida,30.00
+77,Gaseosa Tropical (Manzana/Naranja),Bebida,30.00
+78,Té Frío Limón,Bebida,30.00
+79,Licuado de Papaya con Leche,Bebida,40.00
+80,Licuado de Sandía,Bebida,35.00
+81,Licuado de Melón,Bebida,35.00
+82,Chocolate Caliente Artesanal,Bebida,35.00
+83,Pinol Blanco,Bebida,25.00
+84,Agualoja Tradicional,Bebida,25.00
+85,Cerveza Toña (Botella / Lata 350 ml),Licor,55.00
+86,Cerveza Victoria (Botella / Lata 350 ml),Licor,55.00
+87,Cerveza Corona Extra (Botella 350 ml),Licor,70.00
+88,Ron Flor de Caña Extra Lite 4 Años (Trago),Licor,50.00
+89,Ron Flor de Caña Gran Reserva 7 Años (Trago),Licor,65.00
+90,Tequila Blanco de la Casa (Shot),Licor,80.00

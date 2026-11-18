@@ -1,25 +1,26 @@
 # Plan técnico — cierre y entrega de la demo
 
-**Estado: propuesta pendiente de aprobación concreta; no autoriza cambios a una base persistente.**
+**Estado: alcance actualizado por solicitud del usuario. No autoriza cambios a una base persistente hasta confirmar el destino exacto de defensa.**
 
 ## Enfoque mínimo
 
-1. Inspeccionar los comandos actuales de migración, catálogo de demostración, recetas e inventario para reutilizarlos antes de crear otro mecanismo.
-2. **Fase 1:** fijar/documentar la versión de PostgreSQL local compatible y crear una base vacía explícita `elcarbonazo_demo`; no asumir Docker ni nube.
+1. Inspeccionar los comandos actuales de migración, catálogo, recetas e inventario; reutilizar contratos y servicios. La carga nueva debe ser explícita, completa y segura, no una mutación del seeder demo anterior.
+2. **Fase 1:** el usuario confirmó PostgreSQL local y autorizó expresamente `elcarbonazo` como destino; hizo un respaldo. Preservar registros preexistentes y verificar que las tablas de catálogo e inventario estén vacías. Las pruebas destructivas se mantienen limitadas a bases temporales creadas para ellas.
 3. Añadir `.env.example` sin secretos operativos y scripts PowerShell que comprueben `psql`/`pg_restore`, validen el nombre de base demo y ejecuten migración/seed solo contra ese destino. Evitar automatización oculta al iniciar API.
-4. Si la funcionalidad actual no puede preparar recetas/stock, añadir datos sintéticos deterministas acotados a `elcarbonazo_demo_*`. No inventar pedidos pagados ni usar credenciales reales.
+4. Versionar los archivos fuente del catálogo y preparar herramienta para productos, ingredientes y recetas suministrados, con prevalidación total, transacción, confirmación exacta de destino y aborto si catálogo o inventario no están vacíos. Preservar tablas ajenas, incluido el pedido abierto. Crear stock únicamente mediante movimientos `EntradaCompra` auditados. No inventar cantidades ni pedidos pagados ni usar credenciales reales.
 5. Probar migración limpia, seed repetible y smoke de reservaciones, salón, cocina, caja, inventario y reporte en una base temporal.
-6. **Fase 2, después de aprobar Fase 1:** publicar `dotnet publish` Windows de API/Desktop y un dump PostgreSQL custom-format de la base demo sintética. Añadir procedimiento de restore a un DB nuevo, validación de checksum y conexión local.
+   Para la revisión manual se habilita `AcceptanceHost --catalogo-defensa`: crea su propia base temporal, carga los mismos archivos y permanece abierto hasta Ctrl+C. No combina este modo con el seeder ficticio anterior ni modifica `elcarbonazo`.
+6. **Fase 2, después de aprobar Fase 1:** publicar `dotnet publish` Windows de API/Desktop y un dump PostgreSQL custom-format de la base local de defensa aislada. Añadir procedimiento de restore a un DB nuevo, validación de checksum y conexión local.
 7. Comprobar que ejecutables y dump no contienen secretos personales; preparar guía Windows y guion de demo de 15 minutos.
 
 ## Seguridad y preservación
 
-- No exportar ni leer secretos/datos de la base original; no se requiere para la entrega.
-- El dump distribuido debe generarse desde la base demo ficticia, no desde la base original del usuario. Un dump no reemplaza migraciones ni contiene los binarios publicados. No incluir el directorio `data` de PostgreSQL; usar `pg_dump`/`pg_restore`.
+- No exportar ni leer secretos/datos de ninguna base preexistente; no se requiere para la entrega.
+- El dump distribuido debe generarse exclusivamente desde la base local de defensa recién creada, nunca desde base original, temporal de pruebas ni otra base preexistente. Un dump no reemplaza migraciones ni contiene los binarios publicados. No incluir el directorio `data` de PostgreSQL; usar `pg_dump`/`pg_restore`.
 - No añadir contraseñas JWT/HMAC de producción ni credenciales personales al repositorio. Los valores demo deben ser locales, desechables y explícitamente no seguros.
 - No ejecutar `docker compose down -v` de forma automática; borrar un volumen requiere acción explícita del usuario.
 - No hacer auto-migración al arrancar API. Aplicar migraciones solo a la base demo nombrada por el script.
-- Para generar el dump se usará exclusivamente una base `elcarbonazo_demo_*` ficticia; el restore será a otra base recién creada.
+- Para generar el dump se usará exclusivamente una base `elcarbonazo_demo_*` de defensa aislada; el restore será a otra base recién creada.
 
 ## Validación
 

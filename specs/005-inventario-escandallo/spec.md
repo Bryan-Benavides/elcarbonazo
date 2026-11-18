@@ -2,6 +2,8 @@
 
 **Estado: D0 aprobado como línea base para el perfil universitario local aislado.** El usuario autorizó las decisiones recomendadas y las precisiones técnicas están documentadas en `plan.md`. Los cambios funcionales requieren nueva aprobación. No autoriza migraciones ni cambios en datos persistentes. Offline-first, sin dinero real ni afirmación de aptitud operativa.
 
+**Adenda para datos de defensa:** el usuario confirmó la base local `elcarbonazo`, confirmó haber hecho un respaldo y autorizó expresamente cargar los 90 productos, recetas e ingredientes. Se permite insertar solo si catálogo e inventario están vacíos; preservar pedidos, usuarios y demás historial. No se fabrican recetas, cantidades ni existencias faltantes y no se reemplaza información histórica. Las pruebas se ejecutan en bases temporales aisladas.
+
 ## 1. Objetivo y límites
 
 Administrar ingredientes, recetas y movimientos, y descontar inventario al enviar una comanda de 003. La API es autoridad de stock y permisos; Desktop utiliza REST. Caja 004 conserva sus reglas y nunca vuelve a descontar al cobrar. El catálogo `disponible` no garantiza stock. No se incluyen compras a proveedores, costos, conversiones automáticas de unidades, reservas, anulaciones de comandas, devolución automática de consumo, integración bancaria, operación real ni recuperación durable general de 002.
@@ -12,9 +14,18 @@ Las comandas anteriores a 005 no generan consumos retroactivos ni alteraciones h
 
 1. **Receta obligatoria:** todo producto enviado requiere receta activa con al menos una línea; incluso una bebida embotellada se representa mediante un ingrediente. Sin receta completa se rechaza el envío, sin efectos. Esto cambia el comportamiento vigente de 003 una vez implementado 005; no se habilita retroactivamente por esta documentación.
 2. **Unidad estable:** cada ingrediente tiene una unidad canónica, sin conversiones. Puede cambiarse solo mientras no exista ningún movimiento ni referencia en recetas; para otra unidad se crea un ingrediente nuevo. La inactivación no borra historia y se rechaza si una receta activa lo utiliza; una receta inactiva o sin líneas no habilita envíos.
-3. **Existencia inicial:** se crea ingrediente con stock cero; se carga mediante `EntradaCompra` ficticia explícita y auditada. Para ajustes se exige motivo; para entrada, motivo opcional. Nunca se edita stock directamente.
+3. **Existencia inicial:** se crea ingrediente con stock cero; en la base local de defensa se carga el stock inicial proporcionado mediante `EntradaCompra` explícita y auditada. Para ajustes se exige motivo; para entrada, motivo opcional. Nunca se edita stock directamente.
 4. **Lectura por roles:** Jefa administra y consulta todo; Supervisor y Personal de Cocina consultan ingredientes, alertas y kardex, sin mutar ni consultar/editar recetas; Mesero y Encargado de Caja no acceden a inventario ni recetas. En un rechazo de envío los roles autorizados de salón reciben únicamente nombres, unidades y cantidades faltantes necesarios para corregirlo.
 5. **Resolución de incertidumbre:** para las nuevas escrituras administrativas, sin reintento automático ni garantía de recuperación tras reinicio; conservar bloqueo local de acciones conflictivas, avisar y exigir revisión humana. Una lectura no demuestra la terminación de una escritura. No reutilizar ni modificar el diario de Caja.
+
+### Preparación de datos locales de defensa
+
+- Los productos usan las categorías admitidas `Comida`, `Bebida` y `Licor`, precios NIO y los nombres suministrados. Disponibilidad del producto no equivale a existencia de stock.
+- Cada receta activa referencia ingredientes activos y expresa cantidad positiva en la unidad canónica exacta. No se permiten conversiones automáticas ni cantidades deducidas desde notas.
+- Cada stock inicial positivo se registra como `EntradaCompra` explícita y auditable; nunca se edita `stock_actual` directamente. El mínimo de alerta queda en cero salvo que el usuario suministre otro valor. No se inventa stock omitido.
+- Para la preparación recibida: `Leche de crema` se normaliza a `Crema de leche` manteniendo unidad ml y stock 3000; galletas saladas se representan como unidades-paquete con stock 60; el producto `Gaseosa 7Up / Sprite` se normaliza a Sprite porque ese es el inventario disponible. Por indicación posterior del usuario, la mantequilla usa gramos en todas las recetas y conserva su stock inicial de 4000 g; las cantidades que el usuario escribió en ml se interpretan con el mismo número en gramos como corrección de la receta, no como conversión física.
+- La carga valida el conjunto completo antes de escribir y aborta sin cambios ante registros duplicados, catálogo/recetas preexistentes distintos, unidades incompatibles o datos fuera de límites. No borra ni renombra datos existentes.
+- Se conservan los avisos de que la aplicación no verifica pagos bancarios y de que el comprobante no es fiscal, sin exigir que los nombres de los productos sean ficticios.
 
 ## 3. Reglas funcionales
 

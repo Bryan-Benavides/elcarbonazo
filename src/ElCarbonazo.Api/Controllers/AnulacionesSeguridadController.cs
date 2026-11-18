@@ -76,7 +76,8 @@ public sealed class AnulacionesOperacionesController(AnulacionRecuperacionServic
             !Guid.TryParse(User.FindFirstValue("sid"), out var session))
             return Error(401, "AUTH_NO_AUTENTICADO");
         var result = await recovery.ResolverAsync(id, actor, session, barrier, intervention, ct);
-        if (result.Status >= 400) return Error(result.Status, result.Code);
+        if (!result.Resuelta) return Error(result.Status, result.Code);
+        // Una operación resuelta se describe con 200 aunque su resultado de negocio sea un rechazo.
         return Ok(new { estado = result.Estado, codigo = result.Code, resultado = result.ResultadoJson });
     }
 

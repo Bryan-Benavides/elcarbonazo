@@ -34,12 +34,15 @@ public sealed class CuentasService(AppDbContext context) : ICuentasService
             return new CuentaActivaDto(null);
         }
 
+        // Salón ve únicamente líneas activas: las anuladas se conservan para auditoría y Caja.
         var commands = pedido.Comandas.OrderBy(item => item.FechaHora).ThenBy(item => item.IdComanda)
+            .Where(item => item.Detalles.Any(detail => !detail.Cancelado))
             .Select(item => new CuentaComandaDto(
                 item.IdComanda, item.IdUsuario, item.FechaHora, item.Estado, item.Version,
-                item.Detalles.OrderBy(detail => detail.IdDetalle).Select(detail => new CuentaDetalleDto(
-                    detail.IdDetalle, detail.IdProducto, detail.NombreProducto, detail.Cantidad,
-                    detail.PrecioUnitario, detail.Subtotal, detail.Notas)).ToArray())).ToArray();
+                item.Detalles.Where(detail => !detail.Cancelado).OrderBy(detail => detail.IdDetalle)
+                    .Select(detail => new CuentaDetalleDto(
+                        detail.IdDetalle, detail.IdProducto, detail.NombreProducto, detail.Cantidad,
+                        detail.PrecioUnitario, detail.Subtotal, detail.Notas)).ToArray())).ToArray();
         var legacy = commands.Length == 0;
         return new CuentaActivaDto(new CuentaDto(
             pedido.IdPedido, pedido.IdMesa, pedido.IdGrupo, pedido.IdUsuario, pedido.FechaHora,

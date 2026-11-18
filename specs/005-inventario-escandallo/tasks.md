@@ -1,6 +1,6 @@
 # Tareas 005 — Inventario y escandallo
 
-**Estado: C1–C4 completados para el perfil universitario local aislado.** El usuario confirmó que sus revisiones están bien; no detalló individualmente los escenarios examinados. No autoriza migraciones a bases persistentes.
+**Estado: C1–C4 completados para el perfil universitario local aislado.** El usuario confirmó que sus revisiones están bien; no detalló individualmente los escenarios examinados. La nueva carga de datos de defensa está especificada como trabajo pendiente; no autoriza migraciones ni escrituras a bases persistentes.
 
 ## D0 — Especificación y decisión
 
@@ -46,6 +46,15 @@ Formato, build y 232 pruebas Desktop pasaron. Una ejecución completa de API ter
 - [x] Ejecutar formato → build → tests API → tests Desktop → auditoría de paquetes; AcceptanceHost aparte si se utiliza. Pasaron 141 API, 262 Desktop y auditoría sin vulnerabilidades reportadas; formato/build del anfitrión y `--inventario-smoke`/`--caja-smoke` también pasaron con PostgreSQL temporal.
 - [x] Registrar evidencia real y limitaciones en `docs/validacion-005.md`; solicitar revisión práctica y aceptación del usuario. El usuario confirmó que sus revisiones están bien sin detallar cada escenario.
 - [x] Registrar explícitamente alcance universitario y pendientes posteriores, sin afirmar validación de producción ni LAN.
+
+## Preparación de catálogo local de defensa (adenda pendiente)
+
+- [ ] Normalizar y validar los 90 productos, precios, ingredientes, unidades y recetas suministrados sin alterar cantidades.
+- [ ] Aplicar la corrección indicada por el usuario: mantequilla en gramos en todas las recetas, con el mismo valor numérico indicado y stock inicial de 4000 g; no declarar una conversión física.
+- [ ] Normalizar `Leche de crema` a `Crema de leche` conservando ml y stock informado; representar cada paquete de galletas como una `unidad` indivisible con 60 unidades; renombrar el refresco `7Up / Sprite` a Sprite, que es el inventario suministrado.
+- [ ] Diseñar importación explícita, transaccional, prevalidada e idempotente solo para una base de defensa nueva y aislada; movimientos iniciales como `EntradaCompra` auditada.
+- [ ] Probar recetas activas, suficiencia de stock, no doble consumo en Caja y aborto completo ante destino no vacío, dato inválido o referencia faltante.
+- [ ] Confirmar la base local de defensa por nombre antes de ejecutar migraciones o carga persistente.
 
 ## Posterior, fuera de aceptación universitaria
 

@@ -1,5 +1,11 @@
 # Bitácora de errores y lecciones — El Carbonazo
 
+### Código vigente frente al esquema 005 sin migración 006
+
+- **Hecho confirmado por revisión:** `EnviosService` añade filas a `consumo_detalle`, tabla creada por `AddAuditoriaCancelacionesSeguridad`; otros servicios y entidades utilizan campos añadidos por esa migración. La migración posterior de reservaciones también sigue a 006 en el historial EF.
+- **Contexto:** inicialmente se aplicaron a la base local `elcarbonazo` solo las migraciones hasta 005. Tras informar de la dependencia, el usuario autorizó explícitamente la migración de esquema 006 y reservaciones; EF confirmó ambas aplicadas. El SQL generado de las primeras tres migraciones no contenía `DROP TABLE`, `DROP COLUMN`, `TRUNCATE` ni eliminación de pedidos; no se verificó aún un recorrido de negocio completo contra esa base.
+- **Control:** el catálogo se cargó después de pruebas en PostgreSQL temporal; el smoke con ese catálogo verificó pedidos, Cocina, Caja y consumo único en entorno temporal. No afirmar que aplicar el esquema completa o acepta anulaciones. No fabricar manualmente tablas ni editar migraciones históricas. El recorrido visual con la base persistente aún no se ha comprobado.
+
 ### Reservaciones: historial cancelado en la agenda
 
 - **Hecho observado por el usuario:** tras cancelar, la agenda seguía mostrando la reserva con el botón «Cancelar», aunque el registro había cambiado de estado y la mesa estaba disponible.

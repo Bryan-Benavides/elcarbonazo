@@ -10,7 +10,7 @@ Digitalizar la toma de consumos para una mesa individual o una cuenta compartida
 
 ## 2. Alcance acordado
 
-- Consultar un catálogo de demostración claramente identificado, organizado en Comida, Bebida y Licor, con disponibilidad y precio en NIO. Los datos de demostración se preparan explícitamente en un entorno aislado; no se insertan ni actualizan silenciosamente en producción.
+- Consultar un catálogo local de defensa organizado en Comida, Bebida y Licor, con disponibilidad y precio en NIO. El catálogo puede usar el menú y los nombres comerciales suministrados por el usuario, sin sufijos ficticios, siempre que se cargue explícitamente en una base local de defensa aislada. Esto no convierte la aplicación en un sistema productivo ni autoriza operaciones con dinero real. No insertar ni actualizar silenciosamente catálogos existentes.
 - Preparar un borrador local con productos disponibles, cantidades y notas de hasta 150 caracteres; retirar o modificar líneas antes de enviarlas. No existe borrador compartido ni persistencia automática tras cerrar la vista o sesión, salvo decisión posterior.
 - Enviar a cocina una o varias **comandas** para una sola cuenta activa por mesa o grupo. Cada envío posterior es una comanda nueva, no una modificación silenciosa de una enviada. Una comanda contiene líneas confirmadas y su propio estado de preparación.
 - Mostrar en cocina la cola de comandas pendientes, destino, hora, productos, cantidades y notas; permitir transiciones autorizadas a preparación y listo. Mostrar en salón el estado de sus comandas y un aviso persistente visible de las listas mientras la cuenta esté abierta; no prometer notificación push, sonido o entrega instantánea.
@@ -46,7 +46,7 @@ Digitalizar la toma de consumos para una mesa individual o una cuenta compartida
 2. FIFO significa ordenar por fecha de recepción del servidor UTC ascendente y por identificador ascendente en empate. Ordenar por esta fecha no implica prometer orden absoluto de commit bajo transacciones concurrentes.
 3. Una transición exige versión vigente, autorización y estado anterior válido. Dos cocinas concurrentes no deben sobrescribir cambios; un conflicto actualiza la vista y exige una nueva decisión humana. Una lectura de cola no muta ni audita cada consulta.
 4. Tras marcar lista, desaparece de la cola activa y sigue visible como lista en la cuenta de salón. Al agregarse una comanda nueva a una cuenta con comandas listas, solo la nueva regresa a la cola; las ya listas no se reinician.
-5. Mientras el catálogo sea de demostración y caja no esté implementada, presentar claramente esa condición en el recorrido de demostración. No indicar pago ni stock validado.
+5. El catálogo puede ser representativo del menú previsto para la defensa y no necesita mostrar nombres artificialmente ficticios. La aplicación debe seguir identificándose como demostración universitaria/local; no indicar verificación bancaria, pago externo validado ni validez fiscal del comprobante. La disponibilidad del producto no prueba stock.
 
 ### RF-04. Cuenta pendiente y compatibilidad con 001
 1. El estado existente `pedido.estado` conserva el conjunto `Abierto`, `En Preparación`, `Listo`, `Pagado`, `Cancelado`; los tres primeros siguen siendo activos para unicidad y bloqueo de liberar mesa/cerrar grupo. 003 no ofrece transición a `Pagado` ni `Cancelado`.

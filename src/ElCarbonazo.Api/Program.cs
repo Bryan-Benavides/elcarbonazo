@@ -186,6 +186,7 @@ builder.Services.AddHostedService<PasswordHasherWarmupService>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 builder.Services.AddScoped<IAdminBootstrapService, AdminBootstrapService>();
 builder.Services.AddScoped<DemoCatalogSeeder>();
+builder.Services.AddScoped<CatalogoDefensaSeeder>();
 builder.Services.AddScoped<IAuditRecorder, AuditRecorder>();
 builder.Services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -318,7 +319,7 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 
-var commandModes = new[] { "--bootstrap-admin", "--seed-demo-catalog", "--provisionar-hmac-autorizacion", "--recuperar-hmac-autorizacion" };
+var commandModes = new[] { "--bootstrap-admin", "--seed-demo-catalog", "--seed-catalogo-defensa", "--provisionar-hmac-autorizacion", "--recuperar-hmac-autorizacion" };
 if (commandModes.Count(mode => args.Contains(mode, StringComparer.Ordinal)) > 1)
 {
     Console.Error.WriteLine("Seleccione únicamente una acción administrativa.");
@@ -339,6 +340,34 @@ if (args.Contains("--seed-demo-catalog", StringComparer.Ordinal))
     return await DemoCatalogCommand.RunAsync(
         scope.ServiceProvider.GetRequiredService<DemoCatalogSeeder>(),
         CancellationToken.None);
+}
+
+if (args.Contains("--seed-catalogo-defensa", StringComparer.Ordinal))
+{
+    if (!app.Environment.IsDevelopment() ||
+        builder.Configuration["CatalogoDefensa:ConfirmarBase"] != "elcarbonazo" ||
+        string.IsNullOrWhiteSpace(builder.Configuration["CatalogoDefensa:Directorio"]))
+    {
+        Console.Error.WriteLine("La carga requiere Development, directorio explícito y confirmación exacta de la base.");
+        return 1;
+    }
+    await using var scope = app.Services.CreateAsyncScope();
+    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    try
+    {
+        var actors = await context.Usuarios.AsNoTracking().Where(x => x.Activo && x.Rol == "Jefa")
+            .Select(x => x.IdUsuario).Take(2).ToListAsync();
+        if (actors.Count != 1) throw new InvalidOperationException("Se requiere exactamente una Jefa activa.");
+        await scope.ServiceProvider.GetRequiredService<CatalogoDefensaSeeder>().CargarAsync(
+            builder.Configuration["CatalogoDefensa:Directorio"]!, actors[0], "elcarbonazo", CancellationToken.None);
+        Console.WriteLine("Catálogo validado y cargado, o ya coincidía exactamente.");
+        return 0;
+    }
+    catch (Exception ex) when (ex is InvalidOperationException or IOException or Microsoft.EntityFrameworkCore.DbUpdateException or Npgsql.PostgresException)
+    {
+        Console.Error.WriteLine("No se confirmó la carga; no repetir automáticamente. Revise el destino y el estado antes de continuar.");
+        return 1;
+    }
 }
 
 if (args.Contains("--provisionar-hmac-autorizacion", StringComparer.Ordinal) ||

@@ -1,6 +1,6 @@
 # Tareas 006 — Reservaciones sencillas
 
-**Estado: especificación y plan aprobados por el usuario; implementación iniciada. No ejecutar migraciones en bases persistentes.**
+**Estado: especificación y plan aprobados por el usuario; implementación iniciada.** El usuario autorizó explícitamente migrar la base local `elcarbonazo`; EF confirma aplicada la migración `AddReservaciones`. Esto no confirma por sí solo una prueba funcional contra esa base.
 
 ## API y persistencia
 

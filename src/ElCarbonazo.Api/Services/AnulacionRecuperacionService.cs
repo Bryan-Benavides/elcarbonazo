@@ -6,7 +6,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ElCarbonazo.Api.Services;
 
-public sealed record AnulacionRecuperacionResult(int Status, string Code, string? Estado = null, string? ResultadoJson = null);
+public sealed record AnulacionRecuperacionResult(
+    int Status, string Code, string? Estado = null, string? ResultadoJson = null, bool Resuelta = false);
 
 // Not exposed over HTTP until the authorization and execution paths use the same barrier.
 public sealed class AnulacionRecuperacionService(AppDbContext context, IAuditRecorder audit, TimeProvider time)
@@ -59,6 +60,7 @@ public sealed class AnulacionRecuperacionService(AppDbContext context, IAuditRec
             audit.Record("IntervencionOperacionAnulacion", "Exitoso", actorId, sessionId, "OperacionAnulacion", id.ToString("D"));
         await context.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
-        return new(operation!.StatusResultado ?? 200, operation.CodigoResultado ?? "OPERACION_AUTORIZADA", operation.Estado, operation.ResultadoJson);
+        return new(operation!.StatusResultado ?? 200, operation.CodigoResultado ?? "OPERACION_AUTORIZADA",
+            operation.Estado, operation.ResultadoJson, Resuelta: true);
     }
 }

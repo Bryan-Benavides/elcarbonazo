@@ -1,10 +1,10 @@
 # Diccionario de Dominio y Datos (Definitivo) — El Carbonazo
 
 ## Contexto Operativo y Fiscal
-- **Negocio:** Bar Restaurante "El Carbonazo" (Managua, Nicaragua).
+- **Negocio:** Bar Restaurante "El Carbonazo" (Managua, Nicaragua). El catálogo de 90 productos y los precios preparados para la defensa son datos suministrados por el usuario y no una verificación independiente de la oferta o precios vigentes del restaurante.
 - **Infraestructura:** 15 mesas físicas, 8 colaboradores, ~90 productos en menú.
 - **Referencias generales del modelo:** IVA general 15% (RD-01), propina voluntaria 10%, sistema bimonetario NIO/USD (RD-02). **Aplicación al negocio según información del usuario:** opera bajo régimen de cuota fija y no añadirá IVA 15 % en el alcance 003. Los pedidos de 003 usarán `impuestos = 0` y `total = subtotal`; no son facturas. Esta información comercial no ha sido verificada legalmente. Si cambia el régimen, confirmar con responsable/asesor competente y revisar la especificación antes de cambiar el sistema.
-- **Red local:** La API se publica mediante HTTPS en un hostname LAN fijo (referencia operativa: `elcarbonazo-api.local`); los clientes confían el certificado desde el almacén del sistema operativo.
+- **Red local:** La arquitectura contempla API mediante HTTPS en hostname LAN fijo (referencia: `elcarbonazo-api.local`); la entrega para defensa local no acredita instalación ni validación física de LAN.
 - **Configuración:** Direcciones, certificados, contraseñas y claves no se compilan ni se guardan como secretos en archivos versionados.
 - **Desktop Windows:** `ApiBaseUrl` e `idInstalacion` residen en `%ProgramData%\ElCarbonazo\desktop.json`; el instalador los crea y usuarios normales solo tienen lectura.
 - **Fallo de configuración:** Si ese archivo falta o es inválido en producción, Desktop bloquea el login y muestra un error no editable; no usa localhost ni permite introducir otra URL.

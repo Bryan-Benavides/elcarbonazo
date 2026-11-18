@@ -49,7 +49,8 @@ public partial class PedidosSalonViewModel : ViewModelBase, IDisposable
     public bool BorradorDesactualizado => Conectado && Borrador.Any(line => !_catalogo.Any(product =>
         product.IdProducto == line.Producto.IdProducto && product.Version == line.Producto.Version &&
         product.Precio == line.Producto.Precio && product.Nombre == line.Producto.Nombre));
-    public bool PuedeEditar => Conectado && !Enviando && !ResultadoIncierto && !ConfirmandoEnvio;
+    public bool PuedeEditar => Conectado && !Enviando && !ResultadoIncierto && !ConfirmandoEnvio &&
+        !AnulacionIncierta;
     public bool PuedeVolver => !Enviando && !ResultadoIncierto;
     public bool PuedeAgregar => Conectado && !CuentaLegada && PuedeEditar && Borrador.Count < 50;
     public bool PuedeEnviar => Conectado && !CuentaLegada && PuedeEditar && Borrador.Count is > 0 and <= 50 &&
@@ -60,7 +61,8 @@ public partial class PedidosSalonViewModel : ViewModelBase, IDisposable
 
     public PedidosSalonViewModel(int? mesaId, int? grupoId, string destino,
         IProductosPedidoApiService productos, ICuentaPedidoApiService cuentas, Action volver,
-        IEnvioPedidoApiService? envios = null, uint? versionMesa = null)
+        IEnvioPedidoApiService? envios = null, uint? versionMesa = null,
+        AnulacionCoordinator? anulaciones = null, Func<string?>? rol = null)
     {
         _mesaId = mesaId;
         _grupoId = grupoId;
@@ -70,6 +72,9 @@ public partial class PedidosSalonViewModel : ViewModelBase, IDisposable
         _envios = envios ?? new EnvioNoDisponible();
         _versionMesa = versionMesa;
         _volver = volver;
+        _anulaciones = anulaciones;
+        _rol = rol ?? (() => null);
+        InicializarAnulacion();
         _ = ConsultarPeriodicamenteAsync(_lifetime.Token);
     }
 
@@ -88,6 +93,7 @@ public partial class PedidosSalonViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(TotalCuenta));
         OnPropertyChanged(nameof(HayListas));
         OnPropertyChanged(nameof(PuedeAgregar));
+        ReconstruirAnulables();
         ActualizarPermisos();
     }
     partial void OnConectadoChanged(bool value) => ActualizarPermisos();
@@ -238,6 +244,10 @@ public partial class PedidosSalonViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(PuedeRepetir));
         OnPropertyChanged(nameof(BorradorDesactualizado));
         OnPropertyChanged(nameof(CatalogoVacio));
+        OnPropertyChanged(nameof(PuedeAnular));
+        OnPropertyChanged(nameof(PuedeRecuperarAnulacion));
+        OnPropertyChanged(nameof(PuedeEstablecerBarrera));
+        OnPropertyChanged(nameof(PuedeConfirmarAnulacion));
     }
 
     private void AplicarCategoria()
@@ -279,6 +289,7 @@ public partial class PedidosSalonViewModel : ViewModelBase, IDisposable
                         AplicarCategoria();
                         _cuentaConsultada = true;
                         Cuenta = account.Pedido;
+                        ConciliarAnulacionTrasLectura();
                         OnPropertyChanged(nameof(EstadoCuenta));
                         OnPropertyChanged(nameof(TotalCuenta));
                         Conectado = true;

@@ -1,6 +1,6 @@
 # Tareas 007 — cierre y entrega de la demo local
 
-**Estado: alcance 006/007 aprobado; entrega local propuesta para fase posterior. Dirección del usuario: implementar reservas individuales y reporte sencillo, probar todo, luego entregar ejecutables y dump demo; PostgreSQL local nativo, no nube ni Docker para la defensa.**
+**Estado: alcance de entrega actualizado por solicitud del usuario: preparar catálogo de defensa con los 90 productos, recetas e ingredientes proporcionados en una base PostgreSQL local aislada; validar flujos y después entregar ejecutables y dump restaurable. PostgreSQL local nativo, sin nube ni Docker.**
 
 ## Cierre de alcance
 
@@ -9,9 +9,18 @@
 
 ## Fase 1 — Pruebas aisladas
 
-- [ ] Añadir plantilla de entorno sin secretos personales y script PowerShell que valide explícitamente el nombre de base demo PostgreSQL local.
-- [ ] Reutilizar migraciones y seed actuales; preparar recetas/stock demo solo si hace falta para el flujo aprobado. Comprobar segunda ejecución sin duplicados.
+- [ ] Añadir plantilla de entorno sin secretos personales y script PowerShell que valide explícitamente el nombre de la base PostgreSQL local de defensa.
+- [x] Definir y probar carga explícita de los 90 productos, ingredientes, recetas y existencias suministrados; abortar ante datos existentes incompatibles. Stock inicial por movimientos auditados; repetición idéntica sin cambios.
+- [x] Transcribir y validar las fuentes versionadas iniciales de productos (90 filas) e ingredientes (116 filas). Mantequilla se corrigió a gramos por indicación posterior del usuario.
+- [x] Transcribir 90 recetas por porción (452 líneas) y comprobar referencias, identificadores y stock inicial suficiente para una porción de cada receta individualmente. Esto no verifica la transcripción línea por línea ni garantiza stock para las 90 porciones juntas.
+- [x] Crear `scripts/validar-catalogo-defensa.py` y ejecutarlo sin conexión: valida estructura, precios, nombres, unidades, cantidades y referencias. No comprueba aún fidelidad individual de la transcripción ni prueba de importación.
+- [x] Preparar y probar `CatalogoDefensaSeeder`: PostgreSQL temporal verificó carga completa, repetición idéntica sin duplicación, rechazo de producto modificado, conservación de pedido abierto y rollback al fallar auditoría. El comando explícito exige Development, nombre de base confirmado, localhost y una Jefa activa.
+- [x] Con autorización del usuario cargar `elcarbonazo`; una consulta posterior contó 90 productos, 116 ingredientes, 90 recetas activas, 452 líneas, 116 entradas y un pedido abierto.
+- [x] `AcceptanceHost --catalogo-defensa-smoke` cargó el catálogo en base temporal y probó pedidos individual y grupo, Cocina, Caja y ausencia de doble consumo; sesión adaptada, sin render ni LAN. Pasaron 165 pruebas API y 268 Desktop; el primer intento completo API agotó cinco minutos y la repetición pasó.
+- [ ] Habilitar y probar `AcceptanceHost --catalogo-defensa` para revisión manual del catálogo nuevo en una base temporal sin cambiar la principal.
+- [ ] Validar visualmente el recorrido con `elcarbonazo`: las migraciones y el catálogo ya están aplicados; el smoke comprobó el recorrido en base temporal, no en la ventana persistente. Anulaciones sigue fuera del alcance funcional.
 - [ ] Probar reservas/reporte y los módulos existentes exclusivamente contra una base temporal/demo nueva; nunca contra la base original.
+- [ ] Resolver unidades/nombres incompatibles y completar cualquier dato de stock faltante antes de activar todas las recetas; no inventar conversiones ni existencias.
 
 ## Prueba de aceptación
 
@@ -21,8 +30,8 @@
 ## Fase 2 — Publicación para la defensa (solo tras Fase 1 aprobada)
 
 - [ ] Publicar API y Desktop para Windows, sin credenciales personales ni configuración de producción.
-- [ ] Generar dump PostgreSQL de una base demo ficticia recién creada; no exportar la base original.
-- [ ] Probar restore del dump a una base demo nueva, checksum, conexión API/Desktop y recorrido de humo.
+- [ ] Generar dump PostgreSQL de la base local de defensa aislada recién creada; no exportar ninguna base preexistente ni temporal de pruebas.
+- [ ] Probar restore del dump a otra base local de defensa recién creada, checksum, conexión API/Desktop y recorrido de humo.
 - [ ] Entregar el paquete (ejecutables + dump + guía) en un Release/Drive aprobado y comprobar descarga en otra laptop.
 
 ## Guía y cierre

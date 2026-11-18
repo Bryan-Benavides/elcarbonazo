@@ -17,7 +17,18 @@ sealed class Program
             Environment.ExitCode = ProvisionCaja();
             return;
         }
+        if (args is ["--aprovisionar-diario-anulaciones"])
+        {
+            Environment.ExitCode = ProvisionAnulaciones();
+            return;
+        }
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    }
+
+    private static int ProvisionAnulaciones()
+    {
+        var directory = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ElCarbonazo");
+        return AnulacionFirstInstall.Create(directory) ? 0 : 1;
     }
 
     private static int ProvisionCaja()

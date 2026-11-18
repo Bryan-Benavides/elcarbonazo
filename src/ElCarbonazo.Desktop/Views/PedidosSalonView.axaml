@@ -149,21 +149,25 @@
                         <TextBlock Text="Hay comandas listas para retirar de cocina" IsVisible="{Binding HayListas}" TextWrapping="Wrap" Foreground="#27E7A0" />
                     </StackPanel>
                     <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
-                        <ItemsControl ItemsSource="{Binding Cuenta.Comandas}">
+                        <ItemsControl ItemsSource="{Binding ComandasAnulables}">
                             <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:ComandaPedidoDto">
+                                <DataTemplate x:DataType="vm:ComandaAnulableViewModel">
                                     <Border Background="{StaticResource FondoPrincipalBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,8">
                                         <StackPanel Spacing="6">
-                                            <TextBlock Text="{Binding IdComanda, StringFormat='Comanda #{0}'}" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
-                                            <TextBlock Text="{Binding Estado}" Foreground="#FFB488" />
+                                            <TextBlock Text="{Binding Titulo}" FontWeight="Bold" TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                            <Button Content="Anular comanda completa" Command="{Binding SolicitarCommand}"
+                                                    IsEnabled="{Binding #Root.((vm:PedidosSalonViewModel)DataContext).PuedeAnular}"
+                                                    AutomationProperties.Name="Anular la comanda completa" />
                                             <ItemsControl ItemsSource="{Binding Lineas}">
                                                 <ItemsControl.ItemTemplate>
-                                                    <DataTemplate x:DataType="models:DetallePedidoDto">
-                                                        <StackPanel Margin="0,4,0,4">
-                                                            <TextBlock Text="{Binding NombreProducto}" TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
-                                                            <TextBlock Text="{Binding Cantidad, StringFormat='Cantidad: {0}'}" Foreground="{StaticResource TextoSecundarioBrush}" />
-                                                            <TextBlock Text="{Binding Notas}" TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
-                                                        </StackPanel>
+                                                    <DataTemplate x:DataType="vm:LineaAnulableViewModel">
+                                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,3,0,3">
+                                                            <TextBlock Text="{Binding Texto}" TextWrapping="Wrap" VerticalAlignment="Center"
+                                                                       Foreground="{StaticResource TextoPrincipalBrush}" />
+                                                            <Button Grid.Column="1" Content="Anular línea" Command="{Binding SolicitarCommand}"
+                                                                    IsEnabled="{Binding #Root.((vm:PedidosSalonViewModel)DataContext).PuedeAnular}"
+                                                                    AutomationProperties.Name="Anular esta línea" />
+                                                        </Grid>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
@@ -173,13 +177,64 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
-                    <StackPanel Grid.Row="3" Spacing="4">
+                    <StackPanel Grid.Row="3" Spacing="6">
                         <TextBlock Text="Total de cuenta" Foreground="{StaticResource TextoSecundarioBrush}" />
                         <TextBlock Text="{Binding TotalCuenta}" FontSize="19" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
                         <TextBlock Text="No es factura ni pago." Foreground="{StaticResource TextoSecundarioBrush}" FontSize="12" />
+                        <TextBlock Text="{Binding MensajeAnulacion}" IsVisible="{Binding HayMensajeAnulacion}"
+                                   TextWrapping="Wrap" Foreground="#FFBF36" FontSize="12" />
+                        <WrapPanel IsVisible="{Binding PuedeRecuperarAnulacion}">
+                            <Button Content="Consultar operación" Command="{Binding ConsultarOperacionAnulacionCommand}"
+                                    IsEnabled="{Binding PuedeRecuperarAnulacion}" Margin="0,0,6,4" />
+                            <Button Content="Establecer barrera" Command="{Binding SolicitarBarreraCommand}"
+                                    IsEnabled="{Binding PuedeEstablecerBarrera}" Margin="0,0,0,4" />
+                        </WrapPanel>
+                        <Border IsVisible="{Binding ConfirmandoBarreraVisible}" Background="{StaticResource FondoPrincipalBrush}"
+                                BorderBrush="#FFBF36" BorderThickness="1" CornerRadius="6" Padding="10">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="¿Establecer barrera? Impide una ejecución tardía; no deshace un resultado ya confirmado."
+                                           TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" FontSize="12" />
+                                <WrapPanel>
+                                    <Button Content="Cancelar" Command="{Binding CancelarBarreraCommand}" Margin="0,0,6,0" />
+                                    <Button Classes="primario" Content="Confirmar barrera" Command="{Binding ConfirmarBarreraCommand}" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </Grid>
             </Border>
         </Grid>
+        <Border Grid.RowSpan="3" Background="#CC000000" IsVisible="{Binding ConfirmandoAnulacion}">
+            <Border Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}"
+                    BorderThickness="1" CornerRadius="10" Padding="18" MaxWidth="560"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                <ScrollViewer MaxHeight="620" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Autorizar anulación" FontSize="20" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <TextBlock Text="{Binding ResumenAnulacion}" TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <TextBlock Text="Se devolverá exactamente el consumo registrado y se generará una alerta para Cocina. No se puede deshacer."
+                                   TextWrapping="Wrap" Foreground="#FFB488" FontSize="12" />
+                        <TextBlock Text="Motivo (5–250 caracteres)" Foreground="{StaticResource TextoSecundarioBrush}" />
+                        <TextBox Text="{Binding MotivoAnulacion, Mode=TwoWay}" AcceptsReturn="True" TextWrapping="Wrap"
+                                 MaxLength="250" MinHeight="64" PlaceholderText="Explique el motivo de la anulación"
+                                 AutomationProperties.Name="Motivo de la anulación" />
+                        <TextBlock Text="Correo de la Jefa autorizadora" Foreground="{StaticResource TextoSecundarioBrush}" />
+                        <TextBox Text="{Binding EmailJefa, Mode=TwoWay}" MaxLength="254"
+                                 PlaceholderText="jefa@elcarbonazo.local" AutomationProperties.Name="Correo de la Jefa" />
+                        <TextBlock Text="Contraseña de la Jefa (se revalida; no crea otra sesión)" Foreground="{StaticResource TextoSecundarioBrush}" />
+                        <TextBox Text="{Binding ContrasenaJefa, Mode=TwoWay}" PasswordChar="●" MaxLength="256"
+                                 AutomationProperties.Name="Contraseña de la Jefa" />
+                        <TextBlock Text="{Binding MensajeAnulacion}" IsVisible="{Binding HayMensajeAnulacion}"
+                                   TextWrapping="Wrap" Foreground="#FFBF36" />
+                        <WrapPanel HorizontalAlignment="Right">
+                            <Button Content="Cancelar" Command="{Binding CancelarAnulacionCommand}"
+                                    IsEnabled="{Binding PuedeCancelarAnulacion}" Margin="0,0,8,0" />
+                            <Button Classes="primario" Content="Confirmar anulación"
+                                    Command="{Binding ConfirmarAnulacionCommand}" IsEnabled="{Binding PuedeConfirmarAnulacion}" />
+                        </WrapPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Border>
     </Grid>
 </UserControl>

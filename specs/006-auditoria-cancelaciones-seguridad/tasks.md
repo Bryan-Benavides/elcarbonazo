@@ -1,6 +1,6 @@
 # Tareas propuestas 006 — Auditoría, cancelaciones y seguridad
 
-**Estado: PAUSADO por decisión del usuario; fuera del alcance de la defensa actual.** Se conserva el trabajo local, sus pruebas y la evidencia histórica. No continuar ni marcar este 006 como terminado. El módulo 006 de defensa ahora es Reservaciones sencillas (`specs/006-reservaciones-mesas/`). No aplicar migraciones de cancelación a bases persistentes.
+**Estado: PAUSADO por decisión del usuario; fuera del alcance funcional de la defensa actual.** Se conserva el trabajo local, sus pruebas y la evidencia histórica. No continuar ni marcar este 006 como terminado. El módulo 006 de defensa ahora es Reservaciones sencillas (`specs/006-reservaciones-mesas/`). Excepción explícita: el usuario autorizó aplicar el esquema de cancelaciones a la base local `elcarbonazo` para compatibilidad del código vigente y reservaciones; la migración fue aplicada. Esto no autoriza usar ni presentar anulaciones como funcionalidad aceptada.
 
 **Avance parcial C2:** el envío guarda snapshots por línea/ingrediente en su transacción; 9 pruebas focalizadas verificaron, entre otros casos, líneas repetidas, replay, rollback y carrera con reemplazo de receta. No se ha implementado la anulación ni sus barreras; ninguna tarea integral de C2 se considera cerrada. Ver `docs/validacion-006.md`.
 

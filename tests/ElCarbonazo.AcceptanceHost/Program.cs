@@ -6,6 +6,8 @@ using System.Net.Sockets;
 using System.Text.Json;
 using ElCarbonazo.Api.Domain;
 using ElCarbonazo.Api.Entities;
+using ElCarbonazo.Api.Security;
+using Microsoft.AspNetCore.Http;
 
 // Herramienta manual local: nunca utiliza la base de desarrollo como destino.
 var root = FindRoot();
@@ -25,6 +27,20 @@ Console.CancelKeyPress += (_, e) => { e.Cancel = true; stopping.Cancel(); };
 try
 {
     await database.InitializeAsync();
+    var catalogoDefensa = args.Contains("--catalogo-defensa", StringComparer.Ordinal) ||
+        args.Contains("--catalogo-defensa-smoke", StringComparer.Ordinal);
+    if (catalogoDefensa && (args.Contains("--pedidos", StringComparer.Ordinal) ||
+        args.Contains("--pedidos-smoke", StringComparer.Ordinal) ||
+        args.Contains("--inventario-smoke", StringComparer.Ordinal)))
+        throw new InvalidOperationException("No combine el catálogo de defensa con los modos de catálogo ficticio.");
+    if (catalogoDefensa)
+    {
+        await using var setup = database.CreateContext();
+        var seed = new CatalogoDefensaSeeder(setup,
+            new AuditRecorder(setup, new HttpContextAccessor(), TimeProvider.System), TimeProvider.System);
+        var databaseName = new Npgsql.NpgsqlConnectionStringBuilder(database.ConnectionString).Database!;
+        await seed.CargarAsync(Path.Combine(root, "specs", "entrega-defensa-local"), 1, databaseName, stopping.Token);
+    }
     var pedidosMode = args.Contains("--pedidos", StringComparer.Ordinal) || args.Contains("--pedidos-smoke", StringComparer.Ordinal) ||
         args.Contains("--inventario-smoke", StringComparer.Ordinal);
     if (pedidosMode) await database.SeedDemoCatalogAsync();
@@ -44,6 +60,7 @@ try
     Console.WriteLine("Cocina: cocina / kitchen password");
     Console.WriteLine("Mesa 1 ocupada con cuenta pendiente; mesas 2 y 3 agrupadas con cuenta pendiente.");
     if (pedidosMode) Console.WriteLine("Catálogo ficticio 003 cargado; para pedidos nuevos use la mesa 04 libre. Las cuentas 1 y 2/3 son heredadas de solo lectura.");
+    if (catalogoDefensa) Console.WriteLine("Catálogo de defensa cargado en base temporal; para pedidos nuevos use la mesa 04 libre. Las cuentas 1 y 2/3 son heredadas de solo lectura.");
     Console.WriteLine("En otra terminal PowerShell, para cada Desktop:");
     Console.WriteLine("$env:ELCARBONAZO_ENVIRONMENT='Development'");
     Console.WriteLine($"$env:ELCARBONAZO_API_BASE_URL='{baseUrl}'");
@@ -53,7 +70,8 @@ try
         await PedidosSmoke.RunAsync(client, stopping.Token);
     else if (args.Contains("--inventario-smoke", StringComparer.Ordinal))
         await InventarioSmoke.RunAsync(client, stopping.Token);
-    else if (args.Contains("--caja-smoke", StringComparer.Ordinal))
+    else if (args.Contains("--caja-smoke", StringComparer.Ordinal) ||
+             args.Contains("--catalogo-defensa-smoke", StringComparer.Ordinal))
         await CajaSmoke.RunAsync(client, database, stopping.Token);
     else if (args.Contains("--cadencia", StringComparer.Ordinal))
         await CadenciaLocal.RunAsync(client, stopping.Token);

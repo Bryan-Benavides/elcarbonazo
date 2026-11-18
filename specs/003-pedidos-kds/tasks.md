@@ -73,4 +73,5 @@
 - [x] Ejecutar formato → build → pruebas API → pruebas Desktop → auditoría de paquetes. AcceptanceHost compilado, formateado y probado aparte de la solución.
 - [x] Validación visual/funcional de D4/D5 informada por usuario, incluido flujo integrado Lista en salón y captura del acceso Cocina; registrar evidencia y límites.
 - [x] Documentar demostración, datos ficticios, decisiones, limitación de pagos/inventario y ausencia de recuperación definitiva; mantener fuera de producción.
+- [ ] Preparar catálogo local de defensa de 90 productos sin sufijos ficticios, con herramienta explícita y segura, sin alterar el seeder de pruebas ni datos existentes. Esta adenda no se considera implementada por el trabajo histórico marcado arriba.
 - [x] Usuario acepta oficialmente el módulo 003 para el entorno aislado/local de demostración. La base HTTPS alternativa sin esquema 003 queda anotada como configuración no migrada, no como aceptación de Pedidos contra esa base.

@@ -34,6 +34,7 @@ public partial class App : Application
             var configurationService = new DesktopConfigurationService();
             var navigation = new NavigationService();
             CajaRecoveryViewModel? recoveryPanel = null;
+            Func<AnulacionCoordinator?>? anulacionFactory = null;
             ViewModelBase initialViewModel;
 
             try
@@ -61,9 +62,26 @@ public partial class App : Application
                         recoveryPanel.AttachShiftReader(cajaTransport);
                         recoveryPanel.AttachAccountsReader(new CajaCuentasReader(_sessionManager));
                         recoveryPanel.AttachReceiptsReader(cajaTransport);
+
+                        var anulacionesDirectory = System.IO.Path.Combine(directory, "anulaciones");
+                        var anulacionesPath = System.IO.Path.Combine(anulacionesDirectory, "anulaciones-journal.json");
+                        if (System.IO.File.Exists(anulacionesPath))
+                        {
+                            // La política se crea dentro del bloque verificado como Windows; el cierre solo la reutiliza.
+                            var anulacionesPolicy = new WindowsCajaRecoverySecurityPolicy(anulacionesDirectory, sid);
+                            anulacionFactory = () =>
+                            {
+                                if (!System.IO.File.Exists(anulacionesPath)) return null;
+                                var journal = new AnulacionJournal(anulacionesPath, configuration.IdInstalacion, anulacionesPolicy);
+                                return new AnulacionCoordinator(journal, new AnulacionApiService(_sessionManager),
+                                    () => _sessionManager.CurrentSession?.IdUsuario,
+                                    () => _sessionManager.AnulacionSessionGeneration,
+                                    () => _sessionManager.CurrentSession?.Rol == "Jefa");
+                            };
+                        }
                     }
                 }
-                initialViewModel = new LoginViewModel(_sessionManager, navigation, recoveryPanel);
+                initialViewModel = new LoginViewModel(_sessionManager, navigation, recoveryPanel, anulacionFactory);
             }
             catch (DesktopConfigurationException exception)
             {

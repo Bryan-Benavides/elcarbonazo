@@ -19,6 +19,7 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     private readonly MesasRequestCoordinator _coordinator = new();
     private bool _disposed;
     private readonly CajaRecoveryViewModel? _recoveryPanel;
+    private readonly Func<AnulacionCoordinator?>? _anulacionFactory;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(MostrandoRecuperacionCaja))]
@@ -209,7 +210,8 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
         PedidosActual = new PedidosSalonViewModel(grupo is null ? mesa.IdMesa : null, grupo,
             grupo is null ? $"Mesa {mesa.Numero:00}" : $"Grupo {grupo}",
             new ProductosPedidoApiService(_session), new CuentaPedidoApiService(_session), CerrarPedidos,
-            new EnvioPedidoApiService(_session), grupo is null ? mesa.Version : null);
+            new EnvioPedidoApiService(_session), grupo is null ? mesa.Version : null,
+            _anulacionFactory?.Invoke(), () => Rol);
         ActualizarAcciones();
     }
 
@@ -431,12 +433,14 @@ public partial class MesasViewModel : ViewModelBase, IDisposable
     }
 
     public MesasViewModel(string nombre, string rol, ISessionManager session, IMesasApiService mesasService,
-        Func<Action, Task>? dispatch = null, IGruposMesaApiService? gruposService = null, CajaRecoveryViewModel? recoveryPanel = null)
+        Func<Action, Task>? dispatch = null, IGruposMesaApiService? gruposService = null,
+        CajaRecoveryViewModel? recoveryPanel = null, Func<AnulacionCoordinator?>? anulacionFactory = null)
     {
         Nombre = nombre;
         Rol = rol;
         _session = session;
         _recoveryPanel = recoveryPanel;
+        _anulacionFactory = anulacionFactory;
         _mesasService = mesasService;
         _gruposService = gruposService ?? new GruposMesaApiService(session);
         _dispatch = dispatch ?? DispatchToUiAsync;
