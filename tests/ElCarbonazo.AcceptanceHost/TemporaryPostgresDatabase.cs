@@ -69,6 +69,16 @@ internal sealed class TemporaryPostgresDatabase
         await SeedInventoryAsync();
     }
 
+    public async Task ProvisionHmacAsync(byte[] key)
+    {
+        if (!_created) throw new InvalidOperationException("La base temporal todavía no fue creada.");
+        await using var context = CreateContext();
+        var audit = new AuditRecorder(context, new HttpContextAccessor(), TimeProvider.System);
+        var result = await new HmacAutorizacionProvisioner(context, audit).ProvisionarInicialAsync(key, CancellationToken.None);
+        if (result != ResultadoProvisionHmac.Provisionado)
+            throw new InvalidOperationException($"No se pudo aprovisionar HMAC temporal: {result}.");
+    }
+
     public async Task SeedInventoryAsync()
     {
         if (!_created) throw new InvalidOperationException("La base temporal todavía no fue creada.");

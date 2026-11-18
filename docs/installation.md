@@ -70,3 +70,15 @@ En una **primera instalación nueva**, tras preparar `%ProgramData%\ElCarbonazo\
 ```
 
 El script invoca `--aprovisionar-diario-caja`, espera su resultado y no inicia la interfaz. El comando lee la configuración y crea `recovery` solo si no existe; verifica el diario, el UUID y la política de seguridad antes de devolver éxito. Si falla, no borre `recovery` ni vuelva a crear el diario para desbloquear caja: investigue y conserve la evidencia. Tampoco lo ejecute en una actualización o instalación existente sin confirmar el destino y resolver cualquier operación pendiente. La prueba automatizada ejercitó el servicio y ACL con archivos temporales; además, con autorización, el script se ejecutó en este equipo para la demostración. No hay instalador empaquetado validado.
+
+### Anulaciones 006: primera instalación manual de demostración
+
+La anulación de pedidos requiere el diario protegido `recovery\anulaciones\anulaciones-journal.json` y su archivo `anulaciones-journal.json.lock`, ambos bajo `%ProgramData%\ElCarbonazo`. El diario guarda únicamente versión, UUID de instalación, estado, UUID de operación y propietario; no contiene motivo, credenciales, token ni cuerpo de la petición. Si el diario falta o no se puede verificar, la vista de salón deshabilita la anulación y **no** crea un diario vacío para desbloquearla.
+
+La provisión es explícita y de una sola vez. Requiere que `recovery` ya exista (por ejemplo, provisto con el flujo de caja) y que `recovery\anulaciones` no exista. Con la misma cuenta Windows que usará Desktop:
+
+```powershell
+.\scripts\instalar-diario-anulaciones.ps1 -DesktopExe 'C:\ruta\al\ElCarbonazo.Desktop.exe'
+```
+
+El script invoca `--aprovisionar-diario-anulaciones`, espera su resultado y no inicia la interfaz. El comando crea la carpeta con ACL restringida a la cuenta actual, Administradores y Sistema, verifica la protección del diario y del lock, y lo deja en estado `SinPendientes`. Una segunda ejecución falla sin sobrescribir el diario existente, incluso si quedó una operación pendiente. Si falla, no borre `recovery\anulaciones` ni fabrique un diario manualmente: investigue y conserve la evidencia. No lo ejecute en una actualización sin confirmar el destino y conciliar cualquier operación pendiente. La prueba automatizada ejercita la creación, la negativa a sobrescribir y la política Windows con archivos temporales; no hay instalador empaquetado validado.

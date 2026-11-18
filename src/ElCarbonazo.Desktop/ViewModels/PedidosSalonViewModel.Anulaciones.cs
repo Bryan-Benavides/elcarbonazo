@@ -80,6 +80,7 @@ public partial class PedidosSalonViewModel
     [NotifyPropertyChangedFor(nameof(PuedeAnular))]
     [NotifyPropertyChangedFor(nameof(PuedeRecuperarAnulacion))]
     [NotifyPropertyChangedFor(nameof(PuedeEstablecerBarrera))]
+    [NotifyPropertyChangedFor(nameof(AdvertenciaAnulacionAjena))]
     private bool _anulacionIncierta;
 
     [ObservableProperty]
@@ -88,6 +89,12 @@ public partial class PedidosSalonViewModel
     private bool _anulacionTerminalPendienteConciliar;
 
     [ObservableProperty] private bool _confirmandoBarrera;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PuedeRecuperarAnulacion))]
+    [NotifyPropertyChangedFor(nameof(PuedeEstablecerBarrera))]
+    [NotifyPropertyChangedFor(nameof(AdvertenciaAnulacionAjena))]
+    private bool _anulacionAjena;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HayMensajeAnulacion))]
@@ -110,11 +117,12 @@ public partial class PedidosSalonViewModel
     public ObservableCollection<ComandaAnulableViewModel> ComandasAnulables { get; } = [];
 
     public bool RolPuedeAnular => _rol() is "Jefa" or "Supervisor" or "Mesero" or "Encargado de Caja";
+    public bool RolEsJefa => _rol() == "Jefa";
 
     public bool PuedeAnular => _anulaciones is not null && DiarioAnulacionDisponible && RolPuedeAnular &&
         Conectado && !CuentaLegada && !Enviando && !Anulando && !ConfirmandoAnulacion &&
         !AnulacionIncierta && !AnulacionTerminalPendienteConciliar &&
-        Cuenta is { Estado: not "Pagado" } account && account.Comandas.Count > 0;
+        Cuenta is { Estado: not ("Pagado" or "Cancelado") } account && account.Comandas.Count > 0;
 
     public bool PuedeConfirmarAnulacion => ConfirmandoAnulacion && !Anulando &&
         AnulacionCoordinator.NormalizarMotivo(MotivoAnulacion) is not null &&
@@ -124,9 +132,11 @@ public partial class PedidosSalonViewModel
     public bool PuedeCancelarAnulacion => ConfirmandoAnulacion && !Anulando;
 
     public bool PuedeRecuperarAnulacion => _anulaciones is not null && DiarioAnulacionDisponible &&
-        (AnulacionIncierta || AnulacionTerminalPendienteConciliar) && !Anulando;
+        AnulacionIncierta && !Anulando && (!AnulacionAjena || RolEsJefa);
 
     public bool PuedeEstablecerBarrera => PuedeRecuperarAnulacion && !ConfirmandoBarrera;
+
+    public bool AdvertenciaAnulacionAjena => AnulacionAjena && PuedeRecuperarAnulacion;
 
     public bool ConfirmandoBarreraVisible => ConfirmandoBarrera;
 
@@ -147,12 +157,16 @@ public partial class PedidosSalonViewModel
             return;
         }
         DiarioAnulacionDisponible = true;
+        AnulacionAjena = _anulaciones.OperacionAjena();
         if (state.Estado == "Pendiente")
         {
             _operacionPendiente = state.Operacion;
             AnulacionIncierta = true;
-            MensajeAnulacion = "Hay una anulación pendiente registrada antes de enviar. Consulte la operación; " +
-                               "no repita el envío ni cree una anulación nueva.";
+            MensajeAnulacion = AnulacionAjena
+                ? "Hay una anulación pendiente de otro usuario. Una Jefa debe revisarla y confirmar la intervención; " +
+                  "no repita el envío ni cree una anulación nueva."
+                : "Hay una anulación pendiente registrada antes de enviar. Consulte la operación; " +
+                  "no repita el envío ni cree una anulación nueva.";
         }
         else if (state.Estado == "TerminalPorConciliar")
         {
@@ -227,11 +241,23 @@ public partial class PedidosSalonViewModel
         var motive = MotivoAnulacion;
         var email = EmailJefa;
         var password = ContrasenaJefa;
-        var intention = new IntencionAnulacion(Guid.NewGuid(), account.IdPedido, commandId,
-            _idDetalleSeleccionado, motive);
+        var detailId = _idDetalleSeleccionado;
         Anulando = true;
+        var acquired = false;
         try
         {
+            // El mismo semáforo serializa polling, envío y anulación: la fotografía no cambia al confirmar.
+            await _operacion.WaitAsync(_lifetime.Token);
+            acquired = true;
+            if (_lifetime.IsCancellationRequested) return;
+            if (Cuenta is not { } current || current.IdPedido != account.IdPedido ||
+                !current.Comandas.Any(command => command.IdComanda == commandId &&
+                    (detailId is not int id || command.Lineas.Any(line => line.IdDetalle == id))))
+            {
+                MensajeAnulacion = "La cuenta cambió antes de anular. Revise las líneas y confirme de nuevo.";
+                return;
+            }
+            var intention = new IntencionAnulacion(Guid.NewGuid(), current.IdPedido, commandId, detailId, motive);
             var result = await _anulaciones.AnularAsync(intention, email, password, _lifetime.Token);
             if (_lifetime.IsCancellationRequested) return;
             switch (result.Estado)
@@ -256,13 +282,14 @@ public partial class PedidosSalonViewModel
                     break;
             }
         }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
         catch (SessionExpiredException)
         {
             AnulacionIncierta = true;
             ConfirmandoAnulacion = false;
             MensajeAnulacion = "La sesión expiró durante la anulación. No se confirmó efecto; consulte la operación.";
         }
-        catch (Exception ex) when (ex is OperationCanceledException or IOException or InvalidDataException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException)
         {
             AnulacionIncierta = true;
             ConfirmandoAnulacion = false;
@@ -270,6 +297,7 @@ public partial class PedidosSalonViewModel
         }
         finally
         {
+            if (acquired) _operacion.Release();
             ContrasenaJefa = "";
             Anulando = false;
             ActualizarPermisos();
@@ -281,8 +309,12 @@ public partial class PedidosSalonViewModel
     {
         if (!PuedeRecuperarAnulacion || _anulaciones is null) return;
         Anulando = true;
+        var acquired = false;
         try
         {
+            await _operacion.WaitAsync(_lifetime.Token);
+            acquired = true;
+            if (_lifetime.IsCancellationRequested) return;
             var result = await _anulaciones.RecuperarAsync(false, _lifetime.Token);
             if (_lifetime.IsCancellationRequested) return;
             MensajeAnulacion = result.Mensaje;
@@ -292,16 +324,18 @@ public partial class PedidosSalonViewModel
                 AnulacionTerminalPendienteConciliar = true;
             }
         }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
         catch (SessionExpiredException)
         {
             MensajeAnulacion = "La sesión expiró. Vuelva a iniciar sesión para consultar la operación.";
         }
-        catch (Exception ex) when (ex is OperationCanceledException or IOException or InvalidDataException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException)
         {
             MensajeAnulacion = "No se pudo consultar la operación. No repita la anulación; reintente la consulta.";
         }
         finally
         {
+            if (acquired) _operacion.Release();
             Anulando = false;
             ActualizarPermisos();
         }
@@ -327,8 +361,12 @@ public partial class PedidosSalonViewModel
     {
         if (!ConfirmandoBarrera || Anulando || _anulaciones is null) return;
         Anulando = true;
+        var acquired = false;
         try
         {
+            await _operacion.WaitAsync(_lifetime.Token);
+            acquired = true;
+            if (_lifetime.IsCancellationRequested) return;
             var result = await _anulaciones.RecuperarAsync(true, _lifetime.Token);
             if (_lifetime.IsCancellationRequested) return;
             MensajeAnulacion = result.Mensaje;
@@ -340,12 +378,14 @@ public partial class PedidosSalonViewModel
             ConfirmandoBarrera = false;
             OnPropertyChanged(nameof(ConfirmandoBarreraVisible));
         }
-        catch (Exception ex) when (ex is OperationCanceledException or IOException or InvalidDataException or SessionExpiredException)
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or SessionExpiredException)
         {
             MensajeAnulacion = "No se pudo establecer la barrera. No repita la anulación; reintente la consulta.";
         }
         finally
         {
+            if (acquired) _operacion.Release();
             Anulando = false;
             ActualizarPermisos();
         }

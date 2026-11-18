@@ -46,6 +46,10 @@ Para pruebas y configuración de instalación ver `AGENTS.md`, `docs/installatio
 - `docs/` — Dominio, Constitución
 - `specs/` — Especificaciones por módulo (SDD)
 
-Pedidos y Cocina (`003`) y Caja (`004`) están aceptados para la demostración universitaria local. Consulta sus respectivos `tasks.md` para conocer el alcance y las tareas pendientes para uso real. La propuesta `002-operaciones-seguras` permanece separada y pospuesta.
+Pedidos y Cocina (`003`), Caja (`004`) y Auditoría/anulaciones (`006`) están aceptados para la demostración universitaria local. Consulta sus respectivos `tasks.md` para conocer el alcance y las tareas pendientes para uso real. La propuesta `002-operaciones-seguras` permanece separada y pospuesta.
+
+La anulación de líneas requiere la primera provisión HMAC descrita en `docs/installation.md` y la clave `AutorizacionSuperior__ClaveHmac` configurada fuera de Git; sin ellas el resto del sistema funciona, pero la anulación responde `AUTORIZACION_SUPERIOR_NO_DISPONIBLE`.
+
+Para comprobar que la base local elegida está preparada antes de presentar, ejecutar `.\scripts\validar-base-defensa.ps1 -BaseEsperada elcarbonazo` (solo lectura). Para el recorrido automático completo en bases temporales, `.\scripts\ejecutar-smoke-integral.ps1`.
 
 Inventario y escandallo (`005`) tiene persistencia, API e interfaz implementadas y aceptación del usuario para el perfil universitario local; permanecen los límites documentados de validación. La API actual exige recetas y stock al enviar: no se ha preparado automáticamente la base persistente de demostración. Consultar `specs/005-inventario-escandallo/tasks.md`.

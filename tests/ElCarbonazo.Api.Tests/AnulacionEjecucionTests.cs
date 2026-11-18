@@ -81,6 +81,11 @@ public sealed class AnulacionEjecucionTests
             Assert.Single(await context.DetallesPedido.Where(x => x.Cancelado).ToListAsync());
             Assert.Equal("Lista", (await context.Comandas.SingleAsync()).Estado);
             Assert.Equal("Listo", (await context.Pedidos.SingleAsync()).Estado);
+            var salon = await new CuentasService(context).GetActivaAsync(table.IdMesa, null, default);
+            Assert.NotNull(salon?.Pedido);
+            var salonCommand = Assert.Single(salon!.Pedido!.Comandas);
+            Assert.Equal(details[1].IdDetalle, Assert.Single(salonCommand.Lineas).IdDetalle);
+            Assert.Equal(10m, salon.Pedido.Total);
 
             var secondOperation = Guid.NewGuid();
             var secondAuthorization = await new AnulacionAutorizacionService(context, passwords, audit, TimeProvider.System, configuration)
@@ -97,6 +102,8 @@ public sealed class AnulacionEjecucionTests
             Assert.All(await context.DetallesPedido.ToListAsync(), detail => Assert.True(detail.Cancelado));
             Assert.Equal("Cancelada", (await context.Comandas.SingleAsync()).Estado);
             Assert.Equal("Cancelado", (await context.Pedidos.SingleAsync()).Estado);
+            var emptySalon = await new CuentasService(context).GetActivaAsync(table.IdMesa, null, default);
+            Assert.Null(emptySalon?.Pedido);
             Assert.Equal(2, await context.AlertasAnulacion.CountAsync());
             var alertIds = await context.AlertasAnulacion.Select(x => x.IdAnulacion).Order().ToArrayAsync();
             Assert.Equal(2, alertIds.Length);

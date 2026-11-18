@@ -1,6 +1,12 @@
 # Tareas propuestas 006 — Auditoría, cancelaciones y seguridad
 
-**Estado: PAUSADO por decisión del usuario; fuera del alcance funcional de la defensa actual.** Se conserva el trabajo local, sus pruebas y la evidencia histórica. No continuar ni marcar este 006 como terminado. El módulo 006 de defensa ahora es Reservaciones sencillas (`specs/006-reservaciones-mesas/`). Excepción explícita: el usuario autorizó aplicar el esquema de cancelaciones a la base local `elcarbonazo` para compatibilidad del código vigente y reservaciones; la migración fue aplicada. Esto no autoriza usar ni presentar anulaciones como funcionalidad aceptada.
+**Estado: reanudado por autorización explícita del usuario para el perfil universitario local.** El flujo de anulación se implementó de extremo a extremo en API y Desktop, se provisionó el diario local y se ejecutó un recorrido REST real contra PostgreSQL temporal. **No se declara aceptación integral ni aptitud de producción:** siguen pendientes carreras con Caja/KDS/envío, TTL/cardinalidad HMAC, compatibilidad de huellas Caja y revisión visual/LAN. El módulo de reservaciones de la defensa no se ve afectado; este 006 es el de auditoría, cancelaciones y seguridad autorizado ahora.
+
+**Reanudación y evidencia local:** `AnulacionCoordinator` captura la generación de sesión antes de registrar el diario, exige esa generación en autorización/ejecución/barrera y no reejecuta ante incertidumbre; `AnulacionApiService` emite una sola vez sin refresco ni reintento; el ViewModel serializa polling, envío y anulación con el mismo semáforo y revalida la cuenta antes de confirmar. El diario `recovery\anulaciones` se crea explícitamente con `--aprovisionar-diario-anulaciones` y `scripts/instalar-diario-anulaciones.ps1`, con ACL restringida y sin reparación automática. La consulta/barrera de una operación resuelta devuelve 200 y `CuentasService` oculta líneas anuladas del salón. Se añadieron pruebas de coordinador y ViewModel, y `--anulaciones-smoke` verificó por REST autorización, ejecución, replay terminal, consulta, filtrado de cuenta y barrera durable. El diario real quedó provisionado en este equipo. Regresión: formato/build correctos, **165 pruebas API y 288 Desktop** aprobadas, auditoría NuGet sin vulnerabilidades reportadas. Ver `docs/validacion-006.md`.
+
+**Límites que mantienen el 006 abierto para producción:** no se probaron carreras reales con Caja prepare/execute, KDS, envío o ajuste; ni token expirado/revocado o replay concurrente; ni el umbral de cinco fallos, el límite/TTL de 100 pares HMAC; ni huellas Caja v1/v2 o cobro de una cuenta parcialmente anulada; ni render, contraste, teclado o LAN física. El diario es local a esta instalación Windows, no una barrera distribuida.
+
+**Historial previo:** se conserva el trabajo y la evidencia de las secciones siguientes. Las cifras de regresión anteriores corresponden a sus fechas y no al estado actual.
 
 **Avance parcial C2:** el envío guarda snapshots por línea/ingrediente en su transacción; 9 pruebas focalizadas verificaron, entre otros casos, líneas repetidas, replay, rollback y carrera con reemplazo de receta. No se ha implementado la anulación ni sus barreras; ninguna tarea integral de C2 se considera cerrada. Ver `docs/validacion-006.md`.
 
@@ -52,20 +58,20 @@ Regresión posterior a la prueba de líneas consecutivas y al diario: **159 API 
 
 ## C2 — API, seguridad, inventario y KDS
 
-- [ ] Validar credencial superior, permisos, límites de intentos y auditoría de fallos sin secretos; probar expiración, sesión, rol, recurso y replay.
-- [ ] Implementar identidad durable, ejecución única y barrera/reconciliación explícitas, sin reenvío automático y con pruebas de respuesta perdida.
-- [ ] Cancelar líneas completas o comandas, bloquear evidencia insuficiente y cuentas pagadas/en cobro; devolver consumo exacto con recálculo y auditoría atómicos.
-- [ ] Implementar alertas y acuse por evento, consultas paginadas y autorización por rol.
-- [ ] Probar carreras reales con Caja prepare/execute, envío, KDS y ajuste; rollback por fallo de auditoría y ausencia de duplicación.
+- [ ] Validar credencial superior, permisos, límites de intentos y auditoría de fallos sin secretos; probar expiración, sesión, rol, recurso y replay. **Parcial:** emisión, límite de cinco fallos, sesión, rol, recurso y replay terminal tienen pruebas; expiración de token y replay concurrente siguen pendientes.
+- [x] Implementar identidad durable, ejecución única y barrera/reconciliación explícitas, sin reenvío automático y con pruebas de respuesta perdida. **Hecho para el perfil local:** coordinador Desktop, diario, una sola emisión, consulta/barrera y pruebas de respuesta perdida; la carrera concurrente sigue en la tarea de carreras reales.
+- [x] Cancelar líneas completas o comandas, bloquear evidencia insuficiente y cuentas pagadas/en cobro; devolver consumo exacto con recálculo y auditoría atómicos. **Hecho con límite:** pruebas PostgreSQL cubren reversión exacta, acumulada y bloqueo de cuenta pagada; falta cobro/comprobante de una cuenta parcialmente anulada.
+- [x] Implementar alertas y acuse por evento, consultas paginadas y autorización por rol. **Hecho en API:** rutas KDS y auditoría con cursor opaco y roles; la vista Desktop de auditoría y la cobertura de todos los filtros siguen pendientes.
+- [ ] Probar carreras reales con Caja prepare/execute, envío, KDS y ajuste; rollback por fallo de auditoría y ausencia de duplicación. **Pendiente:** el rollback y la ausencia de duplicación tienen pruebas focalizadas, pero no las intercalaciones concurrentes.
 
 ## C3 — Desktop
 
-- [ ] Clientes REST y coordinador sin reintentos; tratamiento de credenciales, cambio de sesión, incertidumbre y recuperación conforme a D0.
-- [ ] Modal con resumen, motivo y confirmación; KDS con alerta textual y acuse; vistas paginadas de auditoría por rol.
-- [ ] Pruebas con fakes de validación, lecturas obsoletas, respuestas inválidas y un solo envío; revisión de foco, teclado, contraste y escalado en ventana real.
+- [x] Clientes REST y coordinador sin reintentos; tratamiento de credenciales, cambio de sesión, incertidumbre y recuperación conforme a D0. **Hecho para el perfil local:** una sola emisión, generación de sesión, limpieza de contraseña y recuperación sin reejecución, con pruebas de coordinador y ViewModel.
+- [ ] Modal con resumen, motivo y confirmación; KDS con alerta textual y acuse; vistas paginadas de auditoría por rol. **Parcial:** modal y alerta KDS están implementados y probados con fakes; falta la vista Desktop de auditoría paginada.
+- [ ] Pruebas con fakes de validación, lecturas obsoletas, respuestas inválidas y un solo envío; revisión de foco, teclado, contraste y escalado en ventana real. **Parcial:** las pruebas con fakes están hechas; la revisión visual real no se ejecutó.
 
 ## C4 — Integración y aceptación
 
-- [ ] Ejecutar formato → build → pruebas API → pruebas Desktop → auditoría NuGet; AcceptanceHost aparte y recorridos ficticios en PostgreSQL temporal.
-- [ ] Registrar evidencia y limitaciones en `docs/validacion-006.md`, incluidos casos no probados y límites de recuperación.
-- [ ] Realizar recorrido práctico, solicitar revisión y aceptación explícita del usuario; no declarar LAN física, aptitud productiva ni validación visual no medida.
+- [x] Ejecutar formato → build → pruebas API → pruebas Desktop → auditoría NuGet; AcceptanceHost aparte y recorridos ficticios en PostgreSQL temporal. **Hecho:** 165 API, 288 Desktop, sin vulnerabilidades; smoke de anulaciones ejecutado aparte.
+- [x] Registrar evidencia y limitaciones en `docs/validacion-006.md`, incluidos casos no probados y límites de recuperación.
+- [ ] Realizar recorrido práctico, solicitar revisión y aceptación explícita del usuario; no declarar LAN física, aptitud productiva ni validación visual no medida. **Pendiente:** falta el recorrido visual humano y la aceptación explícita.

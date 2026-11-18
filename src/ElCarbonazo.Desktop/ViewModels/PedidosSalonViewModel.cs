@@ -50,8 +50,8 @@ public partial class PedidosSalonViewModel : ViewModelBase, IDisposable
         product.IdProducto == line.Producto.IdProducto && product.Version == line.Producto.Version &&
         product.Precio == line.Producto.Precio && product.Nombre == line.Producto.Nombre));
     public bool PuedeEditar => Conectado && !Enviando && !ResultadoIncierto && !ConfirmandoEnvio &&
-        !AnulacionIncierta;
-    public bool PuedeVolver => !Enviando && !ResultadoIncierto;
+        !AnulacionIncierta && !Anulando && !ConfirmandoAnulacion;
+    public bool PuedeVolver => !Enviando && !ResultadoIncierto && !Anulando && !ConfirmandoAnulacion;
     public bool PuedeAgregar => Conectado && !CuentaLegada && PuedeEditar && Borrador.Count < 50;
     public bool PuedeEnviar => Conectado && !CuentaLegada && PuedeEditar && Borrador.Count is > 0 and <= 50 &&
         (_grupoId is not null || _versionMesa is not null) && Borrador.All(line => line.Cantidad is >= 1 and <= 99 &&

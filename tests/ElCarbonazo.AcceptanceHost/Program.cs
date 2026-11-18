@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text.Json;
 using ElCarbonazo.Api.Domain;
 using ElCarbonazo.Api.Entities;
@@ -31,7 +32,8 @@ try
         args.Contains("--catalogo-defensa-smoke", StringComparer.Ordinal);
     if (catalogoDefensa && (args.Contains("--pedidos", StringComparer.Ordinal) ||
         args.Contains("--pedidos-smoke", StringComparer.Ordinal) ||
-        args.Contains("--inventario-smoke", StringComparer.Ordinal)))
+        args.Contains("--inventario-smoke", StringComparer.Ordinal) ||
+        args.Contains("--anulaciones-smoke", StringComparer.Ordinal)))
         throw new InvalidOperationException("No combine el catálogo de defensa con los modos de catálogo ficticio.");
     if (catalogoDefensa)
     {
@@ -41,15 +43,24 @@ try
         var databaseName = new Npgsql.NpgsqlConnectionStringBuilder(database.ConnectionString).Database!;
         await seed.CargarAsync(Path.Combine(root, "specs", "entrega-defensa-local"), 1, databaseName, stopping.Token);
     }
+    var anulacionesMode = args.Contains("--anulaciones-smoke", StringComparer.Ordinal);
     var pedidosMode = args.Contains("--pedidos", StringComparer.Ordinal) || args.Contains("--pedidos-smoke", StringComparer.Ordinal) ||
-        args.Contains("--inventario-smoke", StringComparer.Ordinal);
+        args.Contains("--inventario-smoke", StringComparer.Ordinal) || anulacionesMode;
     if (pedidosMode) await database.SeedDemoCatalogAsync();
+    byte[]? hmacKey = null;
+    if (anulacionesMode)
+    {
+        hmacKey = RandomNumberGenerator.GetBytes(32);
+        await database.ProvisionHmacAsync(hmacKey);
+    }
     var start = new ProcessStartInfo("dotnet") { WorkingDirectory = apiDirectory, UseShellExecute = false };
     start.ArgumentList.Add(apiDll);
     start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
     start.Environment["ASPNETCORE_URLS"] = baseUrl;
     start.Environment["ConnectionStrings__DefaultConnection"] = database.ConnectionString;
     start.Environment["Logging__FileDirectory"] = database.LogDirectory;
+    if (hmacKey is not null)
+        start.Environment["AutorizacionSuperior__ClaveHmac"] = Convert.ToBase64String(hmacKey);
     api = Process.Start(start) ?? throw new InvalidOperationException("No se pudo iniciar la API temporal.");
     using var client = new HttpClient { BaseAddress = new Uri(baseUrl), Timeout = TimeSpan.FromSeconds(15) };
     await WaitForApiAsync(client, api, stopping.Token);
@@ -70,6 +81,8 @@ try
         await PedidosSmoke.RunAsync(client, stopping.Token);
     else if (args.Contains("--inventario-smoke", StringComparer.Ordinal))
         await InventarioSmoke.RunAsync(client, stopping.Token);
+    else if (anulacionesMode)
+        await AnulacionesSmoke.RunAsync(client, stopping.Token);
     else if (args.Contains("--caja-smoke", StringComparer.Ordinal) ||
              args.Contains("--catalogo-defensa-smoke", StringComparer.Ordinal))
         await CajaSmoke.RunAsync(client, database, stopping.Token);
