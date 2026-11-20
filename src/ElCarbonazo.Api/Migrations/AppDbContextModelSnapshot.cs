@@ -725,6 +725,12 @@ namespace ElCarbonazo.Api.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("id_usuario_creacion");
 
+                    b.Property<bool>("PermitePedidoTrasAnulacion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("permite_pedido_tras_anulacion");
+
                     b.HasKey("IdGrupo");
 
                     b.HasIndex("IdUsuarioCierre");
@@ -900,6 +906,12 @@ namespace ElCarbonazo.Api.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("numero");
 
+                    b.Property<bool>("PermitePedidoTrasAnulacion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("permite_pedido_tras_anulacion");
+
                     b.Property<uint>("Version")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -931,6 +943,7 @@ namespace ElCarbonazo.Api.Migrations
                             Capacidad = 4,
                             Estado = "Libre",
                             Numero = 1,
+                            PermitePedidoTrasAnulacion = false,
                             Version = 0u
                         },
                         new
@@ -939,6 +952,7 @@ namespace ElCarbonazo.Api.Migrations
                             Capacidad = 4,
                             Estado = "Libre",
                             Numero = 2,
+                            PermitePedidoTrasAnulacion = false,
                             Version = 0u
                         },
                         new
@@ -947,6 +961,7 @@ namespace ElCarbonazo.Api.Migrations
                             Capacidad = 4,
                             Estado = "Libre",
                             Numero = 3,
+                            PermitePedidoTrasAnulacion = false,
                             Version = 0u
                         },
                         new
@@ -955,6 +970,7 @@ namespace ElCarbonazo.Api.Migrations
                             Capacidad = 4,
                             Estado = "Libre",
                             Numero = 4,
+                            PermitePedidoTrasAnulacion = false,
                             Version = 0u
                         },
                         new
@@ -963,6 +979,7 @@ namespace ElCarbonazo.Api.Migrations
                             Capacidad = 4,
                             Estado = "Libre",
                             Numero = 5,
+                            PermitePedidoTrasAnulacion = false,
                             Version = 0u
                         },
                         new
@@ -971,6 +988,7 @@ namespace ElCarbonazo.Api.Migrations
                             Capacidad = 4,
                             Estado = "Libre",
                             Numero = 6,
+                            PermitePedidoTrasAnulacion = false,
                             Version = 0u
                         },
                         new
@@ -979,6 +997,7 @@ namespace ElCarbonazo.Api.Migrations
                             Capacidad = 4,
                             Estado = "Libre",
                             Numero = 7,
+                            PermitePedidoTrasAnulacion = false,
                             Version = 0u
                         },
                         new
@@ -987,6 +1006,7 @@ namespace ElCarbonazo.Api.Migrations
                             Capacidad = 4,
                             Estado = "Libre",
                             Numero = 8,
+                            PermitePedidoTrasAnulacion = false,
                             Version = 0u
                         },
                         new
@@ -995,6 +1015,7 @@ namespace ElCarbonazo.Api.Migrations
                             Capacidad = 4,
                             Estado = "Libre",
                             Numero = 9,
+                            PermitePedidoTrasAnulacion = false,
                             Version = 0u
                         },
                         new
@@ -1003,6 +1024,7 @@ namespace ElCarbonazo.Api.Migrations
                             Capacidad = 4,
                             Estado = "Libre",
                             Numero = 10,
+                            PermitePedidoTrasAnulacion = false,
                             Version = 0u
                         },
                         new
@@ -1011,6 +1033,7 @@ namespace ElCarbonazo.Api.Migrations
                             Capacidad = 4,
                             Estado = "Libre",
                             Numero = 11,
+                            PermitePedidoTrasAnulacion = false,
                             Version = 0u
                         },
                         new
@@ -1019,6 +1042,7 @@ namespace ElCarbonazo.Api.Migrations
                             Capacidad = 4,
                             Estado = "Libre",
                             Numero = 12,
+                            PermitePedidoTrasAnulacion = false,
                             Version = 0u
                         },
                         new
@@ -1027,6 +1051,7 @@ namespace ElCarbonazo.Api.Migrations
                             Capacidad = 4,
                             Estado = "Libre",
                             Numero = 13,
+                            PermitePedidoTrasAnulacion = false,
                             Version = 0u
                         },
                         new
@@ -1035,6 +1060,7 @@ namespace ElCarbonazo.Api.Migrations
                             Capacidad = 4,
                             Estado = "Libre",
                             Numero = 14,
+                            PermitePedidoTrasAnulacion = false,
                             Version = 0u
                         },
                         new
@@ -1043,6 +1069,7 @@ namespace ElCarbonazo.Api.Migrations
                             Capacidad = 4,
                             Estado = "Libre",
                             Numero = 15,
+                            PermitePedidoTrasAnulacion = false,
                             Version = 0u
                         });
                 });

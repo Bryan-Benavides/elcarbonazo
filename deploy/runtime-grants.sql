@@ -6,7 +6,7 @@ GRANT USAGE ON SCHEMA public TO elcarbonazo_runtime, elcarbonazo_bootstrap;
 GRANT SELECT ON public.usuario TO elcarbonazo_runtime;
 GRANT UPDATE (contrasena_hash, intentos_fallidos, bloqueo_hasta)
     ON public.usuario TO elcarbonazo_runtime;
-GRANT SELECT, UPDATE (estado, id_grupo) ON public.mesa TO elcarbonazo_runtime;
+GRANT SELECT, UPDATE (estado, id_grupo, permite_pedido_tras_anulacion) ON public.mesa TO elcarbonazo_runtime;
 GRANT SELECT, INSERT, UPDATE ON public.grupo_mesa TO elcarbonazo_runtime;
 GRANT SELECT, INSERT ON public.grupo_mesa_miembro TO elcarbonazo_runtime;
 GRANT SELECT, INSERT, UPDATE (subtotal, impuestos, total, estado) ON public.pedido TO elcarbonazo_runtime;

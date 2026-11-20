@@ -1,5 +1,9 @@
 # Cierre y entrega reproducible de la demo local
 
+**Actualización autorizada por el usuario:** para la entrega al profesor se permite generar un dump de su base local existente `elcarbonazo`, conservando nombres y datos. El dump se restaurará únicamente en una base nueva y aislada para verificarlo. No incluir archivos de configuración personales ni claves en el ZIP. La copia puede contener datos históricos, hashes de contraseñas y metadatos HMAC; no se debe afirmar que sea anónima. La clave HMAC local no se incluye y su uso en otro equipo requiere un procedimiento acordado y probado.
+
+**Decisión posterior:** el usuario autorizó expresamente incluir la clave HMAC de la instalación local en el ZIP privado para el profesor, junto con las credenciales de las tres cuentas de prueba. No registrar la clave en Git, logs ni respuestas; el ZIP resultante es sensible y no debe publicarse. Las demás contraseñas personales y la conexión PostgreSQL local no se incluyen.
+
 **Estado: alcance de entrega actualizado por solicitud del usuario. El usuario pidió preparar catálogo local de defensa con los 90 productos, recetas e ingredientes suministrados, probarlo y después entregar ejecutables y una base PostgreSQL local restaurable. Prefiere PostgreSQL instalado directamente en Windows, sin Docker ni nube. El 006 anterior de anulaciones queda pausado.**
 
 ## Objetivo

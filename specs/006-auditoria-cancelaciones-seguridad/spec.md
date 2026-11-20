@@ -1,6 +1,10 @@
 # Especificación propuesta 006 — Auditoría, cancelaciones y seguridad
 
-**Estado: PAUSADO por decisión del usuario; fuera del alcance de la defensa actual.** Este trabajo local corresponde al diseño original de auditoría, cancelaciones y seguridad 006. No se debe continuar ni presentar como aceptado. Se conserva como trabajo local/histórico y no se elimina. La nueva especificación numerada 006 de reservas es `specs/006-reservaciones-mesas/`; las reglas anteriores de impuestos y Caja siguen vigentes.
+**Estado: reanudado por autorización del usuario para el perfil universitario local.** El flujo de anulaciones está implementado; su estado efectivo, pruebas y pendientes están en `tasks.md` y `docs/validacion-006.md`. No se declara aceptación integral ni aptitud para producción. La especificación numerada 006 de reservas es independiente: `specs/006-reservaciones-mesas/`.
+
+### Cambio aprobado: continuar la atención después de una anulación total
+
+El usuario autorizó permitir un pedido nuevo después de anular totalmente la cuenta, tanto en mesa individual como en grupo activo, sin liberar ni desagrupar el destino. La cuenta anulada, sus movimientos y alertas permanecen históricos; el nuevo pedido tiene identidad propia y consume inventario solo al enviarse. Una anulación parcial conserva la cuenta activa y los envíos posteriores se agregan a ella. Se conservan los bloqueos de cobro pendiente, cuentas pagadas de grupo y operaciones inciertas; este cambio no autoriza reabrir pagos ni reintentar escrituras. La API valida bajo los locks de destino y cuenta, sin inferir temporalidad mediante `xmin`; usa un indicador explícito creado por la anulación total y consumido por el siguiente envío. La migración no presume que anulaciones anteriores correspondan a la ocupación actual. Consultar evidencia y límites en `tasks.md`.
 
 ## 1. Objetivo y límites
 

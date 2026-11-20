@@ -10,6 +10,29 @@ namespace ElCarbonazo.Desktop.Tests;
 public sealed class PedidosSalonAnulacionTests
 {
     [Fact]
+    public async Task Opening_and_cancelling_modal_notifies_button_states_without_sending()
+    {
+        using var fixture = new JournalFixture();
+        var api = new ScriptedAnulacionApi();
+        using var vm = BuildVm(new MutableAccountFake(Account()), fixture.Journal, api);
+        await WaitAsync(() => vm.PuedeAnular, "la anulación debe habilitarse");
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+        vm.ComandasAnulables[0].Lineas[0].SolicitarCommand.Execute(null);
+        Assert.True(vm.PuedeCancelarAnulacion);
+        Assert.Contains(nameof(vm.PuedeCancelarAnulacion), changed);
+        vm.MotivoAnulacion = "Pedido duplicado";
+        vm.EmailJefa = "jefa@example.local";
+        vm.ContrasenaJefa = "clave";
+        Assert.True(vm.PuedeConfirmarAnulacion);
+        Assert.Contains(nameof(vm.PuedeConfirmarAnulacion), changed);
+        vm.CancelarAnulacionCommand.Execute(null);
+        Assert.False(vm.ConfirmandoAnulacion);
+        Assert.Equal("", vm.ContrasenaJefa);
+        Assert.Equal(0, api.AuthorizeCount);
+    }
+
+    [Fact]
     public async Task Missing_journal_disables_the_flow_without_sending_credentials()
     {
         var directory = Path.Combine(Path.GetTempPath(), $"anulacion-vm-missing-{Guid.NewGuid():N}");

@@ -7,6 +7,7 @@ public class Mesa
     public int Numero { get; set; }
     public int Capacidad { get; set; }
     public string Estado { get; set; } = null!;
+    public bool PermitePedidoTrasAnulacion { get; set; }
     public uint Version { get; set; }
 
     public GrupoMesa? GrupoActivo { get; set; }

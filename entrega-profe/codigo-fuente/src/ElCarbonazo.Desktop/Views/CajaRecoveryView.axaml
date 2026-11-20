@@ -1,0 +1,150 @@
+<UserControl x:Class="ElCarbonazo.Desktop.Views.CajaRecoveryView" x:Name="Root"
+             xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:ElCarbonazo.Desktop.ViewModels" xmlns:services="using:ElCarbonazo.Desktop.Services" mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
+             x:CompileBindings="True" x:DataType="vm:CajaRecoveryViewModel" Background="{StaticResource FondoPrincipalBrush}">
+    <Design.DataContext><vm:CajaRecoveryViewModel /></Design.DataContext>
+    <UserControl.Resources>
+        <ControlTheme x:Key="RecoveryButtonTheme" TargetType="Button">
+            <Setter Property="Background" Value="#3F3F46" /><Setter Property="Foreground" Value="#F3F4F6" />
+            <Setter Property="BorderBrush" Value="#71717A" /><Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="16,12" />
+            <Setter Property="Template"><ControlTemplate><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}"><ContentPresenter Content="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" /></Border></ControlTemplate></Setter>
+            <Style Selector="^:pointerover"><Setter Property="BorderBrush" Value="#FF784E" /></Style>
+            <Style Selector="^:focus-visible"><Setter Property="BorderBrush" Value="#F3F4F6" /><Setter Property="BorderThickness" Value="2" /></Style>
+            <Style Selector="^:disabled"><Setter Property="Background" Value="#303034" /><Setter Property="Foreground" Value="#A1A1AA" /></Style>
+        </ControlTheme>
+    </UserControl.Resources>
+    <UserControl.Styles><Style Selector="Button"><Setter Property="Theme" Value="{StaticResource RecoveryButtonTheme}" /></Style></UserControl.Styles>
+    <ScrollViewer>
+        <StackPanel Margin="24" Spacing="16" MaxWidth="900" HorizontalAlignment="Stretch">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
+                <Button Content="← Mesas" Command="{Binding VolverCommand}" IsEnabled="{Binding !Ocupado}" />
+                <TextBlock Grid.Column="1" Text="Caja y recuperación" FontSize="26" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+            </Grid>
+            <TextBlock Text="DEMOSTRACIÓN · La recuperación no vuelve a ejecutar operaciones. El sistema no verifica pagos bancarios." Foreground="{StaticResource TextoSecundarioBrush}" TextWrapping="Wrap" />
+            <Border Background="{StaticResource FondoPanelBrush}" Padding="16" CornerRadius="6">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Turno de caja" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="{Binding ResumenTurno}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <Button Content="Consultar turno" Command="{Binding ConsultarTurnoCommand}" IsEnabled="{Binding !Ocupado}" HorizontalAlignment="Left" />
+                    <TextBlock Text="Fondo inicial en córdobas (por ejemplo, 0.00)" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBox Text="{Binding FondoInicial}" IsEnabled="{Binding !Ocupado}" MaxLength="13" HorizontalAlignment="Left" MinWidth="180" />
+                    <CheckBox Content="Confirmo la apertura con el fondo indicado, incluso si es cero." IsChecked="{Binding ConfirmarApertura}" IsEnabled="{Binding !Ocupado}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <Button Content="Abrir turno" Command="{Binding AbrirTurnoCommand}" IsEnabled="{Binding PuedeAbrirTurno}" HorizontalAlignment="Left" />
+                </StackPanel>
+            </Border>
+            <Border Background="{StaticResource FondoPanelBrush}" Padding="16" CornerRadius="6">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Cierre de turno" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="Consulte el turno y revise efectivo esperado y pendientes. El cálculo no incluye egresos ni conciliación bancaria o fiscal." Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="Conteo total de efectivo en córdobas (use punto decimal)" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <TextBox Text="{Binding EfectivoContado}" IsEnabled="{Binding !Ocupado}" MaxLength="13" MinWidth="180" HorizontalAlignment="Left" />
+                    <TextBlock Text="{Binding DiferenciaCierre}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="Motivo obligatorio si existe diferencia" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBox Text="{Binding MotivoCierre}" IsEnabled="{Binding !Ocupado}" MaxLength="1000" />
+                    <CheckBox Content="Confirmo el conteo, la diferencia y las cuentas pendientes." IsChecked="{Binding ConfirmarCierreCaja}" IsEnabled="{Binding !Ocupado}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <Button Content="Cerrar turno" Command="{Binding CerrarTurnoCommand}" IsEnabled="{Binding ConfirmarCierreCaja}" HorizontalAlignment="Left" />
+                </StackPanel>
+            </Border>
+            <Border Background="{StaticResource FondoPanelBrush}" Padding="16" CornerRadius="6">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Cuentas" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="{Binding EstadoCuentas}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <WrapPanel>
+                        <Button Content="Consultar cuentas" Command="{Binding ConsultarCuentasCommand}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
+                        <Button Content="Siguiente página" Command="{Binding SiguientesCuentasCommand}" IsVisible="{Binding HayMasCuentas}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
+                    </WrapPanel>
+                    <ItemsControl ItemsSource="{Binding Cuentas}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="services:CajaCuentaVista">
+                                <Border BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,8">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="{Binding Destino}" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                        <TextBlock Text="{Binding IdPedido, StringFormat='Cuenta {0}'}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                        <TextBlock Text="{Binding Estado, StringFormat='Estado: {0}'}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                        <TextBlock Text="{Binding Total, StringFormat='Total C$ {0:N2}'}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                        <TextBlock Text="{Binding Explicacion}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                                        <ItemsControl ItemsSource="{Binding Detalle}">
+                                            <ItemsControl.ItemTemplate><DataTemplate x:DataType="services:CajaCuentaLineaVista"><TextBlock Text="{Binding Texto}" Foreground="{StaticResource TextoSecundarioBrush}" TextWrapping="Wrap" /></DataTemplate></ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <Button Content="Revisar cuenta para cobro" IsEnabled="{Binding Cobrable}" Command="{Binding #Root.((vm:CajaRecoveryViewModel)DataContext).SeleccionarCuentaCommand}" CommandParameter="{Binding}" HorizontalAlignment="Left" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+            <Border Background="{StaticResource FondoPanelBrush}" Padding="16" CornerRadius="6" IsVisible="{Binding HayCuentaSeleccionada}">
+                <StackPanel Spacing="12" DataContext="{Binding}">
+                    <TextBlock Text="Revisar cuenta y método de pago" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="{Binding CuentaSeleccionada.Destino}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="{Binding CuentaSeleccionada.IdPedido, StringFormat='Cuenta {0}'}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="{Binding CuentaSeleccionada.Total, StringFormat='Total C$ {0:N2}'}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <ItemsControl ItemsSource="{Binding CuentaSeleccionada.Detalle}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="services:CajaCuentaLineaVista"><TextBlock Text="{Binding Texto}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                    <TextBlock Text="Método de pago" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <ComboBox ItemsSource="{Binding MetodosPago}" SelectedItem="{Binding MetodoPago}" IsEnabled="{Binding !Ocupado}" HorizontalAlignment="Left" MinWidth="180" />
+                    <StackPanel Spacing="8" IsVisible="{Binding EsEfectivo}">
+                        <TextBlock Text="Efectivo recibido (use punto decimal)" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <TextBox Text="{Binding EfectivoRecibido}" IsEnabled="{Binding !Ocupado}" MaxLength="13" MinWidth="180" HorizontalAlignment="Left" />
+                        <TextBlock Text="{Binding CambioPrevisto}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                        <CheckBox Content="Confirmo el destino, líneas, total y efectivo recibido." IsChecked="{Binding ConfirmarCobro}" IsEnabled="{Binding !Ocupado}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <Button Content="Confirmar cobro en efectivo" Command="{Binding CobrarEfectivoCommand}" IsEnabled="{Binding ConfirmarCobro}" HorizontalAlignment="Left" />
+                    </StackPanel>
+                    <StackPanel Spacing="8" IsVisible="{Binding EsPagoExterno}">
+                        <TextBlock Text="Referencia externa (no introduzca números completos de tarjeta, PIN ni credenciales)" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                        <TextBox Text="{Binding ReferenciaPago}" IsEnabled="{Binding !Ocupado}" MaxLength="200" />
+                        <TextBlock Text="{Binding RevisionReferencia}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                        <TextBlock Text="El Carbonazo no verifica pagos bancarios. Confirme la aprobación o recepción fuera del sistema." Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                        <CheckBox Content="Confirmo que verifiqué el pago fuera de El Carbonazo." IsChecked="{Binding ConfirmarVerificacionExterna}" IsEnabled="{Binding !Ocupado}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <CheckBox Content="Confirmo destino, líneas, total, método y referencia." IsChecked="{Binding ConfirmarCobro}" IsEnabled="{Binding !Ocupado}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <CheckBox Content="Si se advirtió coincidencia, revisé y confirmo registrar esta referencia." IsChecked="{Binding ConfirmarReferenciaRepetida}" IsEnabled="{Binding !Ocupado}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <Button Content="Registrar pago externo" Command="{Binding CobrarExternoCommand}" IsEnabled="{Binding ConfirmarCobro}" HorizontalAlignment="Left" />
+                    </StackPanel>
+                    <Button Content="Cancelar revisión" Command="{Binding CancelarSeleccionCobroCommand}" IsEnabled="{Binding !Ocupado}" HorizontalAlignment="Left" />
+                </StackPanel>
+            </Border>
+            <Border Background="{StaticResource FondoPanelBrush}" Padding="16" CornerRadius="6">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Diario local" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="{Binding EstadoDiario}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Mensaje}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <WrapPanel>
+                        <Button Content="Consultar operación" Command="{Binding ConsultarCommand}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
+                        <Button Content="Conciliar resultado" Command="{Binding ConciliarCommand}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+            <Border Background="{StaticResource FondoPanelBrush}" Padding="16" CornerRadius="6">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Cancelar o establecer barrera" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="Si un cobro externo ya ocurrió, no lo repita. Si la operación ya se completó, cancelarla no revierte el cobro." Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <CheckBox Content="Confirmo que deseo cancelar esta operación; si es ajena, actúo como Jefa." IsChecked="{Binding ConfirmarCancelacion}" IsEnabled="{Binding !Ocupado}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <Button Content="Confirmar cancelación" Command="{Binding CancelarCommand}" IsEnabled="{Binding ConfirmarCancelacion}" HorizontalAlignment="Left" />
+                </StackPanel>
+            </Border>
+            <Border Background="{StaticResource FondoPanelBrush}" Padding="16" CornerRadius="6">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Historial de comprobantes" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="{Binding EstadoComprobantes}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <WrapPanel>
+                        <Button Content="Consultar comprobantes" Command="{Binding ConsultarComprobantesCommand}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
+                        <Button Content="Siguiente página" Command="{Binding SiguientesComprobantesCommand}" IsVisible="{Binding HayMasComprobantes}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
+                    </WrapPanel>
+                    <ItemsControl ItemsSource="{Binding Comprobantes}">
+                        <ItemsControl.ItemTemplate><DataTemplate x:DataType="services:CajaComprobanteResumen">
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+                                <TextBlock Text="{Binding NumeroComprobante, StringFormat='Comprobante {0}'}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                <TextBlock Text="{Binding Total, StringFormat='C$ {0:N2}'}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                <Button Content="Ver detalle" Command="{Binding #Root.((vm:CajaRecoveryViewModel)DataContext).VerComprobanteCommand}" CommandParameter="{Binding}" />
+                            </StackPanel>
+                        </DataTemplate></ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="Fotografía del comprobante" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="{Binding Fotografia}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

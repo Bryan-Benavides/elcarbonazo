@@ -82,6 +82,7 @@ public sealed class GruposMesaService(
         {
             table.IdGrupo = group.IdGrupo;
             table.Estado = MesaStates.Agrupada;
+            table.PermitePedidoTrasAnulacion = false;
             group.Miembros.Add(new GrupoMesaMiembro
             {
                 IdGrupo = group.IdGrupo,
@@ -151,12 +152,14 @@ public sealed class GruposMesaService(
 
         var now = timeProvider.GetUtcNow();
         group.Activo = false;
+        group.PermitePedidoTrasAnulacion = false;
         group.FechaCierre = now;
         group.IdUsuarioCierre = userId;
         foreach (var table in tables)
         {
             table.IdGrupo = null;
             table.Estado = MesaStates.Libre;
+            table.PermitePedidoTrasAnulacion = false;
         }
 
         auditRecorder.Record(

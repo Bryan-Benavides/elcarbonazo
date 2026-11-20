@@ -8,6 +8,7 @@ public sealed class GrupoMesa
     public DateTimeOffset FechaCreacion { get; set; }
     public DateTimeOffset? FechaCierre { get; set; }
     public bool Activo { get; set; } = true;
+    public bool PermitePedidoTrasAnulacion { get; set; }
 
     public Usuario UsuarioCreacion { get; set; } = null!;
     public Usuario? UsuarioCierre { get; set; }

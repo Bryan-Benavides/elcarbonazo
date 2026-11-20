@@ -1,0 +1,246 @@
+<UserControl x:Class="ElCarbonazo.Desktop.Views.PedidosSalonView"
+             x:Name="Root"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:ElCarbonazo.Desktop.ViewModels"
+             xmlns:design="using:ElCarbonazo.Desktop.Design"
+             xmlns:models="using:ElCarbonazo.Desktop.Models"
+             mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
+             x:CompileBindings="True" x:DataType="vm:PedidosSalonViewModel"
+             Background="{StaticResource FondoPrincipalBrush}">
+    <Design.DataContext><design:PedidosSalonDesignViewModel /></Design.DataContext>
+    <UserControl.Resources>
+        <ControlTheme x:Key="BotonPedidoTheme" TargetType="Button">
+            <Setter Property="Background" Value="#3F3F46" />
+            <Setter Property="Foreground" Value="#F3F4F6" />
+            <Setter Property="BorderBrush" Value="#71717A" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover"><Setter Property="Background" Value="#565660" /><Setter Property="BorderBrush" Value="#FF784E" /></Style>
+            <Style Selector="^:pressed"><Setter Property="Background" Value="#26262A" /></Style>
+            <Style Selector="^:focus-visible"><Setter Property="BorderBrush" Value="#F3F4F6" /><Setter Property="BorderThickness" Value="2" /></Style>
+            <Style Selector="^:disabled"><Setter Property="Background" Value="#303034" /><Setter Property="Foreground" Value="#A1A1AA" /><Setter Property="BorderBrush" Value="#52525B" /></Style>
+        </ControlTheme>
+    </UserControl.Resources>
+    <UserControl.Styles>
+        <Style Selector="Button"><Setter Property="Theme" Value="{StaticResource BotonPedidoTheme}" /></Style>
+        <Style Selector="Button.primario"><Setter Property="Background" Value="#9F3517" /><Setter Property="BorderBrush" Value="#D75630" /></Style>
+        <Style Selector="Button.primario:disabled"><Setter Property="Background" Value="#303034" /><Setter Property="Foreground" Value="#A1A1AA" /><Setter Property="BorderBrush" Value="#52525B" /></Style>
+        <Style Selector="Button.activa"><Setter Property="BorderBrush" Value="#FF784E" /><Setter Property="Background" Value="#71331F" /></Style>
+        <Style Selector="Border.panelPedido">
+            <Setter Property="Background" Value="{StaticResource FondoPanelBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BordePanelBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="12" />
+        </Style>
+        <Style Selector="Button:focus-visible">
+            <Setter Property="BorderBrush" Value="{StaticResource TextoPrincipalBrush}" />
+            <Setter Property="BorderThickness" Value="2" />
+        </Style>
+    </UserControl.Styles>
+    <Grid>
+    <Grid RowDefinitions="Auto,Auto,*" Margin="16" RowSpacing="12"
+          IsEnabled="{Binding !ConfirmandoAnulacion}">
+        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+            <Button Content="← Mesas" Command="{Binding VolverCommand}" IsEnabled="{Binding PuedeVolver}" AutomationProperties.Name="Volver al mapa de mesas" />
+            <StackPanel Grid.Column="1" Spacing="2">
+                <TextBlock Text="Pedidos de salón" FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                <TextBlock Text="{Binding Destino}" Foreground="{StaticResource TextoSecundarioBrush}" />
+            </StackPanel>
+            <TextBlock Grid.Column="2" Text="DEMOSTRACIÓN" Foreground="#FFB488" FontWeight="Bold" VerticalAlignment="Center" />
+        </Grid>
+        <Border Grid.Row="1" Classes="panelPedido" Padding="10,6">
+            <TextBlock Text="{Binding EstadoLectura}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+        </Border>
+        <Grid Grid.Row="2" ColumnDefinitions="*,*,*" ColumnSpacing="10">
+            <Border Classes="panelPedido">
+                <Grid RowDefinitions="Auto,Auto,*" RowSpacing="10">
+                    <StackPanel Spacing="3">
+                        <TextBlock Text="Catálogo" FontSize="19" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <TextBlock Text="Precios ficticios · sin control de inventario" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource TextoSecundarioBrush}" />
+                    </StackPanel>
+                    <WrapPanel Grid.Row="1">
+                        <Button Content="Comida" Classes.activa="{Binding CategoriaComida}" Command="{Binding ElegirCategoriaCommand}" CommandParameter="Comida" Margin="0,0,4,4" />
+                        <Button Content="Bebida" Classes.activa="{Binding CategoriaBebida}" Command="{Binding ElegirCategoriaCommand}" CommandParameter="Bebida" Margin="0,0,4,4" />
+                        <Button Content="Licor" Classes.activa="{Binding CategoriaLicor}" Command="{Binding ElegirCategoriaCommand}" CommandParameter="Licor" Margin="0,0,4,4" />
+                    </WrapPanel>
+                    <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+                        <TextBlock Text="No hay productos disponibles en esta categoría." IsVisible="{Binding CatalogoVacio}" TextWrapping="Wrap" Foreground="{StaticResource TextoSecundarioBrush}" />
+                        <ItemsControl ItemsSource="{Binding Productos}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:ProductoPedidoDto">
+                                    <Border Background="{StaticResource FondoPrincipalBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,8">
+                                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto" RowSpacing="6">
+                                            <TextBlock Text="{Binding Nombre}" TextWrapping="Wrap" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                            <TextBlock Grid.Row="1" Text="{Binding Precio, StringFormat='C$ {0:N2}'}" Foreground="#FFB488" FontWeight="Bold" />
+                                            <Button Grid.Column="1" Grid.RowSpan="2" Content="+" FontSize="18" MinWidth="42" IsEnabled="{Binding #Root.((vm:PedidosSalonViewModel)DataContext).PuedeAgregar}" Command="{Binding #Root.((vm:PedidosSalonViewModel)DataContext).AgregarCommand}" CommandParameter="{Binding}" AutomationProperties.Name="Agregar producto al borrador" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+            <Border Grid.Column="1" Classes="panelPedido">
+                <Grid RowDefinitions="Auto,*,Auto" RowSpacing="10">
+                    <StackPanel Spacing="3">
+                        <TextBlock Text="Borrador local" FontSize="19" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <TextBlock Text="Sin confirmar · no enviado" Foreground="#FFB488" FontSize="12" />
+                    </StackPanel>
+                    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+                        <ItemsControl ItemsSource="{Binding Borrador}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:LineaSalonViewModel">
+                                    <Border Background="{StaticResource FondoPrincipalBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,8">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="{Binding Producto.Nombre}" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="5">
+                                                <Button Content="−" Command="{Binding DecrementarCommand}" IsEnabled="{Binding #Root.((vm:PedidosSalonViewModel)DataContext).PuedeEditar}" AutomationProperties.Name="Reducir cantidad" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Cantidad}" VerticalAlignment="Center" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                                <Button Grid.Column="2" Content="+" Command="{Binding IncrementarCommand}" IsEnabled="{Binding #Root.((vm:PedidosSalonViewModel)DataContext).PuedeEditar}" AutomationProperties.Name="Aumentar cantidad" />
+                                                <Button Grid.Column="4" Content="Quitar" Command="{Binding #Root.((vm:PedidosSalonViewModel)DataContext).RetirarCommand}" IsEnabled="{Binding #Root.((vm:PedidosSalonViewModel)DataContext).PuedeEditar}" CommandParameter="{Binding}" />
+                                            </Grid>
+                                            <TextBlock Text="{Binding Importe}" Foreground="#FFB488" FontWeight="SemiBold" />
+                                            <TextBox Text="{Binding Notas, Mode=TwoWay}" IsEnabled="{Binding #Root.((vm:PedidosSalonViewModel)DataContext).PuedeEditar}" PlaceholderText="Nota para cocina" AutomationProperties.Name="Nota de la línea" />
+                                            <TextBlock Text="{Binding AyudaNota}" Foreground="{StaticResource TextoSecundarioBrush}" FontSize="11" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <ScrollViewer Grid.Row="2" MaxHeight="200" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="Subtotal estimado" Foreground="{StaticResource TextoSecundarioBrush}" />
+                        <TextBlock Text="{Binding SubtotalTexto}" FontSize="19" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <TextBlock Text="{Binding Mensaje}" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <TextBlock Text="El catálogo cambió. Retire y agregue las líneas afectadas para revisar sus precios." IsVisible="{Binding BorradorDesactualizado}" TextWrapping="Wrap" Foreground="#FFBF36" FontSize="12" />
+                        <TextBlock Text="¿Confirmar el envío de estas líneas a cocina?" IsVisible="{Binding ConfirmandoEnvio}" TextWrapping="Wrap" Foreground="#FFB488" />
+                        <WrapPanel IsVisible="{Binding ConfirmandoEnvio}">
+                            <Button Content="Cancelar" Command="{Binding CancelarEnvioCommand}" Margin="0,0,6,4" />
+                            <Button Classes="primario" Content="Confirmar envío" Command="{Binding ConfirmarEnvioCommand}" Margin="0,0,0,4" />
+                        </WrapPanel>
+                        <Button Classes="primario" Content="Enviar a cocina" Command="{Binding SolicitarEnvioCommand}" IsEnabled="{Binding PuedeEnviar}" HorizontalAlignment="Stretch" />
+                        <Button Content="Repetir la misma solicitud" Command="{Binding RepetirEnvioCommand}" IsVisible="{Binding ResultadoIncierto}" IsEnabled="{Binding PuedeRepetir}" HorizontalAlignment="Stretch" />
+                    </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+            <Border Grid.Column="2" Classes="panelPedido">
+                <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="10">
+                    <TextBlock Text="Cuenta confirmada" FontSize="19" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <StackPanel Grid.Row="1" Spacing="4">
+                        <TextBlock Text="{Binding EstadoCuenta}" TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <TextBlock Text="Cuenta anterior sin detalle disponible · solo lectura" IsVisible="{Binding CuentaLegada}" TextWrapping="Wrap" Foreground="#FFBF36" />
+                        <TextBlock Text="Hay comandas listas para retirar de cocina" IsVisible="{Binding HayListas}" TextWrapping="Wrap" Foreground="#27E7A0" />
+                    </StackPanel>
+                    <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
+                        <ItemsControl ItemsSource="{Binding ComandasAnulables}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ComandaAnulableViewModel">
+                                    <Border Background="{StaticResource FondoPrincipalBrush}" BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,8">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="{Binding Titulo}" FontWeight="Bold" TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
+                                            <Button Content="Anular comanda completa" Command="{Binding SolicitarCommand}"
+                                                    IsEnabled="{Binding #Root.((vm:PedidosSalonViewModel)DataContext).PuedeAnular}"
+                                                    AutomationProperties.Name="Anular la comanda completa" />
+                                            <ItemsControl ItemsSource="{Binding Lineas}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:LineaAnulableViewModel">
+                                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,3,0,3">
+                                                            <TextBlock Text="{Binding Texto}" TextWrapping="Wrap" VerticalAlignment="Center"
+                                                                       Foreground="{StaticResource TextoPrincipalBrush}" />
+                                                            <Button Grid.Column="1" Content="Anular línea" Command="{Binding SolicitarCommand}"
+                                                                    IsEnabled="{Binding #Root.((vm:PedidosSalonViewModel)DataContext).PuedeAnular}"
+                                                                    AutomationProperties.Name="Anular esta línea" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <StackPanel Grid.Row="3" Spacing="6">
+                        <TextBlock Text="Total de cuenta" Foreground="{StaticResource TextoSecundarioBrush}" />
+                        <TextBlock Text="{Binding TotalCuenta}" FontSize="19" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <TextBlock Text="No es factura ni pago." Foreground="{StaticResource TextoSecundarioBrush}" FontSize="12" />
+                        <TextBlock Text="{Binding MensajeAnulacion}" IsVisible="{Binding HayMensajeAnulacion}"
+                                   TextWrapping="Wrap" Foreground="#FFBF36" FontSize="12" />
+                        <TextBlock Text="Esta operación pertenece a otro usuario. Solo una Jefa puede intervenirla y la intervención quedará auditada."
+                                   IsVisible="{Binding AdvertenciaAnulacionAjena}" TextWrapping="Wrap"
+                                   Foreground="#FFB488" FontSize="12" />
+                        <WrapPanel IsVisible="{Binding PuedeRecuperarAnulacion}">
+                            <Button Content="Consultar operación" Command="{Binding ConsultarOperacionAnulacionCommand}"
+                                    IsEnabled="{Binding PuedeRecuperarAnulacion}" Margin="0,0,6,4" />
+                            <Button Content="Establecer barrera" Command="{Binding SolicitarBarreraCommand}"
+                                    IsEnabled="{Binding PuedeEstablecerBarrera}" Margin="0,0,0,4" />
+                        </WrapPanel>
+                        <Border IsVisible="{Binding ConfirmandoBarreraVisible}" Background="{StaticResource FondoPrincipalBrush}"
+                                BorderBrush="#FFBF36" BorderThickness="1" CornerRadius="6" Padding="10">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="¿Establecer barrera? Impide una ejecución tardía; no deshace un resultado ya confirmado."
+                                           TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" FontSize="12" />
+                                <WrapPanel>
+                                    <Button Content="Cancelar" Command="{Binding CancelarBarreraCommand}" Margin="0,0,6,0" />
+                                    <Button Classes="primario" Content="Confirmar barrera" Command="{Binding ConfirmarBarreraCommand}" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+        </Grid>
+        <Border Background="#CC000000" IsVisible="{Binding ConfirmandoAnulacion}">
+            <Border Background="{StaticResource FondoPanelBrush}" BorderBrush="{StaticResource BordePanelBrush}"
+                    BorderThickness="1" CornerRadius="10" Padding="18" MaxWidth="560"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                <ScrollViewer MaxHeight="620" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Autorizar anulación" FontSize="20" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <TextBlock Text="{Binding ResumenAnulacion}" TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <TextBlock Text="Se devolverá exactamente el consumo registrado y se generará una alerta para Cocina. No se puede deshacer."
+                                   TextWrapping="Wrap" Foreground="#FFB488" FontSize="12" />
+                        <TextBlock Text="Motivo (5–250 caracteres)" Foreground="{StaticResource TextoSecundarioBrush}" />
+                        <TextBox Text="{Binding MotivoAnulacion, Mode=TwoWay}" AcceptsReturn="True" TextWrapping="Wrap"
+                                 MaxLength="250" MinHeight="64" PlaceholderText="Explique el motivo de la anulación"
+                                 AutomationProperties.Name="Motivo de la anulación" />
+                        <TextBlock Text="Correo de la Jefa autorizadora" Foreground="{StaticResource TextoSecundarioBrush}" />
+                        <TextBox Text="{Binding EmailJefa, Mode=TwoWay}" MaxLength="254"
+                                 PlaceholderText="jefa@elcarbonazo.local" AutomationProperties.Name="Correo de la Jefa" />
+                        <TextBlock Text="Contraseña de la Jefa (se revalida; no crea otra sesión)" Foreground="{StaticResource TextoSecundarioBrush}" />
+                        <TextBox Text="{Binding ContrasenaJefa, Mode=TwoWay}" PasswordChar="●" MaxLength="256"
+                                 AutomationProperties.Name="Contraseña de la Jefa" />
+                        <TextBlock Text="{Binding MensajeAnulacion}" IsVisible="{Binding HayMensajeAnulacion}"
+                                   TextWrapping="Wrap" Foreground="#FFBF36" />
+                        <WrapPanel HorizontalAlignment="Right">
+                            <Button Content="Cancelar" Command="{Binding CancelarAnulacionCommand}"
+                                    IsEnabled="{Binding PuedeCancelarAnulacion}" Margin="0,0,8,0" />
+                            <Button Classes="primario" Content="Confirmar anulación"
+                                    Command="{Binding ConfirmarAnulacionCommand}" IsEnabled="{Binding PuedeConfirmarAnulacion}" />
+                        </WrapPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Border>
+    </Grid>
+</UserControl>

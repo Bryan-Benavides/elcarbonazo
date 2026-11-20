@@ -319,7 +319,7 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 
-var commandModes = new[] { "--bootstrap-admin", "--seed-demo-catalog", "--seed-catalogo-defensa", "--provisionar-hmac-autorizacion", "--recuperar-hmac-autorizacion" };
+var commandModes = new[] { "--bootstrap-admin", "--seed-demo-catalog", "--seed-catalogo-defensa", "--provisionar-hmac-autorizacion", "--recuperar-hmac-autorizacion", "--preparar-cuentas-defensa" };
 if (commandModes.Count(mode => args.Contains(mode, StringComparer.Ordinal)) > 1)
 {
     Console.Error.WriteLine("Seleccione únicamente una acción administrativa.");
@@ -340,6 +340,20 @@ if (args.Contains("--seed-demo-catalog", StringComparer.Ordinal))
     return await DemoCatalogCommand.RunAsync(
         scope.ServiceProvider.GetRequiredService<DemoCatalogSeeder>(),
         CancellationToken.None);
+}
+
+if (args.Contains("--preparar-cuentas-defensa", StringComparer.Ordinal))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    return await CuentasDefensaCommand.RunAsync(
+        scope.ServiceProvider.GetRequiredService<AppDbContext>(),
+        scope.ServiceProvider.GetRequiredService<IPasswordHasher>(),
+        scope.ServiceProvider.GetRequiredService<IAuditRecorder>(),
+        app.Environment.IsDevelopment(),
+        builder.Configuration["CuentasDefensa:ClaveJefa"],
+        builder.Configuration["CuentasDefensa:ClaveCocina"],
+        builder.Configuration["CuentasDefensa:ClaveMesero"],
+        Console.In, Console.Out, CancellationToken.None);
 }
 
 if (args.Contains("--seed-catalogo-defensa", StringComparer.Ordinal))

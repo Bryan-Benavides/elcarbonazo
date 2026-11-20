@@ -6,6 +6,7 @@
 
 - Reutilizar solución/.NET 10 y paquetes existentes: API ASP.NET Core + EF Core/Npgsql; Desktop Avalonia 12/SukiUI/MVVM con REST; PostgreSQL. Controllers delgados, servicios coordinan dominio/transacción, entidades no dependen de HTTP, DTOs nunca exponen EF.
 - Desktop/pruebas no referencian API, EF Core ni Npgsql. Code-behind solo inicialización. Reutilizar `SessionManager`; polling no renueva sesión ni es actividad.
+- La priorización y filtro de cuentas históricas se implementan en Desktop sobre cada página REST recibida; no alterar cursor ni orden contractual del API. No almacenar/combinar páginas para inferir que una cuenta desapareció o cambió de estado. Mantener el botón de siguiente página para que el historial completo siga accesible; elegibilidad de cobro sigue validándose en API.
 - API decide roles, totales, elegibilidad, referencias, estados y resultado. Sin dependencia de Internet.
 - No agregar paquetes ni actualizar versiones sin análisis y aprobación de compatibilidad. Todos los tiempos persistidos UTC mediante `TimeProvider`; presentar localmente en `America/Managua`.
 - 002 sigue pospuesto y mesa-específico. 004 debe implementar protocolo durable para sus tipos de operación sin afirmar que 002 ya existe ni modificar contratos de 001 de modo implícito. Durante implementación evaluar extracción futura compartida solo si mantiene los contratos separados y recibe aprobación.

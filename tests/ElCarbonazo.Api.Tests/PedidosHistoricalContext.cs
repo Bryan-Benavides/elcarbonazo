@@ -12,5 +12,7 @@ internal sealed class PedidosHistoricalContext(string connectionString)
         base.OnModelCreating(modelBuilder);
         modelBuilder.Entity<Comanda>().Ignore(x => x.RevisionDetalles);
         modelBuilder.Entity<DetallePedido>().Ignore(x => x.Cancelado);
+        modelBuilder.Entity<Mesa>().Ignore(x => x.PermitePedidoTrasAnulacion);
+        modelBuilder.Entity<GrupoMesa>().Ignore(x => x.PermitePedidoTrasAnulacion);
     }
 }

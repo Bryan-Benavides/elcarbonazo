@@ -12,6 +12,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     private readonly ISessionManager? _sessionManager;
     private readonly IServerClock? _serverClock;
     private readonly CajaRecoveryViewModel? _recoveryPanel;
+    private readonly Func<AnulacionCoordinator?>? _anulacionFactory;
     private readonly CancellationTokenSource _lifetime = new();
 
     [ObservableProperty]
@@ -43,13 +44,15 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         INavigationService navigation,
         ISessionManager? sessionManager,
         IServerClock? serverClock,
-        CajaRecoveryViewModel? recoveryPanel = null)
+        CajaRecoveryViewModel? recoveryPanel = null,
+        Func<AnulacionCoordinator?>? anulacionFactory = null)
     {
         _currentViewModel = initialViewModel;
         _navigation = navigation;
         _sessionManager = sessionManager;
         _serverClock = serverClock;
         _recoveryPanel = recoveryPanel;
+        _anulacionFactory = anulacionFactory;
         _navigation.Navigated += OnNavigated;
         if (_sessionManager is not null)
         {
@@ -165,7 +168,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     {
         if (_sessionManager is not null && CurrentViewModel is not SecurityErrorViewModel)
         {
-            _navigation.Navigate(new LoginViewModel(_sessionManager, _navigation, _recoveryPanel));
+            _navigation.Navigate(new LoginViewModel(_sessionManager, _navigation, _recoveryPanel, _anulacionFactory));
         }
     }
 

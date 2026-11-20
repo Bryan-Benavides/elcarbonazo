@@ -104,6 +104,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Numero).HasColumnName("numero").IsRequired();
             entity.Property(e => e.Capacidad).HasColumnName("capacidad").IsRequired();
             entity.Property(e => e.Estado).HasColumnName("estado").HasMaxLength(20).IsRequired();
+            entity.Property(e => e.PermitePedidoTrasAnulacion).HasColumnName("permite_pedido_tras_anulacion").HasDefaultValue(false);
             entity.Property(e => e.Version).IsRowVersion();
 
             // Índice único para numero
@@ -211,6 +212,7 @@ public class AppDbContext : DbContext
                 .IsRequired();
             entity.Property(e => e.FechaCierre).HasColumnName("fecha_cierre").IsRequired(false);
             entity.Property(e => e.Activo).HasColumnName("activo").HasDefaultValue(true).IsRequired();
+            entity.Property(e => e.PermitePedidoTrasAnulacion).HasColumnName("permite_pedido_tras_anulacion").HasDefaultValue(false);
 
             entity.HasOne(e => e.UsuarioCreacion)
                 .WithMany(e => e.GruposCreados)

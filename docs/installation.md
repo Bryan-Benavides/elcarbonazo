@@ -45,7 +45,7 @@ Para ejecutar pedidos 003 en una base local, la API también debe tener aplicado
 
 ### 006: primera provisión HMAC — solo instalación autorizada
 
-El comando `--provisionar-hmac-autorizacion` realiza únicamente la primera provisión del registro HMAC de 006. No aplica migraciones ni se ejecuta al iniciar la API. Se probó su ejecución como proceso separado contra PostgreSQL temporal; la autorización superior completa de 006 aún no está implementada.
+El comando `--provisionar-hmac-autorizacion` realiza únicamente la primera provisión del registro HMAC de 006. No aplica migraciones ni se ejecuta al iniciar la API. La autorización superior y la anulación están implementadas para el perfil local; consulte `docs/validacion-006.md` para la evidencia y los límites pendientes.
 
 Antes de usarlo en una base persistente, confirmar expresamente el destino y obtener autorización. Aprovisionar una clave aleatoria independiente de JWT, de al menos 32 bytes, desde una fuente segura externa a Git; configurar su Base64 mediante `AutorizacionSuperior__ClaveHmac` y mantenerlo protegido y estable entre reinicios. No imprimirlo, escribirlo en archivos versionados ni pasarlo como argumento de línea de comandos. La longitud no demuestra por sí sola que una clave sea aleatoria. Configurar también la conexión administrativa y la clave JWT existente mediante sus fuentes protegidas.
 

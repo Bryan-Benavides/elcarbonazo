@@ -1,0 +1,58 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ElCarbonazo.Desktop.App"
+             xmlns:suki="clr-namespace:SukiUI;assembly=SukiUI"
+             xmlns:views="using:ElCarbonazo.Desktop.Views"
+             xmlns:vm="using:ElCarbonazo.Desktop.ViewModels"
+             RequestedThemeVariant="Light">
+
+    <Application.Styles>
+        <suki:SukiTheme ThemeColor="Red" Locale="es-ES" />
+    </Application.Styles>
+
+    <Application.DataTemplates>
+        <DataTemplate DataType="{x:Type vm:LoginViewModel}">
+            <views:LoginView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ConfigurationErrorViewModel}">
+            <views:ConfigurationErrorView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SecurityErrorViewModel}">
+            <views:SecurityErrorView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:MesasViewModel}">
+            <views:MesasView />
+        </DataTemplate>
+    </Application.DataTemplates>
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- Design System Colors - El Carbonazo -->
+            <Color x:Key="ColorVino">#8C2331</Color>
+            <Color x:Key="ColorCarbón">#2A2421</Color>
+            <Color x:Key="ColorHueso">#F8F5F0</Color>
+            <Color x:Key="ColorBeige">#E8E0D5</Color>
+            <Color x:Key="ColorMesaLibre">#7CB342</Color>
+            <Color x:Key="ColorMesaOcupada">#8C2331</Color>
+            <Color x:Key="ColorMesaReservada">#E67E22</Color>
+            <Color x:Key="ColorMesaAgrupada">#2E86AB</Color>
+
+            <!-- Carbón & Fuego: recursos compartidos por el nuevo mapa. -->
+            <SolidColorBrush x:Key="FondoPrincipalBrush" Color="#1E1E1E" />
+            <SolidColorBrush x:Key="FondoPanelBrush" Color="#2D2D30" />
+            <SolidColorBrush x:Key="BordePanelBrush" Color="#3F3F46" />
+            <SolidColorBrush x:Key="TextoPrincipalBrush" Color="#F3F4F6" />
+            <SolidColorBrush x:Key="TextoSecundarioBrush" Color="#9CA3AF" />
+            <SolidColorBrush x:Key="AcentoFuegoBrush" Color="#FF5722" />
+
+            <SolidColorBrush x:Key="ColorVinoBrush" Color="{StaticResource ColorVino}" />
+            <SolidColorBrush x:Key="ColorCarbónBrush" Color="{StaticResource ColorCarbón}" />
+            <SolidColorBrush x:Key="ColorHuesoBrush" Color="{StaticResource ColorHueso}" />
+            <SolidColorBrush x:Key="ColorBeigeBrush" Color="{StaticResource ColorBeige}" />
+            <SolidColorBrush x:Key="ColorMesaLibreBrush" Color="{StaticResource ColorMesaLibre}" />
+            <SolidColorBrush x:Key="ColorMesaOcupadaBrush" Color="{StaticResource ColorMesaOcupada}" />
+            <SolidColorBrush x:Key="ColorMesaReservadaBrush" Color="{StaticResource ColorMesaReservada}" />
+            <SolidColorBrush x:Key="ColorMesaAgrupadaBrush" Color="{StaticResource ColorMesaAgrupada}" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

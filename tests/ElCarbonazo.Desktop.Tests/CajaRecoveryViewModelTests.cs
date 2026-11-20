@@ -9,6 +9,45 @@ namespace ElCarbonazo.Desktop.Tests;
 public sealed class CajaRecoveryViewModelTests
 {
     [Fact]
+    public async Task Accounts_filter_prioritizes_pending_and_cobrable_and_keeps_history_accessible()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"caja-filter-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "journal.json");
+        var installation = Guid.NewGuid();
+        try
+        {
+            File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                version = 1,
+                instalacion = installation,
+                estado = "SinPendientes",
+                operacion = (Guid?)null,
+                propietario = (int?)null,
+                tipo = (string?)null
+            }));
+            File.WriteAllText(path + ".lock", "");
+            var store = new CajaRecoveryStore(path, installation, new Policy());
+            var vm = new CajaRecoveryViewModel(store, new FakeSession(), () => 1);
+            vm.AttachAccountsReader(new MixedAccountsReader());
+            Assert.True(vm.Open(() => { }));
+
+            await vm.ConsultarCuentasCommand.ExecuteAsync(null);
+
+            Assert.Equal([8, 7, 6], vm.CuentasVisibles.Select(account => account.IdPedido));
+            vm.FiltroCuentas = "Todas";
+            Assert.Equal([8, 7, 6, 5], vm.CuentasVisibles.Select(account => account.IdPedido));
+            Assert.Equal(4, vm.Cuentas.Count);
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(path + ".lock");
+            Directory.Delete(directory);
+        }
+    }
+
+    [Fact]
     public async Task External_payment_session_change_during_execution_preserves_pending_operation()
     {
         var directory = Path.Combine(Path.GetTempPath(), $"caja-session-{Guid.NewGuid():N}");
@@ -587,6 +626,21 @@ public sealed class CajaRecoveryViewModelTests
             Task.FromResult<CajaCuentasPaginaVista?>(new CajaCuentasPaginaVista(
                 [new CajaCuentaVista(3, "Mesa 01", "Listo", 10, true, "Cobrable", [new CajaCuentaLineaVista("Comida")], new string('a', 64)),
                  new CajaCuentaVista(4, "Mesa 02", "Abierto", 10, false, "Comandas pendientes", [], null)], null));
+    }
+
+    private sealed class MixedAccountsReader : ICajaCuentasReader
+    {
+        public Task<CajaCuentasPaginaVista?> ReadAsync(int actor, string? cursor, CancellationToken cancellationToken)
+        {
+            Assert.Null(cursor);
+            return Task.FromResult<CajaCuentasPaginaVista?>(new CajaCuentasPaginaVista(
+            [
+                new CajaCuentaVista(5, "Mesa 05", "Pagado", 10, false, "Pagada", []),
+                new CajaCuentaVista(6, "Mesa 06", "Abierto", 10, false, "Pendiente", []),
+                new CajaCuentaVista(7, "Mesa 07", "Listo", 10, false, "Comandas pendientes", []),
+                new CajaCuentaVista(8, "Mesa 08", "Listo", 10, true, "Cobrable", [], new string('a', 64))
+            ], null));
+        }
     }
 
     private sealed class CashTransport(ICajaRecoverySnapshotSink sink, bool uncertain, bool reconciliationFails) : ICajaRecoveryTransport

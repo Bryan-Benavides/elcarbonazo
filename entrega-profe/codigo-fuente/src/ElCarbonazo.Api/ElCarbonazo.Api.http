@@ -1,0 +1,28 @@
+@ElCarbonazo.Api_HostAddress = http://localhost:5261
+@token = pegue-aqui-el-token-devuelto-por-login
+
+POST {{ElCarbonazo.Api_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "nombre": "admin",
+  "contrasena": "admin123"
+}
+
+###
+
+GET {{ElCarbonazo.Api_HostAddress}}/api/mesas
+Accept: application/json
+Authorization: Bearer {{token}}
+
+###
+
+PUT {{ElCarbonazo.Api_HostAddress}}/api/mesas/1/estado
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "estado": "Ocupada"
+}
+
+###

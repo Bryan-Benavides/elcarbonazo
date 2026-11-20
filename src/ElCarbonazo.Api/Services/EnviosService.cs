@@ -74,6 +74,7 @@ public sealed class EnviosService(AppDbContext context, IAuditRecorder audit, Ti
         }
 
         Mesa? mesa = null;
+        GrupoMesa? grupo = null;
         if (request.MesaId is int mesaId)
         {
             mesa = await context.Mesas.FromSqlInterpolated($"""
@@ -91,14 +92,12 @@ public sealed class EnviosService(AppDbContext context, IAuditRecorder audit, Ti
                 SELECT * FROM grupo_mesa WHERE id_grupo = {groupId} FOR UPDATE
                 """).SingleOrDefaultAsync(cancellationToken);
             if (group is null || !group.Activo) return new EnvioResult(404, "HTTP_NO_ENCONTRADO");
+            grupo = group;
             var members = await context.Mesas.FromSqlInterpolated($"""
                 SELECT xmin, * FROM mesa WHERE id_grupo = {groupId} ORDER BY id_mesa FOR UPDATE
                 """).ToListAsync(cancellationToken);
             if (members.Count < 2 || members.Any(item => item.Estado != MesaStates.Agrupada))
                 return new EnvioResult(409, "DESTINO_STATE_CONFLICT");
-            if (await context.Pedidos.AsNoTracking().AnyAsync(item =>
-                    item.IdGrupo == groupId && item.Estado == PedidoStates.Cancelado, cancellationToken))
-                return new EnvioResult(409, "GRUPO_CANCELADO_REQUIERE_CIERRE");
             if (await context.Pedidos.AsNoTracking().AnyAsync(item => item.IdGrupo == groupId && item.Estado == PedidoStates.Pagado, cancellationToken))
                 return new EnvioResult(409, "GRUPO_PAGADO_REQUIERE_CIERRE");
         }
@@ -106,6 +105,10 @@ public sealed class EnviosService(AppDbContext context, IAuditRecorder audit, Ti
         var pedido = await context.Pedidos.SingleOrDefaultAsync(item =>
             (request.MesaId != null ? item.IdMesa == request.MesaId : item.IdGrupo == request.GrupoId) &&
             PedidoStates.Active.Contains(item.Estado), cancellationToken);
+        if (grupo is not null && pedido is null && !grupo.PermitePedidoTrasAnulacion &&
+            await context.Pedidos.AsNoTracking().AnyAsync(item =>
+                item.IdGrupo == grupo.IdGrupo && item.Estado == PedidoStates.Cancelado, cancellationToken))
+            return new EnvioResult(409, "GRUPO_CANCELADO_REQUIERE_CIERRE");
         if (pedido is not null)
         {
             pedido = await context.Pedidos.FromSqlInterpolated($"""
@@ -116,7 +119,8 @@ public sealed class EnviosService(AppDbContext context, IAuditRecorder audit, Ti
             if (await CajaPendientes.HayCobroParaCuentaAsync(context, pedido.IdPedido, Guid.Empty, cancellationToken))
                 return new EnvioResult(409, "OPERACION_NO_TERMINAL");
         }
-        if (mesa is not null && ((pedido is null && mesa.Estado is not (MesaStates.Libre or MesaStates.Reservada)) ||
+        if (mesa is not null && ((pedido is null && mesa.Estado is not (MesaStates.Libre or MesaStates.Reservada) &&
+                                  !(mesa.Estado == MesaStates.Ocupada && mesa.PermitePedidoTrasAnulacion)) ||
                                  (pedido is not null && mesa.Estado != MesaStates.Ocupada)))
             return new EnvioResult(409, "DESTINO_STATE_CONFLICT");
 
@@ -185,7 +189,12 @@ public sealed class EnviosService(AppDbContext context, IAuditRecorder audit, Ti
         {
             pedido = new Pedido { IdMesa = request.MesaId, IdGrupo = request.GrupoId, IdUsuario = userId, FechaHora = now };
             context.Pedidos.Add(pedido);
-            if (mesa is not null) mesa.Estado = MesaStates.Ocupada;
+            if (mesa is not null)
+            {
+                mesa.Estado = MesaStates.Ocupada;
+                mesa.PermitePedidoTrasAnulacion = false;
+            }
+            if (grupo is not null) grupo.PermitePedidoTrasAnulacion = false;
         }
         pedido.Subtotal += amount;
         pedido.Impuestos = 0;

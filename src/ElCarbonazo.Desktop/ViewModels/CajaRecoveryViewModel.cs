@@ -44,6 +44,8 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
     [ObservableProperty] private string _fondoInicial = "0.00";
     [ObservableProperty] private string _estadoCuentas = "Consulte las cuentas para ver sus estados.";
     [ObservableProperty] private bool _hayMasCuentas;
+    [ObservableProperty] private string _filtroCuentas = "Pendientes";
+    public IReadOnlyList<string> FiltrosCuentas { get; } = ["Pendientes", "Todas"];
     [ObservableProperty] private bool _hayMasComprobantes;
     [ObservableProperty] private string _estadoComprobantes = "Consulte los comprobantes internos.";
     public ObservableCollection<CajaComprobanteResumen> Comprobantes { get; } = [];
@@ -113,6 +115,14 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
         : "Introduzca efectivo suficiente para calcular el vuelto previsto.";
     partial void OnEfectivoRecibidoChanged(string value) => ConfirmarCobro = false;
     public ObservableCollection<CajaCuentaVista> Cuentas { get; } = [];
+    public IEnumerable<CajaCuentaVista> CuentasVisibles => FiltroCuentas == "Pendientes"
+        ? Cuentas.Where(account => account.Estado is not ("Pagado" or "Cancelado"))
+            .OrderByDescending(account => account.Cobrable)
+            .ThenByDescending(account => account.IdPedido)
+        : Cuentas.OrderByDescending(account => account.Cobrable)
+            .ThenByDescending(account => account.IdPedido);
+
+    partial void OnFiltroCuentasChanged(string value) => OnPropertyChanged(nameof(CuentasVisibles));
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PuedeAbrirTurno))]
     private bool _confirmarApertura;
@@ -223,6 +233,7 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
     {
         CancelarSeleccionCobro();
         Cuentas.Clear();
+        OnPropertyChanged(nameof(CuentasVisibles));
         _nextAccountsCursor = null;
         HayMasCuentas = false;
         EstadoCuentas = "Consulte las cuentas para ver sus estados.";
@@ -391,6 +402,7 @@ public partial class CajaRecoveryViewModel : ViewModelBase, ICajaRecoverySnapsho
                 return;
             }
             foreach (var account in page.Items) Cuentas.Add(account);
+            OnPropertyChanged(nameof(CuentasVisibles));
             if (_repeatedReference is not null) _reviewedAccountsAfterCollision = true;
             _nextAccountsCursor = page.CursorSiguiente;
             HayMasCuentas = _nextAccountsCursor is not null;

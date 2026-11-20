@@ -97,11 +97,14 @@ public sealed class AnulacionEjecucionService(
         var dest = await context.Pedidos.AsNoTracking().Where(x => x.IdPedido == pedidoId)
             .Select(x => new { x.IdMesa, x.IdGrupo }).SingleOrDefaultAsync(ct);
         if (dest is null) return await RechazarAsync(404, "RECURSO_NO_ENCONTRADO");
+        GrupoMesa? destinoGrupo = null;
+        Mesa? destinoMesa = null;
         if (dest.IdGrupo is int groupId)
         {
             var group = await context.GruposMesa.FromSqlInterpolated(
                 $"SELECT * FROM grupo_mesa WHERE id_grupo = {groupId} FOR UPDATE").SingleOrDefaultAsync(ct);
             if (group is null) return await RechazarAsync(409, "DESTINO_STATE_CONFLICT");
+            destinoGrupo = group;
             await context.Mesas.FromSqlInterpolated($"""
                 SELECT xmin, * FROM mesa WHERE id_grupo = {groupId} ORDER BY id_mesa FOR UPDATE
                 """).ToListAsync(ct);
@@ -111,6 +114,7 @@ public sealed class AnulacionEjecucionService(
             var mesa = await context.Mesas.FromSqlInterpolated(
                 $"SELECT xmin, * FROM mesa WHERE id_mesa = {mesaId} FOR UPDATE").SingleOrDefaultAsync(ct);
             if (mesa is null) return await RechazarAsync(409, "DESTINO_STATE_CONFLICT");
+            destinoMesa = mesa;
         }
         else return await RechazarAsync(409, "DESTINO_STATE_CONFLICT");
 
@@ -218,6 +222,12 @@ public sealed class AnulacionEjecucionService(
         order.Estado = activeCommands.Length == 0 ? PedidoStates.Cancelado :
             activeCommands.Any(x => x.Estado == ComandaStates.Abierta) ? PedidoStates.Abierto :
             activeCommands.Any(x => x.Estado == ComandaStates.EnPreparacion) ? PedidoStates.EnPreparacion : PedidoStates.Listo;
+        if (activeCommands.Length == 0)
+        {
+            if (destinoMesa is not null && destinoMesa.Estado == MesaStates.Ocupada && destinoMesa.IdGrupo is null)
+                destinoMesa.PermitePedidoTrasAnulacion = true;
+            if (destinoGrupo is { Activo: true }) destinoGrupo.PermitePedidoTrasAnulacion = true;
+        }
         await context.SaveChangesAsync(ct);
         foreach (var ingredient in ingredients)
         {

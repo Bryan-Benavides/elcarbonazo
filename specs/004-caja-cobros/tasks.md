@@ -2,6 +2,10 @@
 
 **Estado:** 004 aceptado para demostración universitaria local aislada, conforme al perfil y evidencia documentados; no equivale a operación con dinero real. Los pendientes posteriores permanecen en C6. No aplicar migraciones ni modificar bases persistentes sin autorización y destino confirmado.
 
+**Mejora de usabilidad autorizada:** en Caja Desktop, presentar primero las cuentas activas no pagadas/canceladas y ofrecer filtro «Pendientes / Todas». Solo cambia la presentación de cada página, conserva el historial, cursor y validación server-authoritative. No borrar registros ni modificar orden del endpoint.
+
+- [x] Implementar filtro visual «Pendientes / Todas» en Caja. En «Pendientes», cuentas pagadas/canceladas no se muestran y el resto se ordena con cobrables primero; «Todas» permite consultar cada registro de la página. «Siguiente página» mantiene la navegación completa del historial. Prueba `Accounts_filter_prioritizes_pending_and_cobrable_and_keeps_history_accessible` aprobada; build sin advertencias y suite Desktop: 290 aprobadas. Revisión en ventana real pendiente.
+
 Las notas de avance conservan observaciones de diferentes etapas y algunas describen como pendientes funciones implementadas después. Consultar las casillas y la evidencia más reciente, no una nota histórica aislada.
 
 **Revisión de concurrencia:** una prueba PostgreSQL demostró que la lectura MVCC por sí sola no impide preparar un cobro después del control de pendientes. El plan exige una barrera global compartida; ambos órdenes se probaron tanto con el modelo como con servicios reales de caja. La matriz exhaustiva sigue pendiente posterior.

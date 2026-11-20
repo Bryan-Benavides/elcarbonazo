@@ -2,6 +2,10 @@
 
 **Estado: línea base D0 aprobada para comenzar C1.** Preferir el código, configuración y migraciones reales cuando los documentos históricos describan diseños anteriores. Las intercalaciones y el SQL generado siguen requiriendo pruebas en C1/C2; el diseño no equivale a evidencia de ejecución. No autoriza modificar bases persistentes.
 
+## Adenda aprobada: nuevo pedido tras anulación total
+
+Revisar `EnviosService` y los contratos de salón para admitir una nueva cuenta tras la cancelación total, individual o agrupada, sin alterar el historial y manteniendo la validación de destino bajo locks. Evitar tratar `xmin`, IDs o la mera existencia de una cancelación antigua como prueba de que corresponde a la ocupación actual. Definir explícitamente cómo se confirma la apertura en mesa ocupada sin cuenta activa y cómo se distingue de una cuenta pagada; conservar el bloqueo de grupo pagado. Mantener una sola cuenta activa, controles de Caja y consumo atómico del nuevo envío. Probar cancelación parcial y total, mesa individual y grupo, pedido pagado, repetición y carreras en PostgreSQL temporal; no mutar la base personal durante las pruebas.
+
 ## 1. Inspección inicial y riesgos
 
 - `EnviosService` agrega requerimientos por ingrediente y guarda un movimiento `ConsumoPedido` por comanda/ingrediente. `MovimientoInventario` no contiene ID de detalle ni desglose por producto; una receta posterior no permite reconstruir un ítem histórico.

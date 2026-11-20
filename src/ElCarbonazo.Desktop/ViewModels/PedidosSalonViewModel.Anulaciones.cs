@@ -67,11 +67,13 @@ public partial class PedidosSalonViewModel
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PuedeAnular))]
     [NotifyPropertyChangedFor(nameof(PuedeConfirmarAnulacion))]
+    [NotifyPropertyChangedFor(nameof(PuedeCancelarAnulacion))]
     private bool _confirmandoAnulacion;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PuedeAnular))]
     [NotifyPropertyChangedFor(nameof(PuedeConfirmarAnulacion))]
+    [NotifyPropertyChangedFor(nameof(PuedeCancelarAnulacion))]
     [NotifyPropertyChangedFor(nameof(PuedeRecuperarAnulacion))]
     [NotifyPropertyChangedFor(nameof(PuedeEstablecerBarrera))]
     private bool _anulando;

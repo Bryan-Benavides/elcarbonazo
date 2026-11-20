@@ -1,0 +1,35 @@
+# Build outputs
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+
+# IDE
+.vs/
+.idea/
+*.user
+*.suo
+
+# Secrets / local config
+**/appsettings.Development.json
+**/appsettings.Local.json
+*.db
+*.sqlite
+
+# Logs
+*.log
+**/logs/
+/src/ElCarbonazo.Api/ElCarbonazo/api-logs/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Rider
+.idea/
+*.sln.iml

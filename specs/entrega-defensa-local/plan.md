@@ -1,5 +1,7 @@
 # Plan técnico — cierre y entrega de la demo
 
+**Cambio autorizado:** el usuario solicita expresamente copiar la base personal `elcarbonazo` para el profesor, en vez de generar una base con otros datos. Esta instrucción sustituye la prohibición histórica de exportarla para esta entrega. Usar `pg_dump` de solo lectura, verificar restauración en base nueva y no publicar el ZIP anterior que contenía configuración personal. No incluir la clave HMAC del equipo ni afirmar que las anulaciones funcionarán en el equipo de destino sin configurar y verificar una clave compatible.
+
 **Estado: alcance actualizado por solicitud del usuario. No autoriza cambios a una base persistente hasta confirmar el destino exacto de defensa.**
 
 ## Enfoque mínimo

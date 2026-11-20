@@ -1,0 +1,91 @@
+# número de producto | ingrediente=cantidad en la unidad de catalogo-ingredientes.csv
+1|Arroz blanco=150;Frijoles rojos=120;Cebolla blanca=25;Chiltoma=20;Aceite vegetal=15;Sal=3
+2|Masa de maíz=200;Carne de cerdo=110;Manteca de cerdo=40;Papa=50;Arroz blanco=30;Tomate=25;Cebolla blanca=15;Hierbabuena=10;Hoja de plátano=1
+3|Yuca=220;Chicharrón de cerdo=110;Repollo=80;Tomate=25;Vinagre criollo=15;Sal=3;Hoja de plátano=1
+4|Carne de res deshebrada=140;Masa de maíz=80;Tomate=30;Cebolla blanca=25;Chiltoma=20;Jugo de naranja agria=30;Achiote=5;Hierbabuena=8
+5|Tortilla de maíz=1;Quesillo=90;Cebolla blanca=40;Crema agria=35;Vinagre criollo=15;Sal=2
+6|Carne de res (posta)=160;Yuca=150;Plátano verde=100;Plátano maduro=100;Repollo=70;Jugo de naranja agria=20;Achiote=5;Hoja de plátano=1
+7|Lomo de cerdo=180;Arroz blanco=150;Frijoles rojos=100;Plátano verde=100;Repollo=50;Jugo de naranja agria=15;Ajo=10;Aceite vegetal=15
+8|Pechuga de pollo=180;Crema agria=60;Chile jalapeño=30;Cebolla blanca=30;Arroz blanco=150;Mantequilla=15;Sal=3
+9|Lomito de res=180;Crema agria=60;Chile jalapeño=30;Cebolla blanca=30;Chiltoma=25;Arroz blanco=150;Aceite vegetal=15
+10|Cuarto de pollo=250;Arroz blanco=150;Frijoles rojos=100;Repollo=60;Tomate=20;Jugo de naranja agria=15;Achiote=5
+11|Fideos de trigo=140;Pechuga de pollo=80;Lomo de cerdo=60;Brócoli=50;Zanahoria=40;Chiltoma=30;Salsa de soya=25;Aceite vegetal=15
+12|Carne molida de res=170;Huevo=1;Cebolla blanca=20;Ajo=10;Tomate=60;Arroz blanco=150;Papa=100;Aceite vegetal=15
+13|Carne de res (posta)=180;Yuca=150;Tomate=50;Cebolla blanca=30;Chiltoma=25;Culantro=10;Aceite vegetal=15;Sal=3
+14|Chuleta de pescado=220;Plátano verde=120;Arroz blanco=120;Harina de trigo=30;Ajo=10;Jugo de limón=20;Aceite vegetal=25
+15|Carne de res (posta)=160;Cebolla blanca=40;Chiltoma=35;Jugo de naranja agria=30;Hierbabuena=10;Arroz blanco=120;Sal=3
+16|Carne de res (posta)=180;Cebolla blanca=40;Ajo=10;Arroz blanco=150;Frijoles rojos=100;Aceite vegetal=30;Sal=3
+17|Bistec de res=180;Tomate=50;Cebolla blanca=40;Chiltoma=25;Arroz blanco=150;Frijoles rojos=100;Plátano maduro=80;Aceite vegetal=15
+18|Lomito de res=240;Salsa chimichurri=35;Arroz blanco=150;Frijoles rojos=100;Plátano verde=100;Aguacate=60;Aceite vegetal=10
+19|Filete de pescado=180;Jugo de limón=80;Cebolla morada=45;Tomate=40;Culantro=10;Sal=4;Galletas saladas=1
+20|Tortilla de maíz=3;Carne de res deshebrada=120;Repollo=60;Crema agria=30;Salsa de tomate=30;Aceite vegetal=30
+21|Tortilla de maíz=2;Carne molida de res=90;Arroz blanco=60;Huevo=1;Harina de trigo=40;Achiote=5;Aceite vegetal=35
+22|Maíz tierno molido=220;Cuajada fresca=80;Azúcar=15;Mantequilla=10;Sal=2;Hoja de plátano=1
+23|Masa de maíz=180;Costilla de cerdo=120;Achiote=5;Hierbabuena=10;Cebolla blanca=20;Hoja de plátano=1
+24|Bistec de res=110;Lomo de cerdo=110;Arroz blanco=150;Frijoles rojos=100;Plátano verde=80;Queso fresco=50;Repollo=50;Aceite vegetal=20
+25|Plátano maduro=180;Queso fresco=60;Aceite vegetal=25
+26|Plátano verde=180;Queso fresco=60;Ajo=5;Aceite vegetal=30;Sal=2
+27|Plátano verde=160;Queso fresco=60;Aceite vegetal=30;Sal=2
+28|Espinazo de res=220;Yuca=100;Elote=80;Plátano verde=80;Chayote=70;Repollo=50;Hierbabuena=10;Sal=4
+29|Arroz blanco=180;Pechuga de pollo=70;Lomo de cerdo=50;Chorizo criollo=40;Zanahoria=30;Chiltoma=25;Salsa de tomate=30;Aceite vegetal=15
+30|Frijoles rojos=180;Cuajada fresca=80;Cebolla blanca=25;Aceite vegetal=20;Sal=2
+31|Huevo=2;Tomate=30;Cebolla blanca=25;Chiltoma=20;Arroz blanco=120;Frijoles rojos=80;Tortilla de maíz=1;Aceite vegetal=15
+32|Gallina india=260;Yuca=100;Chayote=70;Zanahoria=60;Hierbabuena=10;Achiote=5;Sal=4
+33|Tortilla de maíz=1;Quesillo=75
+34|Harina de arroz=60;Queso crema=40;Cuajada fresca=30;Azúcar=35;Mantequilla=15;Crema agria=20;Huevo=1
+35|Harina de trigo=60;Huevo=1;Leche condensada=60;Leche evaporada=60;Crema de leche=50;Azúcar=25
+36|Harina de trigo=70;Huevo=1;Ron Flor de Caña 4 Años=20;Leche entera=50;Azúcar=40;Pasas=10;Canela en polvo=2
+37|Yuca=140;Queso fresco=50;Huevo=1;Dulce de rapadura=50;Aceite vegetal=30
+38|Leche entera=120;Azúcar=60;Esencia de vainilla=2
+39|Coco rallado=80;Dulce de rapadura=60;Canela en polvo=2
+40|Rosquillas somoteñas=4;Cuajada fresca=40
+41|Alitas de pollo=250;Jugo de naranja agria=20;Ajo=10;Aceite vegetal=40;Sal=3
+42|Costilla de cerdo=260;Salsa de tamarindo criolla=60;Ajo=10;Cebolla blanca=20;Achiote=5
+43|Bistec de res=180;Cebolla blanca=80;Chiltoma=25;Salsa inglesa=15;Arroz blanco=150;Aceite vegetal=15
+44|Filete de pescado=200;Mantequilla=15;Ajo=10;Jugo de limón=20;Arroz blanco=150;Lechuga=60
+45|Camarones limpios=180;Mantequilla=25;Ajo=20;Culantro=10;Arroz blanco=150;Plátano verde=100
+46|Arroz blanco=160;Camarones limpios=140;Salsa de tomate=35;Chiltoma=30;Cebolla blanca=30;Zanahoria=30;Aceite vegetal=15
+47|Filete de pescado=90;Camarones limpios=80;Calamares=60;Leche de coco=100;Yuca=100;Plátano verde=80;Culantro=10
+48|Lomo de cerdo=180;Carne molida de res=50;Pasas=15;Aceitunas=15;Zanahoria=20;Salsa de tomate=40;Arroz blanco=150
+49|Pechuga de pollo=150;Tomate=50;Cebolla blanca=30;Chiltoma=25;Salsa de tomate=30;Arroz blanco=150;Aceite vegetal=10
+50|Maíz tierno molido=140;Leche entera=50;Mantequilla=20;Azúcar=35;Huevo=1
+51|Harina de trigo=110;Leche de coco=60;Azúcar=20;Aceite vegetal=15;Levadura=3
+52|Harina de trigo=90;Carne molida de res=80;Cebolla blanca=20;Chile cabro=5;Aceite vegetal=15
+53|Filete de pescado=180;Leche de coco=150;Yuca=100;Quequisque=100;Plátano verde=80;Culantro=10;Sal=3
+54|Papa=200;Aceite vegetal=35;Sal=3
+55|Lechuga=80;Tomate=50;Pepino=40;Cebolla morada=20;Jugo de limón=15;Aceite vegetal=10
+56|Pinolillo en polvo=45;Leche entera=250;Azúcar=25;Hielo=100
+57|Tiste en polvo=45;Agua purificada=250;Azúcar=25;Hielo=100
+58|Cacao molido=35;Arroz blanco=20;Leche entera=250;Azúcar=25;Canela en polvo=2;Hielo=100
+59|Cebada tostada=30;Agua purificada=280;Azúcar=25;Esencia de vainilla=2;Hielo=100
+60|Semilla de jícaro molida=40;Leche entera=250;Azúcar=25;Canela en polvo=2;Hielo=100
+61|Masa de maíz=60;Dulce de rapadura=40;Piña=30;Agua purificada=250;Hielo=100
+62|Naranja dulce=350;Hielo=80
+63|Jugo de limón=60;Agua purificada=250;Azúcar=30;Hielo=100
+64|Jugo de limón=60;Hierbabuena=8;Agua purificada=250;Azúcar=30;Hielo=100
+65|Pulpa de calala=70;Agua purificada=250;Azúcar=30;Hielo=100
+66|Piña=100;Agua purificada=250;Azúcar=25;Hielo=100
+67|Flor de jamaica seca=15;Agua purificada=280;Azúcar=30;Hielo=100
+68|Café molido=18;Agua purificada=220;Azúcar=15
+69|Café molido=18;Agua purificada=120;Leche entera=120;Azúcar=15
+70|Café molido=20;Agua purificada=180;Crema de leche=30;Azúcar=15
+71|Agua Fuente Pura 500ml=1
+72|Agua Luna 600ml=1
+73|Agua con gas 330ml=1
+74|Coca-Cola Lata 350ml=1
+75|Pepsi Lata 350ml=1
+76|Sprite Lata 350ml=1
+77|Gaseosa Tropical Lata 350ml=1
+78|Polvo de té frío limón=25;Agua purificada=280;Hielo=100
+79|Papaya=140;Leche entera=200;Azúcar=20;Hielo=100
+80|Sandía=180;Agua purificada=120;Azúcar=15;Hielo=100
+81|Melón=160;Agua purificada=150;Azúcar=20;Hielo=100
+82|Cacao molido=35;Leche entera=240;Azúcar=20;Canela en polvo=2
+83|Pinol blanco en polvo=45;Agua purificada=250;Azúcar=25;Hielo=100
+84|Dulce de rapadura=40;Jengibre fresco=10;Masa de maíz=15;Agua purificada=280;Hielo=100
+85|Cerveza Toña 350ml=1
+86|Cerveza Victoria 350ml=1
+87|Cerveza Corona 350ml=1;Limón criollo=15
+88|Ron Flor de Caña 4 Años=45;Hielo=100
+89|Ron Flor de Caña 7 Años=45;Hielo=100
+90|Tequila blanco=45;Limón criollo=20;Sal=2

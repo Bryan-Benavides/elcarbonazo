@@ -1,0 +1,9 @@
+[
+  { "nombre": "vacia", "texto": "", "repeticiones": 1, "valida": true, "normalizada": "" },
+  { "nombre": "nfc-compuesta", "texto": "Café", "repeticiones": 1, "valida": true, "normalizada": "Café" },
+  { "nombre": "nfc-descompuesta", "texto": "Café", "repeticiones": 1, "valida": true, "normalizada": "Café" },
+  { "nombre": "emoji-150", "texto": "😀", "repeticiones": 150, "valida": true },
+  { "nombre": "emoji-151", "texto": "😀", "repeticiones": 151, "valida": false },
+  { "nombre": "control", "texto": "línea\notra", "repeticiones": 1, "valida": false },
+  { "nombre": "tabulador", "texto": "a\tb", "repeticiones": 1, "valida": false }
+]

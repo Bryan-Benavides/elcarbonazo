@@ -51,11 +51,12 @@
                 <StackPanel Spacing="12">
                     <TextBlock Text="Cuentas" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
                     <TextBlock Text="{Binding EstadoCuentas}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <ComboBox ItemsSource="{Binding FiltrosCuentas}" SelectedItem="{Binding FiltroCuentas}" IsEnabled="{Binding !Ocupado}" HorizontalAlignment="Left" MinWidth="180" />
                     <WrapPanel>
                         <Button Content="Consultar cuentas" Command="{Binding ConsultarCuentasCommand}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
                         <Button Content="Siguiente página" Command="{Binding SiguientesCuentasCommand}" IsVisible="{Binding HayMasCuentas}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
                     </WrapPanel>
-                    <ItemsControl ItemsSource="{Binding Cuentas}">
+                    <ItemsControl ItemsSource="{Binding CuentasVisibles}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="services:CajaCuentaVista">
                                 <Border BorderBrush="{StaticResource BordePanelBrush}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,8">

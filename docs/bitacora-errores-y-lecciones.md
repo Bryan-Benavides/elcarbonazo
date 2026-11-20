@@ -1,5 +1,10 @@
 # Bitácora de errores y lecciones — El Carbonazo
 
+### 006: botones del modal de anulación deshabilitados
+
+- **Hecho observado:** el usuario abrió el modal y no pudo usar Cancelar ni Confirmar. `PuedeCancelarAnulacion` no notificaba sus cambios al abrir el modal o cambiar el estado de ejecución.
+- **Corrección:** se notifican las dependencias del botón Cancelar y los campos actualizan sus bindings al escribir. Una prueba de ViewModel verifica notificaciones, validación y cancelación sin envío. Compilación y pruebas focalizadas pasaron; queda pendiente comprobar los botones y la anulación en ventana real.
+
 ### Código vigente frente al esquema 005 sin migración 006
 
 - **Hecho confirmado por revisión:** `EnviosService` añade filas a `consumo_detalle`, tabla creada por `AddAuditoriaCancelacionesSeguridad`; otros servicios y entidades utilizan campos añadidos por esa migración. La migración posterior de reservaciones también sigue a 006 en el historial EF.

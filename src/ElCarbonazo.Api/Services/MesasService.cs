@@ -95,6 +95,7 @@ public sealed class MesasService(AppDbContext context, IAuditRecorder auditRecor
 
         var previousState = mesa.Estado;
         mesa.Estado = request.Estado;
+        mesa.PermitePedidoTrasAnulacion = false;
         try
         {
             await context.SaveChangesAsync(cancellationToken);

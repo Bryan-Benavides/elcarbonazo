@@ -95,7 +95,7 @@ public partial class App : Application
                 initialViewModel,
                 navigation,
                 _sessionManager,
-                _serverClock, recoveryPanel);
+                _serverClock, recoveryPanel, anulacionFactory);
             var window = new MainWindow { DataContext = _shellViewModel };
             window.AddHandler(
                 InputElement.PointerPressedEvent,

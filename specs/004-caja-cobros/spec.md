@@ -16,6 +16,7 @@ El resultado debe ser pulido y demostrable ante el restaurante y el profesor, co
 - Apertura con fondo inicial no negativo, incluido C$0.00 con confirmación.
 - Roles `Jefa` y `Encargado de Caja` para consultar caja, abrir, cobrar, recuperar y cerrar; los actos conservan el actor efectivo.
 - Listado paginado de cuentas por mesa y grupo, incluidas las no elegibles con causa visible.
+- En Desktop, priorizar visualmente cuentas activas pendientes de cobro sobre cuentas pagadas/canceladas, con filtro simple entre pendientes y todo el historial. El filtro solo afecta presentación; conserva paginación, consulta informativa y registros históricos, y no cambia elegibilidad ni permisos.
 - Cobro de cuenta completa con un único método (efectivo, tarjeta o transferencia), exclusivamente en córdobas.
 - Verificación humana externa previa para tarjeta/transferencia y referencia obligatoria.
 - Vuelto calculado por API; sin pagos parciales o mixtos.

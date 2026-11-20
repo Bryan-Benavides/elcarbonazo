@@ -1,55 +1,83 @@
-# El Carbonazo — POS Restaurant (MVP)
+# El Carbonazo — Sistema de Punto de Venta (POS)
+
+Proyecto académico de punto de venta para restaurante. Incluye gestión de mesas, pedidos, cocina, caja, inventario, reportes y control de anulaciones con auditoría.
 
 ## Stack
 - .NET 10
 - Backend: ASP.NET Core Web API + EF Core + Npgsql (PostgreSQL)
-- Frontend: Avalonia UI 12.1.4 + SukiUI 7.0.1 + CommunityToolkit.Mvvm 8.4.0
+- Frontend: Avalonia UI 12 + SukiUI 7 + CommunityToolkit.Mvvm
 
-## Iniciar la demostración preparada
+## Requisitos previos
+- .NET 10 SDK instalado
+- PostgreSQL 15 o superior instalado y en ejecución
+- Una base de datos PostgreSQL creada (por ejemplo, llamada `elcarbonazo`)
 
-Si ya se preparó la base local `elcarbonazo_demo_local` y el diario de caja en este equipo, ejecutar desde la raíz en PowerShell:
+## Configuración inicial
+
+### 1. Base de datos
+Configure primero la conexión del paso 2 en la misma terminal y confirme el destino. La base debe existir; respáldela si contiene datos que desee conservar. La migración no carga menú ni inventario. Restaure la herramienta local y aplique las migraciones desde `src/ElCarbonazo.Api`:
 
 ```powershell
-.\scripts\iniciar-api-demo.ps1
+dotnet tool restore
+cd src/ElCarbonazo.Api
+dotnet ef database update
+cd ../..
 ```
 
-Dejar esa terminal abierta y, en otra, ejecutar `dotnet run --project src/ElCarbonazo.Desktop`. La API escucha en `https://localhost:7191/`. El iniciador no crea bases ni diarios y no cambia la configuración instalada. Si informa de una operación pendiente, no borrar el diario: confirmar primero que pertenece a esta base; para abrir la API y recuperarla usar `-RecuperarDiarioDeEstaDemo`. Esa opción no ejecuta ni concilia la operación automáticamente.
+> La API no aplica migraciones automáticamente. Este paso es obligatorio antes de iniciar el sistema.
 
-## Preparación inicial general
+### 2. Variables de entorno
+Cree un archivo `entorno.ps1` en la raíz del proyecto (no subirlo a ningún repositorio) con los valores de su instalación. Ejemplo:
 
-Requiere .NET 10 SDK y PostgreSQL 15 o superior. El prototipo es para presentación universitaria; no está listo para operar el restaurante. Preparar una base de desarrollo aislada y respaldar cualquier base existente antes de aplicar migraciones. No publicar contraseñas, tokens ni cadenas de conexión.
+```powershell
+$env:ConnectionStrings__DefaultConnection = 'Host=localhost;Port=5432;Database=elcarbonazo;Username=postgres;Password=SU_CONTRASEÑA'
+$env:Jwt__Key = 'REEMPLAZAR_POR_CLAVE_BASE64_VALIDA'
+$env:AutorizacionSuperior__ClaveHmac = 'REEMPLAZAR_POR_CLAVE_BASE64_INDEPENDIENTE'
+$env:ASPNETCORE_ENVIRONMENT = 'Development'
+```
 
-1. Configurar la conexión PostgreSQL de **Development** fuera de Git, por ejemplo mediante `ConnectionStrings__DefaultConnection` en el entorno de la API. Confirmar que la base elegida es la de demostración, no una base con datos que se desee conservar.
-2. Desde la raíz, ejecutar `dotnet tool restore` y `dotnet build ElCarbonazo.sln`. Después, desde `src/ElCarbonazo.Api`, ejecutar `dotnet ef database update` contra la base confirmada. La API no aplica migraciones automáticamente.
-3. Desktop necesita `%ProgramData%\ElCarbonazo\desktop.json` con `ApiBaseUrl` e `idInstalacion` UUID válido. En una instalación nueva de demostración, crear ese archivo a partir de `deploy/desktop.example.json`, generar un UUID y poner como URL `https://localhost:7191/`. **No sobrescribir una configuración existente**: revisarla primero. El UUID sigue siendo necesario aun usando un override de Development.
-4. Iniciar la API con el perfil HTTPS y la conexión de la base confirmada, y en otra terminal ejecutar Desktop. Para la base preparada `elcarbonazo_demo_local`, usar el iniciador anterior; el comando genérico `dotnet run --project src/ElCarbonazo.Api --launch-profile https` usa la conexión configurada, que puede ser otra base. El certificado debe ser confiable; nunca desactivar la validación TLS.
-5. En Development, el seeder local crea o reutiliza la cuenta de demostración documentada en `docs/installation.md` solo bajo sus condiciones de seguridad. No usarla en producción ni alterar usuarios existentes manualmente.
+Ejecutelo antes de iniciar la API:
 
-### Recorrido universitario
+```powershell
+. .\entorno.ps1
+```
 
-Con datos ficticios: iniciar sesión, consultar mesas, registrar pedidos, avanzar las comandas en Cocina y revisar la cuenta en Caja. Caja registra efectivo, tarjeta o transferencia; no procesa pagos ni verifica bancos. El comprobante interno es de demostración, no una factura fiscal. La instalación de caja requiere el diario protegido descrito en `docs/installation.md`.
+Los marcadores no son claves válidas. Para anulaciones, la clave HMAC debe ser aleatoria, protegida y estable, y requiere primera provisión explícita; consulte `docs/installation.md`.
 
-Para una comprobación automática aislada, ejecutar `dotnet run --project tests/ElCarbonazo.AcceptanceHost -- --caja-smoke` después del build. El anfitrión crea y limpia una base temporal; no abre una ventana ni sustituye la revisión visual. Ver `docs/validacion-004.md` para el alcance y las limitaciones.
+### 3. Iniciar la API
+Desde una terminal:
 
-### Si no conecta
+```powershell
+dotnet run --project src/ElCarbonazo.Api --launch-profile https
+```
 
-- Confirmar que PostgreSQL y la API iniciaron correctamente, y que la URL del Desktop coincide con la dirección escuchada por la API.
-- Un error de configuración exige revisar la ruta y el UUID; un error TLS requiere corregir confianza o hostname, no utilizar bypass.
-- Si la API registra que falta `cobro` u otra tabla, confirmar a qué base apunta y si tiene las migraciones correspondientes; no modificar una base persistente sin autorización y respaldo.
-- Si una escritura da resultado incierto, no repetirla automáticamente: revisar la advertencia. Un GET no demuestra que la escritura anterior haya terminado.
+La API escucha en `https://localhost:7191/`.
 
-Para pruebas y configuración de instalación ver `AGENTS.md`, `docs/installation.md` y `docs/validacion-t5.md`.
+### 4. Iniciar el escritorio
+Desde otra terminal:
 
-## Arquitectura
-- `src/ElCarbonazo.Api` — API REST + EF Core (solo BD)
-- `src/ElCarbonazo.Desktop` — Cliente Avalonia (solo HTTP a API)
-- `docs/` — Dominio, Constitución
-- `specs/` — Especificaciones por módulo (SDD)
+En una instalación nueva configure primero `%ProgramData%\ElCarbonazo\desktop.json` y provisione los diarios de caja y anulaciones según `docs/installation.md`. No reemplace diarios existentes.
 
-Pedidos y Cocina (`003`), Caja (`004`) y Auditoría/anulaciones (`006`) están aceptados para la demostración universitaria local. Consulta sus respectivos `tasks.md` para conocer el alcance y las tareas pendientes para uso real. La propuesta `002-operaciones-seguras` permanece separada y pospuesta.
+```powershell
+dotnet run --project src/ElCarbonazo.Desktop
+```
 
-La anulación de líneas requiere la primera provisión HMAC descrita en `docs/installation.md` y la clave `AutorizacionSuperior__ClaveHmac` configurada fuera de Git; sin ellas el resto del sistema funciona, pero la anulación responde `AUTORIZACION_SUPERIOR_NO_DISPONIBLE`.
+## Credenciales de prueba (entorno Development)
+- En una base nueva, si se cumplen las condiciones del seeder Development: usuario `admin`, contraseña `admin123`, rol Jefa. Una base existente puede tener otra contraseña.
 
-Para comprobar que la base local elegida está preparada antes de presentar, ejecutar `.\scripts\validar-base-defensa.ps1 -BaseEsperada elcarbonazo` (solo lectura). Para el recorrido automático completo en bases temporales, `.\scripts\ejecutar-smoke-integral.ps1`.
+> Estas credenciales son solo para el entorno de desarrollo y pruebas académicas. No usarlas en un entorno real.
 
-Inventario y escandallo (`005`) tiene persistencia, API e interfaz implementadas y aceptación del usuario para el perfil universitario local; permanecen los límites documentados de validación. La API actual exige recetas y stock al enviar: no se ha preparado automáticamente la base persistente de demostración. Consultar `specs/005-inventario-escandallo/tasks.md`.
+## Estructura del proyecto
+- `src/ElCarbonazo.Api` — API REST y base de datos
+- `src/ElCarbonazo.Desktop` — Interfaz de escritorio
+- `tests/` — Pruebas automatizadas
+- `docs/` — Documentación técnica
+- `specs/` — Especificaciones funcionales por módulo
+
+## Alcance
+Este sistema cubre: mesas, pedidos, cocina, caja, inventario, recetas, reportes, reservas y anulaciones con registro de auditoría. Es un proyecto académico para presentación universitaria; no está diseñado para operación comercial ni para uso con dinero real.
+
+## Soporte
+Cualquier problema de instalación, consulte `docs/installation.md` y `AGENTS.md`.
+
+**Entrega pendiente:** el ZIP generado anteriormente contiene configuración local y registros, y no incluye una base restaurable verificada. No lo comparta; hay que preparar y revisar un paquete nuevo.

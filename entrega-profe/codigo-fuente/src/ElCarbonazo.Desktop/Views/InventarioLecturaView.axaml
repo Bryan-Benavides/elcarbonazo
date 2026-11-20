@@ -1,0 +1,113 @@
+<UserControl x:Class="ElCarbonazo.Desktop.Views.InventarioLecturaView" x:Name="Root"
+             xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:ElCarbonazo.Desktop.ViewModels" xmlns:services="using:ElCarbonazo.Desktop.Services"
+             xmlns:converters="using:ElCarbonazo.Desktop.Converters"
+             mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
+             x:CompileBindings="True" x:DataType="vm:InventarioLecturaViewModel"
+             Background="{StaticResource FondoPrincipalBrush}">
+    <Design.DataContext><vm:InventarioLecturaViewModel /></Design.DataContext>
+    <UserControl.Resources><converters:EstadoInventarioColorConverter x:Key="EstadoInventarioColor" /></UserControl.Resources>
+    <ScrollViewer>
+        <StackPanel Margin="24" Spacing="16" MaxWidth="900">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
+                <Button Content="← Mesas" Command="{Binding VolverCommand}" IsEnabled="{Binding !Ocupado}" />
+                <TextBlock Grid.Column="1" Text="Inventario y recetas" FontSize="26" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+            </Grid>
+            <TextBlock Text="Demostración local · Los datos consultados pueden cambiar. Revise y confirme cada modificación."
+                       TextWrapping="Wrap" Foreground="{StaticResource TextoSecundarioBrush}" />
+            <TextBlock Text="{Binding Estado}" TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
+            <Border Background="{StaticResource FondoPanelBrush}" Padding="16" CornerRadius="6">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Ingredientes y alertas" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="{Binding ResumenAlertas}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <TextBox PlaceholderText="Buscar ingrediente" Text="{Binding BusquedaIngredientes}" IsEnabled="{Binding !Ocupado}" MaxLength="120" />
+                    <ComboBox ItemsSource="{Binding EstadosFiltro}" SelectedItem="{Binding FiltroEstado}" IsEnabled="{Binding !Ocupado}" />
+                    <WrapPanel>
+                        <Button Content="Consultar alertas" Command="{Binding ConsultarAlertasCommand}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
+                        <Button Content="Consultar ingredientes" Command="{Binding ConsultarIngredientesCommand}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
+                        <Button Content="Siguiente página" Command="{Binding SiguientesIngredientesCommand}" IsVisible="{Binding HayMasIngredientes}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
+                    </WrapPanel>
+                    <ListBox ItemsSource="{Binding Ingredientes}" SelectedItem="{Binding IngredienteSeleccionado}" IsEnabled="{Binding !Ocupado}" MaxHeight="260">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="services:IngredienteLectura">
+                                <TextBlock Text="{Binding Texto}" Foreground="{Binding Estado, Converter={StaticResource EstadoInventarioColor}}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </StackPanel>
+            </Border>
+            <Border Background="{StaticResource FondoPanelBrush}" Padding="16" CornerRadius="6">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Kardex del ingrediente seleccionado" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="{Binding EstadoMovimientos}" TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <WrapPanel>
+                        <Button Content="Consultar movimientos" Command="{Binding ConsultarMovimientosCommand}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
+                        <Button Content="Siguiente página" Command="{Binding SiguientesMovimientosCommand}" IsVisible="{Binding HayMasMovimientos}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
+                    </WrapPanel>
+                    <ItemsControl ItemsSource="{Binding Movimientos}">
+                        <ItemsControl.ItemTemplate><DataTemplate x:DataType="services:MovimientoLectura">
+                            <TextBlock Text="{Binding Texto}" TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" Margin="0,0,0,8" />
+                        </DataTemplate></ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+            <Border Background="{StaticResource FondoPanelBrush}" Padding="16" CornerRadius="6" IsVisible="{Binding PuedeAdministrar}">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Administración de ingredientes" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="{Binding EstadoEscritura}" TextWrapping="Wrap" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBlock Text="Crear ingrediente · El stock inicial será cero" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBox PlaceholderText="Nombre" Text="{Binding NombreNuevo}" MaxLength="120" IsEnabled="{Binding !Ocupado}" />
+                    <ComboBox ItemsSource="{Binding Unidades}" SelectedItem="{Binding UnidadNueva}" IsEnabled="{Binding !Ocupado}" />
+                    <TextBox PlaceholderText="Stock mínimo (punto decimal)" Text="{Binding MinimoNuevo}" IsEnabled="{Binding !Ocupado}" />
+                    <CheckBox Content="Confirmo crear el ingrediente con los datos indicados." IsChecked="{Binding ConfirmarIngrediente}" IsEnabled="{Binding !Ocupado}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <Button Content="Crear ingrediente" Command="{Binding CrearIngredienteCommand}" IsEnabled="{Binding !Ocupado}" HorizontalAlignment="Left" />
+                    <TextBlock Text="Editar ingrediente seleccionado" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBox PlaceholderText="Nombre" Text="{Binding NombreEdicion}" MaxLength="120" IsEnabled="{Binding !Ocupado}" />
+                    <ComboBox ItemsSource="{Binding Unidades}" SelectedItem="{Binding UnidadEdicion}" IsEnabled="{Binding !Ocupado}" />
+                    <TextBox PlaceholderText="Stock mínimo (punto decimal)" Text="{Binding MinimoEdicion}" IsEnabled="{Binding !Ocupado}" />
+                    <CheckBox Content="Ingrediente activo" IsChecked="{Binding ActivoEdicion}" IsEnabled="{Binding !Ocupado}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <CheckBox Content="Confirmo los cambios al ingrediente seleccionado." IsChecked="{Binding ConfirmarEdicion}" IsEnabled="{Binding !Ocupado}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <Button Content="Guardar ingrediente" Command="{Binding ActualizarIngredienteCommand}" IsEnabled="{Binding !Ocupado}" HorizontalAlignment="Left" />
+                    <TextBlock Text="Entrada o ajuste · Seleccione un ingrediente en la lista consultada" FontWeight="SemiBold" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding IngredienteSeleccionado.Texto}" Foreground="{StaticResource TextoSecundarioBrush}" TextWrapping="Wrap" />
+                    <ComboBox ItemsSource="{Binding TiposMovimiento}" SelectedItem="{Binding TipoMovimiento}" IsEnabled="{Binding !Ocupado}" />
+                    <TextBox PlaceholderText="Cantidad (punto decimal)" Text="{Binding CantidadMovimiento}" IsEnabled="{Binding !Ocupado}" />
+                    <TextBox PlaceholderText="Motivo obligatorio para ajustes" Text="{Binding MotivoMovimiento}" MaxLength="250" IsEnabled="{Binding !Ocupado}" />
+                    <CheckBox Content="Confirmo el ingrediente, tipo, cantidad y motivo indicados." IsChecked="{Binding ConfirmarMovimiento}" IsEnabled="{Binding !Ocupado}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <Button Content="Registrar movimiento" Command="{Binding RegistrarMovimientoCommand}" IsEnabled="{Binding !Ocupado}" HorizontalAlignment="Left" />
+                </StackPanel>
+            </Border>
+            <Border Background="{StaticResource FondoPanelBrush}" Padding="16" CornerRadius="6" IsVisible="{Binding PuedeVerRecetas}">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Escandallo por producto" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBox PlaceholderText="Buscar producto" Text="{Binding BusquedaProductos}" MaxLength="120" IsEnabled="{Binding !Ocupado}" />
+                    <WrapPanel>
+                        <Button Content="Consultar productos" Command="{Binding ConsultarProductosCommand}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
+                        <Button Content="Siguiente página" Command="{Binding SiguientesProductosCommand}" IsVisible="{Binding HayMasProductos}" IsEnabled="{Binding !Ocupado}" Margin="0,0,8,8" />
+                    </WrapPanel>
+                    <ListBox ItemsSource="{Binding Productos}" SelectedItem="{Binding ProductoSeleccionado}" IsEnabled="{Binding !Ocupado}" MaxHeight="240">
+                        <ListBox.ItemTemplate><DataTemplate x:DataType="services:ProductoRecetaLectura"><TextBlock Text="{Binding Texto}" /></DataTemplate></ListBox.ItemTemplate>
+                    </ListBox>
+                    <Button Content="Consultar receta seleccionada" Command="{Binding ConsultarRecetaCommand}" IsEnabled="{Binding !Ocupado}" HorizontalAlignment="Left" />
+                    <TextBlock Text="{Binding DetalleReceta}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="Editor · seleccione un ingrediente activo en la lista superior" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                    <TextBox PlaceholderText="Cantidad requerida por producto (punto decimal)" Text="{Binding CantidadReceta}" IsEnabled="{Binding !Ocupado}" />
+                    <Button Content="Agregar ingrediente seleccionado" Command="{Binding AgregarLineaRecetaCommand}" IsEnabled="{Binding !Ocupado}" HorizontalAlignment="Left" />
+                    <ItemsControl ItemsSource="{Binding LineasReceta}">
+                        <ItemsControl.ItemTemplate><DataTemplate x:DataType="services:LineaRecetaLectura">
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                                <TextBlock Text="{Binding Texto}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
+                                <Button Grid.Column="1" Content="Quitar" Command="{Binding #Root.((vm:InventarioLecturaViewModel)DataContext).QuitarLineaRecetaCommand}" CommandParameter="{Binding}" />
+                            </Grid>
+                        </DataTemplate></ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBox PlaceholderText="Notas de preparación opcionales" Text="{Binding NotasReceta}" MaxLength="500" IsEnabled="{Binding !Ocupado}" />
+                    <CheckBox Content="Receta activa" IsChecked="{Binding RecetaActiva}" IsEnabled="{Binding !Ocupado}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <CheckBox Content="Confirmo el producto, sus ingredientes, cantidades y estado." IsChecked="{Binding ConfirmarReceta}" IsEnabled="{Binding !Ocupado}" Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <Button Content="Guardar receta" Command="{Binding GuardarRecetaCommand}" IsEnabled="{Binding !Ocupado}" HorizontalAlignment="Left" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -13,6 +13,69 @@ namespace ElCarbonazo.Api.Tests;
 public sealed class AnulacionEjecucionTests
 {
     [Fact]
+    public async Task Grupo_permite_nuevo_pedido_tras_anulacion_total_y_conserva_historial()
+    {
+        var db = new TemporaryPostgresDatabase();
+        try
+        {
+            await db.InitializeAsync();
+            await using var context = db.CreateContext();
+            await context.Database.ExecuteSqlRawAsync("INSERT INTO producto (nombre,categoria,precio,disponible) VALUES ('Plato','Comida',10,true)");
+            var product = await context.Productos.AsNoTracking().SingleAsync();
+            await InventarioTestSetup.PrepararProductoAsync(context, product.IdProducto);
+            var audit = new AuditRecorder(context, new TestHttpContextAccessor(), TimeProvider.System);
+            var mesas = await context.Mesas.AsNoTracking().Where(x => x.IdMesa == 1 || x.IdMesa == 2).ToListAsync();
+            var groupResult = await new GruposMesaService(context, TimeProvider.System, audit)
+                .CreateAsync(new(mesas.Select(x => new MesaVersionRequest(x.IdMesa, x.Version)).ToList()), 1, default);
+            var groupId = groupResult.Grupo!.IdGrupo;
+            var envios = new EnviosService(context, audit, TimeProvider.System);
+            var first = await envios.EnviarAsync(new(Guid.NewGuid(), null, groupId, null,
+                [new(product.IdProducto, product.Version, 1, "")]), 1, default);
+            Assert.Equal(201, first.Status);
+            context.ChangeTracker.Clear();
+            var order = await context.Pedidos.AsNoTracking().SingleAsync();
+            var command = await context.Comandas.AsNoTracking().SingleAsync();
+            var session = Guid.NewGuid();
+            await context.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO sesion_usuario (id_sesion,id_usuario,fecha_creacion,ultima_actividad,expiracion_absoluta)
+                VALUES ({session},1,now(),now(),now()+interval '1 hour')
+                """);
+            var key = Enumerable.Repeat((byte)73, 32).ToArray();
+            Assert.Equal(ResultadoProvisionHmac.Provisionado,
+                await new HmacAutorizacionProvisioner(context, audit).ProvisionarInicialAsync(key, default));
+            var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["AutorizacionSuperior:ClaveHmac"] = Convert.ToBase64String(key)
+            }).Build();
+            var passwords = new BCryptPasswordHasher(Options.Create(new PasswordHashingOptions { WorkFactor = 10 }));
+            var operation = Guid.NewGuid();
+            const string reason = "Pedido duplicado";
+            var authorization = await new AnulacionAutorizacionService(context, passwords, audit, TimeProvider.System, config)
+                .AutorizarAsync(new(operation, order.IdPedido, command.IdComanda, null, reason,
+                    "jefa@example.local", "correct horse battery staple"), 1, session, default);
+            Assert.Equal(200, authorization.Status);
+            var result = await new AnulacionEjecucionService(context, audit, TimeProvider.System, config)
+                .EjecutarAsync(order.IdPedido, new(operation, command.IdComanda, null, reason, authorization.Data!.Token),
+                    1, session, default);
+            Assert.Equal(200, result.Status);
+            context.ChangeTracker.Clear();
+            Assert.True((await context.GruposMesa.SingleAsync(x => x.IdGrupo == groupId)).PermitePedidoTrasAnulacion);
+            var next = await envios.EnviarAsync(new(Guid.NewGuid(), null, groupId, null,
+                [new(product.IdProducto, product.Version, 1, "")]), 1, default);
+            Assert.Equal(201, next.Status);
+            context.ChangeTracker.Clear();
+            Assert.Equal(2, await context.Pedidos.CountAsync());
+            Assert.Equal(1, await context.Pedidos.CountAsync(x => x.Estado == "Cancelado"));
+            Assert.Equal(1, await context.Pedidos.CountAsync(x => x.Estado == "Abierto"));
+            Assert.False((await context.GruposMesa.SingleAsync(x => x.IdGrupo == groupId)).PermitePedidoTrasAnulacion);
+            var subsequent = await envios.EnviarAsync(new(Guid.NewGuid(), null, groupId, null,
+                [new(product.IdProducto, product.Version, 1, "")]), 1, default);
+            Assert.Equal(201, subsequent.Status);
+        }
+        finally { await db.DisposeAsync(); }
+    }
+
+    [Fact]
     public async Task Authorized_execution_reverses_exact_snapshot_once_and_replays_terminal_result()
     {
         var db = new TemporaryPostgresDatabase();
@@ -81,6 +144,7 @@ public sealed class AnulacionEjecucionTests
             Assert.Single(await context.DetallesPedido.Where(x => x.Cancelado).ToListAsync());
             Assert.Equal("Lista", (await context.Comandas.SingleAsync()).Estado);
             Assert.Equal("Listo", (await context.Pedidos.SingleAsync()).Estado);
+            Assert.False((await context.Mesas.AsNoTracking().SingleAsync(x => x.IdMesa == 1)).PermitePedidoTrasAnulacion);
             var salon = await new CuentasService(context).GetActivaAsync(table.IdMesa, null, default);
             Assert.NotNull(salon?.Pedido);
             var salonCommand = Assert.Single(salon!.Pedido!.Comandas);
@@ -127,6 +191,18 @@ public sealed class AnulacionEjecucionTests
             var replay = await service.EjecutarAsync(order.IdPedido, request, 1, session, default);
             Assert.True(JsonNode.DeepEquals(JsonNode.Parse(result.Json!), JsonNode.Parse(replay.Json!)));
             Assert.Equal(2, await context.MovimientosInventario.CountAsync(x => x.TipoMovimiento == "ReversionCancelacion"));
+            context.ChangeTracker.Clear();
+            var occupied = await context.Mesas.AsNoTracking().SingleAsync(x => x.IdMesa == 1);
+            Assert.True(occupied.PermitePedidoTrasAnulacion);
+            var next = await new EnviosService(context, audit, TimeProvider.System).EnviarAsync(
+                new(Guid.NewGuid(), 1, null, occupied.Version, [new(product.IdProducto, product.Version, 1, "")]), 1, default);
+            Assert.Equal(201, next.Status);
+            context.ChangeTracker.Clear();
+            Assert.Equal(2, await context.Pedidos.CountAsync());
+            Assert.Equal(1, await context.Pedidos.CountAsync(x => x.Estado == "Cancelado"));
+            Assert.Equal(1, await context.Pedidos.CountAsync(x => x.Estado == "Abierto"));
+            Assert.False((await context.Mesas.AsNoTracking().SingleAsync(x => x.IdMesa == 1)).PermitePedidoTrasAnulacion);
+            Assert.Equal(99998m, (await context.Ingredientes.SingleAsync()).StockActual);
         }
         finally { await db.DisposeAsync(); }
     }

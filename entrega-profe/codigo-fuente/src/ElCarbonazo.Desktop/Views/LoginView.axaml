@@ -1,0 +1,131 @@
+<UserControl x:Class="ElCarbonazo.Desktop.Views.LoginView"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ElCarbonazo.Desktop.ViewModels"
+             x:DataType="vm:LoginViewModel"
+             Background="{StaticResource FondoPrincipalBrush}">
+    <UserControl.Resources>
+        <ControlTheme x:Key="LoginButtonTheme" TargetType="Button">
+            <Setter Property="Background" Value="#9F3517" />
+            <Setter Property="Foreground" Value="#F3F4F6" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="14,10">
+                        <ContentPresenter Content="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" HorizontalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Setter Property="BorderBrush" Value="#D75630" />
+            <Style Selector="^:pointerover"><Setter Property="Background" Value="#B44220" /></Style>
+            <Style Selector="^:focus-visible"><Setter Property="BorderBrush" Value="#F3F4F6" /></Style>
+            <Style Selector="^:disabled"><Setter Property="Background" Value="#303034" /><Setter Property="Foreground" Value="#A1A1AA" /><Setter Property="BorderBrush" Value="#52525B" /></Style>
+        </ControlTheme>
+        <ControlTheme x:Key="MostrarContrasenaTheme" TargetType="ToggleButton">
+            <Setter Property="Background" Value="#303034" />
+            <Setter Property="Foreground" Value="#F3F4F6" />
+            <Setter Property="BorderBrush" Value="#71717A" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="10">
+                        <ContentPresenter Content="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover"><Setter Property="Background" Value="#505057" /></Style>
+            <Style Selector="^:checked"><Setter Property="BorderBrush" Value="#FF8A50" /></Style>
+            <Style Selector="^:focus-visible"><Setter Property="BorderBrush" Value="#F3F4F6" /></Style>
+        </ControlTheme>
+    </UserControl.Resources>
+    <UserControl.Styles>
+        <Style Selector="TextBox:focus"><Setter Property="BorderBrush" Value="{StaticResource AcentoFuegoBrush}" /><Setter Property="BorderThickness" Value="2" /></Style>
+    </UserControl.Styles>
+    <Grid>
+    <Image Source="avares://ElCarbonazo.Desktop/Assets/logo_cabonazo.jfif" Stretch="UniformToFill" IsHitTestVisible="False" />
+    <Border Background="#C51A1411" IsHitTestVisible="False" />
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <Grid Margin="32">
+        <Border Width="460"
+                Padding="36"
+                CornerRadius="20"
+                Background="#F027272B"
+                BorderBrush="#A96544"
+                BorderThickness="1"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+            <StackPanel Spacing="18">
+                <Border Width="76"
+                        Height="76"
+                        CornerRadius="38"
+                        Background="#A93817"
+                        HorizontalAlignment="Center">
+                    <TextBlock Text="EC"
+                               Foreground="White"
+                               FontSize="26"
+                               FontWeight="Bold"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                </Border>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="El Carbonazo"
+                               FontSize="30"
+                               FontWeight="Bold"
+                               Foreground="#FFB488"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Text="Sistema de mesas y atención"
+                               Foreground="{StaticResource TextoSecundarioBrush}"
+                               HorizontalAlignment="Center" />
+                </StackPanel>
+
+                <StackPanel Spacing="7">
+                    <TextBlock Text="Nombre de usuario"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <TextBox Text="{Binding Nombre, Mode=TwoWay}"
+                             AutomationProperties.Name="Nombre de usuario"
+                             PlaceholderText="Ingrese su nombre"
+                             Background="{StaticResource FondoPrincipalBrush}"
+                             Foreground="{StaticResource TextoPrincipalBrush}" />
+                </StackPanel>
+
+                <StackPanel Spacing="7">
+                    <TextBlock Text="Contraseña"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource TextoPrincipalBrush}" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBox Text="{Binding Contrasena, Mode=TwoWay}"
+                                 AutomationProperties.Name="Contraseña"
+                                 PasswordChar="●" RevealPassword="{Binding MostrarContrasena}"
+                                 PlaceholderText="Ingrese su contraseña"
+                                 Background="{StaticResource FondoPrincipalBrush}"
+                                 Foreground="{StaticResource TextoPrincipalBrush}" />
+                        <ToggleButton Grid.Column="1" Theme="{StaticResource MostrarContrasenaTheme}"
+                                      IsChecked="{Binding MostrarContrasena, Mode=TwoWay}"
+                                      AutomationProperties.Name="{Binding TextoVisibilidadContrasena}"
+                                      ToolTip.Tip="{Binding TextoVisibilidadContrasena}">
+                            <PathIcon Width="19" Height="19" Data="M 1,12 C 4,7 7,5 12,5 C 17,5 20,7 23,12 C 20,17 17,19 12,19 C 7,19 4,17 1,12 Z M 12,8 A 4,4 0 1 0 12,16 A 4,4 0 1 0 12,8 Z" />
+                        </ToggleButton>
+                    </Grid>
+                </StackPanel>
+
+                <TextBlock Text="{Binding ErrorMessage}"
+                           Foreground="#FFB4A0"
+                           TextWrapping="Wrap"
+                           HorizontalAlignment="Center" />
+
+                <Button Content="Ingresar"
+                        Theme="{StaticResource LoginButtonTheme}"
+                        Command="{Binding LoginCommand}"
+                        FontWeight="SemiBold"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center" />
+
+                <ProgressBar IsVisible="{Binding IsBusy}"
+                             IsIndeterminate="True"
+                             Height="4" />
+            </StackPanel>
+        </Border>
+    </Grid>
+    </ScrollViewer>
+    </Grid>
+</UserControl>

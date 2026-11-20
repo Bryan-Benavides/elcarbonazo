@@ -60,7 +60,6 @@
                 <TextBlock Text="Pedidos de salón" FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextoPrincipalBrush}" />
                 <TextBlock Text="{Binding Destino}" Foreground="{StaticResource TextoSecundarioBrush}" />
             </StackPanel>
-            <TextBlock Grid.Column="2" Text="DEMOSTRACIÓN" Foreground="#FFB488" FontWeight="Bold" VerticalAlignment="Center" />
         </Grid>
         <Border Grid.Row="1" Classes="panelPedido" Padding="10,6">
             <TextBlock Text="{Binding EstadoLectura}" Foreground="{StaticResource TextoPrincipalBrush}" TextWrapping="Wrap" />
@@ -221,14 +220,14 @@
                         <TextBlock Text="Se devolverá exactamente el consumo registrado y se generará una alerta para Cocina. No se puede deshacer."
                                    TextWrapping="Wrap" Foreground="#FFB488" FontSize="12" />
                         <TextBlock Text="Motivo (5–250 caracteres)" Foreground="{StaticResource TextoSecundarioBrush}" />
-                        <TextBox Text="{Binding MotivoAnulacion, Mode=TwoWay}" AcceptsReturn="True" TextWrapping="Wrap"
+                        <TextBox Text="{Binding MotivoAnulacion, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap"
                                  MaxLength="250" MinHeight="64" PlaceholderText="Explique el motivo de la anulación"
                                  AutomationProperties.Name="Motivo de la anulación" />
                         <TextBlock Text="Correo de la Jefa autorizadora" Foreground="{StaticResource TextoSecundarioBrush}" />
-                        <TextBox Text="{Binding EmailJefa, Mode=TwoWay}" MaxLength="254"
+                        <TextBox Text="{Binding EmailJefa, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" MaxLength="254"
                                  PlaceholderText="jefa@elcarbonazo.local" AutomationProperties.Name="Correo de la Jefa" />
                         <TextBlock Text="Contraseña de la Jefa (se revalida; no crea otra sesión)" Foreground="{StaticResource TextoSecundarioBrush}" />
-                        <TextBox Text="{Binding ContrasenaJefa, Mode=TwoWay}" PasswordChar="●" MaxLength="256"
+                        <TextBox Text="{Binding ContrasenaJefa, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PasswordChar="●" MaxLength="256"
                                  AutomationProperties.Name="Contraseña de la Jefa" />
                         <TextBlock Text="{Binding MensajeAnulacion}" IsVisible="{Binding HayMensajeAnulacion}"
                                    TextWrapping="Wrap" Foreground="#FFBF36" />
